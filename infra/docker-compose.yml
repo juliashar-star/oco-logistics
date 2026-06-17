@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oco-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: oco
+      POSTGRES_PASSWORD: oco_dev_password
+      POSTGRES_DB: oco_logistics
+    volumes:
+      - oco_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oco -d oco_logistics"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  oco_pg_data:

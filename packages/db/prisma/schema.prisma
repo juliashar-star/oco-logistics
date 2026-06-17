@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  OPERATOR
+}
+
+enum ProductCategory {
+  FASHION
+  BEAUTY
+  WELLNESS
+  PET
+  OTHER
+}
+
+enum PickupType {
+  COURIER
+  PVZ
+}
+
+enum SelectionMode {
+  FAST
+  CHEAP
+  OPTIMAL
+  MANUAL
+}
+
+enum ShipmentStatus {
+  DRAFT
+  CREATED
+  IN_TRANSIT
+  AT_PVZ
+  DELIVERED
+  RETURNED
+  CANCELED
+  PROBLEM
+}
+
+model Company {
+  id            String     @id @default(cuid())
+  name          String
+  inn           String?
+  contactEmail  String
+  senderCity    String?
+  senderAddress String?
+  apishipKeyRef String?
+  users         User[]
+  shipments     Shipment[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OWNER)
+  createdAt    DateTime @default(now())
+}
+
+model Carrier {
+  id          String         @id @default(cuid())
+  apishipCode String         @unique
+  name        String
+  isActive    Boolean        @default(true)
+  shipments   Shipment[]
+  quotes      TariffQuote[]
+  scores      CarrierScore[]
+}
+
+model Shipment {
+  id              String          @id @default(cuid())
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id])
+  createdByUserId String?
+
+  category        ProductCategory @default(OTHER)
+  weightG         Int
+  lengthCm        Int
+  widthCm         Int
+  heightCm        Int
+  declaredValue   Int?
+
+  destCity        String
+  destAddress     String?
+  pvzCode         String?
+  pickupType      PickupType      @default(PVZ)
+  recipientName   String
+  recipientPhone  String
+
+  carrierId       String?
+  carrier         Carrier?        @relation(fields: [carrierId], references: [id])
+  selectionMode   SelectionMode?
+  serviceCode     String?
+
+  plannedCost          Int?
+  plannedDeliveryDays  Int?
+  plannedDeliveryDate  DateTime?
+
+  actualCost           Int?
+  pickedUpAt           DateTime?
+  arrivedAtPvzAt       DateTime?
+  deliveredAt          DateTime?
+  isOnTime             Boolean?
+  isReturned           Boolean    @default(false)
+  isCanceled           Boolean    @default(false)
+  returnReason         String?
+
+  apishipOrderId       String?
+  trackNumber          String?
+
+  status          ShipmentStatus  @default(DRAFT)
+  legalBasisConfirmed Boolean     @default(false)
+
+  quotes          TariffQuote[]
+  trackingEvents  TrackingEvent[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([companyId, status])
+  @@index([trackNumber])
+}
+
+model TariffQuote {
+  id               String   @id @default(cuid())
+  shipmentId       String?
+  shipment         Shipment? @relation(fields: [shipmentId], references: [id])
+  carrierId        String
+  carrier          Carrier   @relation(fields: [carrierId], references: [id])
+  serviceCode      String
+  cost             Int
+  deliveryDaysMin  Int?
+  deliveryDaysMax  Int?
+  pickupType       PickupType
+  rawResponse      Json?
+  createdAt        DateTime  @default(now())
+
+  @@index([shipmentId])
+  @@index([carrierId])
+}
+
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+  statusCode  String
+  statusText  String
+  location    String?
+  eventAt     DateTime
+  rawResponse Json?
+  createdAt   DateTime @default(now())
+
+  @@index([shipmentId])
+}
+
+model CarrierScore {
+  id          String          @id @default(cuid())
+  carrierId   String
+  carrier     Carrier         @relation(fields: [carrierId], references: [id])
+  category    ProductCategory?
+  region      String?
+  onTimeRate  Float
+  returnRate  Float
+  sampleSize  Int
+  score       Int
+  computedAt  DateTime         @default(now())
+
+  @@index([carrierId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
