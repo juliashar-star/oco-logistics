@@ -50,7 +50,10 @@ model Company {
   contactEmail  String
   senderCity    String?
   senderAddress String?
-  apishipKeyRef String?
+  apishipKeyRef String?    // устарело: используйте apishipLogin + apishipPasswordEnc
+  apishipLogin          String?
+  apishipPasswordEnc    String?    // пароль APIShip, зашифрован на сервере
+  apishipConnectedAt    DateTime?
   users         User[]
   shipments     Shipment[]
   createdAt     DateTime   @default(now())

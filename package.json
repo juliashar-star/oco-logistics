@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:push": "prisma db push --schema packages/db/prisma/schema.prisma",
     "docker:up": "docker compose -f infra/docker-compose.yml up -d",
-    "docker:down": "docker compose -f infra/docker-compose.yml down"
+    "docker:down": "docker compose -f infra/docker-compose.yml down",
+    "test": "node --test tests/apiship-auth.test.mjs"
   },
   "devDependencies": {
     "prisma": "^6.9.0"

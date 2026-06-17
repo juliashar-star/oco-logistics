@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+import { ApishipError } from "@oco/apiship";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { createApishipClientFromCredentials } from "@/lib/apiship-client-for-company";
+
+export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const login = String(body.login ?? "").trim();
+    const password = String(body.password ?? "");
+
+    if (!login || !password) {
+      return NextResponse.json(
+        { error: "Укажите логин и пароль APIShip для проверки" },
+        { status: 400 },
+      );
+    }
+
+    const client = createApishipClientFromCredentials({ login, password });
+    await client.testConnection();
+
+    return NextResponse.json({
+      ok: true,
+      message: "Подключение к APIShip успешно",
+    });
+  } catch (error) {
+    if (error instanceof ApishipError) {
+      return NextResponse.json(
+        { error: error.message || "APIShip отклонил подключение" },
+        { status: 502 },
+      );
+    }
+    console.error("apiship test failed");
+    return NextResponse.json(
+      { error: "Не удалось проверить подключение к APIShip" },
+      { status: 500 },
+    );
+  }
+}
