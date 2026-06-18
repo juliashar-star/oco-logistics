@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { Package } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { LogoutButton } from "@/components/logout-button";
 
 const NAV = [
   { href: "/dashboard", label: "Дашборд" },
   { href: "/new-order", label: "Новый заказ" },
+  { href: "/shipments", label: "Отправления", icon: Package },
   { href: "/settings", label: "Настройки" },
 ];
 
@@ -31,12 +33,13 @@ export async function CabinetShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${
                   active === item.href
                     ? "bg-slate-900 text-white"
                     : "text-slate-700 hover:bg-slate-100"
                 }`}
               >
+                {item.icon && <item.icon className="h-4 w-4 shrink-0" aria-hidden />}
                 {item.label}
               </Link>
             ))}

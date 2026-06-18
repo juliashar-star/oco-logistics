@@ -809,6 +809,12 @@ export function NewOrderForm() {
               </li>
             )}
           </ul>
+          <Link
+            href="/shipments"
+            className="mt-3 inline-flex font-medium underline underline-offset-2 hover:text-emerald-950"
+          >
+            Перейти к списку отправлений
+          </Link>
         </div>
       )}
     </div>
