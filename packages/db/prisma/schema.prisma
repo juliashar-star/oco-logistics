@@ -50,12 +50,14 @@ model Company {
   contactEmail  String
   senderCity    String?
   senderAddress String?
+  senderPhone   String?
   apishipKeyRef String?    // устарело: используйте apishipLogin + apishipPasswordEnc
   apishipLogin          String?
   apishipPasswordEnc    String?    // пароль APIShip, зашифрован на сервере
   apishipConnectedAt    DateTime?
   users         User[]
   shipments     Shipment[]
+  quotes        TariffQuote[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 }
@@ -135,6 +137,8 @@ model Shipment {
 
 model TariffQuote {
   id               String   @id @default(cuid())
+  companyId        String?
+  company          Company? @relation(fields: [companyId], references: [id])
   shipmentId       String?
   shipment         Shipment? @relation(fields: [shipmentId], references: [id])
   carrierId        String
@@ -149,6 +153,7 @@ model TariffQuote {
 
   @@index([shipmentId])
   @@index([carrierId])
+  @@index([companyId])
 }
 
 model TrackingEvent {
