@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
-import { scopeToCompany } from "@/lib/company-scope";
 import {
   encryptApishipPassword,
   isApishipEncryptionConfigured,
@@ -25,7 +24,7 @@ export async function GET() {
   }
 
   const company = await prisma.company.findFirst({
-    where: scopeToCompany(user.companyId, { id: user.companyId }),
+    where: { id: user.companyId },
     select: {
       apishipLogin: true,
       apishipPasswordEnc: true,
@@ -37,14 +36,18 @@ export async function GET() {
     return NextResponse.json({ error: "Компания не найдена" }, { status: 404 });
   }
 
+  const envConfigured = hasEnvFallback();
+  const canCalculate = canUseApiship(company);
+  const encryptionConfigured = isApishipEncryptionConfigured();
+
   return NextResponse.json({
     connected: isCompanyApishipConnected(company),
     login: company.apishipLogin ? maskApishipLogin(company.apishipLogin) : null,
     connectedAt: company.apishipConnectedAt?.toISOString() ?? null,
     isSandbox: isSandboxApishipUrl(),
-    canCalculate: canUseApiship(company),
-    envConfigured: hasEnvFallback(),
-    encryptionConfigured: isApishipEncryptionConfigured(),
+    canCalculate,
+    envConfigured,
+    encryptionConfigured,
   });
 }
 
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     const existing = await prisma.company.findFirst({
-      where: scopeToCompany(user.companyId, { id: user.companyId }),
+      where: { id: user.companyId },
       select: { apishipPasswordEnc: true },
     });
 
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
       : existing!.apishipPasswordEnc!;
 
     await prisma.company.updateMany({
-      where: scopeToCompany(user.companyId, { id: user.companyId }),
+      where: { id: user.companyId },
       data: {
         apishipLogin: login,
         apishipPasswordEnc: passwordEnc,

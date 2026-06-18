@@ -29,7 +29,7 @@ export async function fetchApishipToken(
     if (cached) return cached;
   }
 
-  const response = await fetch(`${baseUrl}/login`, {
+  const response = await fetch(`${baseUrl}/users/login`, {
     method: "POST",
     headers: {
       Accept: "application/json",

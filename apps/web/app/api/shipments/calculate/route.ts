@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { rankQuotes } from "@oco/core";
+import { DEFAULT_DECISION_WEIGHTS, rankQuotes } from "@oco/core";
 import { ApishipError } from "@oco/apiship";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
-import { scopeToCompany } from "@/lib/company-scope";
 import {
   canUseApiship,
   getApishipClientForCompany,
 } from "@/lib/apiship-client-for-company";
+import { resolveSenderLocation, formatAddressForApiship } from "@/lib/sender-address";
+import { persistTariffQuotes } from "@/lib/tariff-quotes/persist-tariff-quotes";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -16,9 +17,10 @@ export async function POST(request: Request) {
   }
 
   const company = await prisma.company.findFirst({
-    where: scopeToCompany(user.companyId, { id: user.companyId }),
+    where: { id: user.companyId },
     select: {
       senderCity: true,
+      senderAddress: true,
       apishipLogin: true,
       apishipPasswordEnc: true,
       apishipConnectedAt: true,
@@ -35,6 +37,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const sender = resolveSenderLocation(company);
+  if (!sender) {
+    return NextResponse.json(
+      {
+        error:
+          "Укажите город отправления в настройках компании — без него расчёт тарифов неточен",
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     const body = await request.json();
     const weightG = Number(body.weightG);
@@ -42,10 +55,26 @@ export async function POST(request: Request) {
     const widthCm = Number(body.widthCm);
     const heightCm = Number(body.heightCm);
     const destCity = String(body.destCity ?? "").trim();
+    const destAddress = String(body.destAddress ?? "").trim();
     const pickupType = String(body.pickupType ?? "PVZ");
+    const pointOutId = body.pointOutId != null ? Number(body.pointOutId) : undefined;
 
     if (!destCity) {
       return NextResponse.json({ error: "Укажите город назначения" }, { status: 400 });
+    }
+
+    if (pickupType === "COURIER" && !destAddress) {
+      return NextResponse.json(
+        { error: "Укажите полный адрес доставки для курьера" },
+        { status: 400 },
+      );
+    }
+
+    if (pickupType === "PVZ" && (!pointOutId || pointOutId <= 0)) {
+      return NextResponse.json(
+        { error: "Выберите пункт выдачи (ПВЗ) в городе назначения" },
+        { status: 400 },
+      );
     }
 
     if (!weightG || weightG <= 0) {
@@ -59,27 +88,57 @@ export async function POST(request: Request) {
       );
     }
 
-    const fromCity = company.senderCity?.trim() || "Москва";
     const deliveryTypes = pickupType === "COURIER" ? [1] : [2];
 
     const client = await getApishipClientForCompany(user.companyId);
     const result = await client.calculate({
-      from: { countryCode: "RU", city: fromCity },
-      to: { countryCode: "RU", city: destCity },
+      from: {
+        countryCode: "RU",
+        city: sender.city,
+        addressString: sender.addressString,
+      },
+      to: {
+        countryCode: "RU",
+        city: destCity,
+        ...(pickupType === "COURIER"
+          ? { addressString: formatAddressForApiship(destCity, destAddress) }
+          : {}),
+      },
       weightG,
       lengthCm,
       widthCm,
       heightCm,
       deliveryTypes,
+      ...(pickupType === "PVZ" && pointOutId ? { pointOutId } : {}),
     });
 
-    const quotes = rankQuotes(result.quotes);
+    const savedQuotes = await persistTariffQuotes({
+      companyId: user.companyId,
+      quotes: result.quotes,
+      rawResponse: result.rawResponse,
+    });
+
+    const quotes = rankQuotes(result.quotes, {
+      weights: DEFAULT_DECISION_WEIGHTS,
+    });
+
+    const quoteIds = Object.fromEntries(
+      savedQuotes.map((row) => [
+        `${row.providerKey}:${row.tariffId}:${row.deliveryMode}`,
+        row.id,
+      ]),
+    );
 
     return NextResponse.json({
       ok: true,
-      fromCity,
+      fromCity: sender.city,
+      fromAddress: sender.addressString ?? null,
       destCity,
+      destAddress: pickupType === "COURIER" ? destAddress : null,
+      pointOutId: pickupType === "PVZ" ? pointOutId : null,
       quotes,
+      quoteIds,
+      savedCount: savedQuotes.length,
       count: quotes.length,
     });
   } catch (error) {
