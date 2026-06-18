@@ -203,6 +203,7 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
       data: {
         apishipOrderId,
         trackNumber,
+        labelUrl,
         status: "CREATED",
       },
     });

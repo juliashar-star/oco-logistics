@@ -122,6 +122,7 @@ model Shipment {
 
   apishipOrderId       String?
   trackNumber          String?
+  labelUrl             String?    // URL этикетки PDF от APIShip
 
   status          ShipmentStatus  @default(DRAFT)
   legalBasisConfirmed Boolean     @default(false)
