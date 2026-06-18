@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { normalizeRuPhone } from "@/lib/phone/ru-phone";
 
 export function CompanySettingsForm() {
   const [name, setName] = useState("");
   const [senderCity, setSenderCity] = useState("");
   const [senderAddress, setSenderAddress] = useState("");
+  // Полная строка «г Москва, ул. Тверская, 1» для отображения в поле после выбора подсказки.
+  // Не хранится в БД — только для UX. Сбрасывается при ручном вводе.
+  const [addressDisplayValue, setAddressDisplayValue] = useState("");
   const [senderPhone, setSenderPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [configured, setConfigured] = useState(false);
@@ -124,18 +128,27 @@ export function CompanySettingsForm() {
       </div>
 
       <div>
-        <label htmlFor="sender-address" className="mb-1 block text-sm font-medium text-slate-700">
+        <label className="mb-1 block text-sm font-medium text-slate-700">
           Адрес отправления
         </label>
         <p className="mb-2 text-xs text-slate-500">
-          Улица и дом, например <strong>ул. Тверская, д. 1</strong> — город подставится
-          автоматически. Для точного расчёта укажите реальный адрес склада.
+          Начните вводить улицу — выберите подсказку, и город заполнится автоматически.
+          Или впишите адрес вручную.
         </p>
-        <Input
-          id="sender-address"
+        <AddressAutocomplete
           value={senderAddress}
-          onChange={(e) => setSenderAddress(e.target.value)}
-          placeholder="ул. Примерная, д. 1"
+          displayValue={addressDisplayValue || undefined}
+          onChange={(raw) => {
+            setSenderAddress(raw);
+            setAddressDisplayValue("");
+          }}
+          onSelect={(result) => {
+            if (result.city) setSenderCity(result.city);
+            setSenderAddress(result.addressString);
+            setAddressDisplayValue(result.fullAddress);
+          }}
+          placeholder="Начните вводить улицу или полный адрес"
+          disabled={loading}
         />
       </div>
 
