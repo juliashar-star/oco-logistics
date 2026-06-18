@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 type RankTag = "fast" | "cheap" | "optimal";
 
@@ -73,7 +74,9 @@ export function NewOrderForm() {
   const [widthCm, setWidthCm] = useState("20");
   const [heightCm, setHeightCm] = useState("10");
   const [destCity, setDestCity] = useState("Санкт-Петербург");
+  const [destCityDisplayValue, setDestCityDisplayValue] = useState("");
   const [destAddress, setDestAddress] = useState("");
+  const [destAddressDisplayValue, setDestAddressDisplayValue] = useState("");
   const [pickupType, setPickupType] = useState<"PVZ" | "COURIER">("PVZ");
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -452,17 +455,20 @@ export function NewOrderForm() {
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Город назначения
             </label>
-            <input
-              required
+            <AddressAutocomplete
               value={destCity}
-              onChange={(e) => setDestCity(e.target.value)}
-              onBlur={() => {
-                if (pickupType === "PVZ") {
-                  void loadPoints(destCity);
+              displayValue={destCityDisplayValue || undefined}
+              onChange={(raw) => {
+                setDestCity(raw);
+                setDestCityDisplayValue("");
+              }}
+              onSelect={(result) => {
+                if (result.city) {
+                  setDestCity(result.city);
+                  setDestCityDisplayValue(result.city);
                 }
               }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              placeholder="Санкт-Петербург"
+              placeholder="Город доставки"
             />
           </div>
         </div>
@@ -534,12 +540,22 @@ export function NewOrderForm() {
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Адрес доставки
             </label>
-            <input
-              required
+            <AddressAutocomplete
               value={destAddress}
-              onChange={(e) => setDestAddress(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              placeholder="Невский проспект, д. 1, кв. 10"
+              displayValue={destAddressDisplayValue || undefined}
+              onChange={(raw) => {
+                setDestAddress(raw);
+                setDestAddressDisplayValue("");
+              }}
+              onSelect={(result) => {
+                setDestAddress(result.addressString);
+                setDestAddressDisplayValue(result.fullAddress);
+                if (result.city) {
+                  setDestCity(result.city);
+                  setDestCityDisplayValue(result.city);
+                }
+              }}
+              placeholder="Улица, дом, квартира"
             />
           </div>
         )}
