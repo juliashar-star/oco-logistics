@@ -44,7 +44,9 @@ export async function POST(request: Request) {
       include: { company: { select: { id: true } } },
     });
 
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    const passwordOk = Boolean(user && (await verifyPassword(password, user.passwordHash)));
+
+    if (!user || !passwordOk) {
       recordFailedLogin(key);
       return NextResponse.json(
         { error: "Неверный email или пароль" },
@@ -65,8 +67,9 @@ export async function POST(request: Request) {
       ok: true,
       redirect: "/dashboard",
     });
-  } catch {
-    console.error("login failed");
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error("login failed", errMessage);
     return NextResponse.json(
       { error: "Не удалось войти. Попробуйте позже." },
       { status: 500 },
