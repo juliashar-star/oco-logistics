@@ -9,6 +9,7 @@ import type {
   DeliveryInterval,
   DeliveryQuote,
   GetIntervalsInput,
+  GetOrderStatusesResult,
   ListPointsInput,
   ListPointsResult,
   OrderInfoResult,
@@ -16,6 +17,10 @@ import type {
   PickupPoint,
 } from "./types";
 import { ApishipError } from "./types";
+import {
+  parseApishipOrderStatusOrderInfo,
+  parseApishipStatusEvent,
+} from "./parse-status";
 
 type CalculatorTariff = {
   providerKey?: string;
@@ -443,6 +448,83 @@ export class ApishipClient {
       orderId: row.orderId != null ? String(row.orderId) : clientNumber,
       providerNumber: row.providerNumber?.trim() || null,
       additionalProviderNumber: row.additionalProviderNumber?.trim() || null,
+      rawResponse: data,
+    };
+  }
+
+  /** POST /orders/statuses — текущий статус по списку orderId (макс. 100 за запрос). */
+  async getOrderStatuses(orderIds: number[]): Promise<GetOrderStatusesResult> {
+    if (orderIds.length === 0) {
+      return { succeedOrders: [], failedOrders: [], rawResponse: {} };
+    }
+
+    if (orderIds.length > 100) {
+      throw new ApishipError("APIShip: не более 100 orderIds за один запрос POST /orders/statuses");
+    }
+
+    const data = await this.request<{
+      succeedOrders?: Array<{
+        orderInfo?: {
+          orderId?: number | string;
+          clientNumber?: string | null;
+          providerKey?: string | null;
+          providerNumber?: string | null;
+          additionalProviderNumber?: string | null;
+          returnProviderNumber?: string | null;
+          barcode?: string | null;
+          trackingUrl?: string | null;
+        };
+        status?: {
+          key?: string;
+          name?: string;
+          description?: string;
+          created?: string;
+          providerCode?: string | null;
+          providerName?: string | null;
+          providerDescription?: string | null;
+          createdProvider?: string | null;
+          errorCode?: string | null;
+        };
+      }>;
+      failedOrders?: Array<{
+        orderId?: number;
+        message?: string;
+      }>;
+    }>("/orders/statuses", {
+      method: "POST",
+      body: JSON.stringify({ orderIds }),
+    });
+
+    const succeedOrders = (data.succeedOrders ?? [])
+      .map((row) => {
+        const orderInfo = parseApishipOrderStatusOrderInfo(row.orderInfo);
+        if (!orderInfo.orderId) {
+          return null;
+        }
+
+        return {
+          orderInfo,
+          status: parseApishipStatusEvent(row.status),
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
+
+    const failedOrders = (data.failedOrders ?? [])
+      .map((row) => {
+        if (row.orderId == null) {
+          return null;
+        }
+
+        return {
+          orderId: row.orderId,
+          message: row.message?.trim() || "Не удалось получить статус заказа",
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
+
+    return {
+      succeedOrders,
+      failedOrders,
       rawResponse: data,
     };
   }

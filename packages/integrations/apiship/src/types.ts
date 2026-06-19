@@ -157,3 +157,55 @@ export type OrderLabelsResult = {
   failedOrders: number[] | null;
   rawResponse: unknown;
 };
+
+/** Совпадает с enum ShipmentStatus в packages/db — без зависимости от Prisma. */
+export type ShipmentStatus =
+  | "DRAFT"
+  | "CREATED"
+  | "IN_TRANSIT"
+  | "AT_PVZ"
+  | "DELIVERED"
+  | "RETURNED"
+  | "CANCELED"
+  | "PROBLEM";
+
+/** Один статус из ответа APIShip (POST /orders/statuses, webhook ORDER_STATUS и др.). */
+export type ApishipStatusEvent = {
+  key: string;
+  name: string;
+  description: string;
+  /** RFC3339, напр. 2021-01-19T13:01:09+03:00 */
+  created: string;
+  providerCode: string | null;
+  providerName: string | null;
+  providerDescription: string | null;
+  createdProvider: string | null;
+  errorCode: string | null;
+};
+
+export type ApishipOrderStatusOrderInfo = {
+  orderId: string;
+  clientNumber: string | null;
+  providerKey: string | null;
+  providerNumber: string | null;
+  additionalProviderNumber: string | null;
+  returnProviderNumber: string | null;
+  barcode: string | null;
+  trackingUrl: string | null;
+};
+
+export type ApishipOrderStatusEntry = {
+  orderInfo: ApishipOrderStatusOrderInfo;
+  status: ApishipStatusEvent;
+};
+
+export type ApishipOrderStatusFailure = {
+  orderId: number;
+  message: string;
+};
+
+export type GetOrderStatusesResult = {
+  succeedOrders: ApishipOrderStatusEntry[];
+  failedOrders: ApishipOrderStatusFailure[];
+  rawResponse: unknown;
+};
