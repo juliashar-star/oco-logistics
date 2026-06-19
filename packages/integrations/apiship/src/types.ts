@@ -28,6 +28,30 @@ export type CalculateInput = {
   pointOutId?: number;
 };
 
+export type DeliveryInterval = {
+  date: string | null;
+  from: string;
+  to: string;
+};
+
+/** Параметры POST /calculator/intervals (кроме providerKey и tariffId). */
+export type GetIntervalsInput = {
+  from: ApishipAddress;
+  to: ApishipAddress;
+  weightG: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  /** 1 = курьер, 2 = ПВЗ */
+  deliveryTypes?: number[];
+  /** 1 = забор от двери, 2 = забор с ПВЗ */
+  pickupTypes?: number[];
+  assessedCostRub?: number;
+  pointOutId?: number;
+  pickupDate?: string;
+  deliveryDate?: string;
+};
+
 export type PickupPoint = {
   id: number;
   providerKey: string;
@@ -110,6 +134,9 @@ export type CreateOrderInput = {
   assessedCostRub?: number;
   sender: CreateOrderAddress;
   recipient: CreateOrderAddress;
+  deliveryDate?: string;
+  deliveryTimeStart?: string;
+  deliveryTimeEnd?: string;
 };
 
 export type CreateOrderResult = {

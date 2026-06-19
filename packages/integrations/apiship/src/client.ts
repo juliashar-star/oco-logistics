@@ -6,7 +6,9 @@ import type {
   CalculateResult,
   CreateOrderInput,
   CreateOrderResult,
+  DeliveryInterval,
   DeliveryQuote,
+  GetIntervalsInput,
   ListPointsInput,
   ListPointsResult,
   OrderInfoResult,
@@ -38,6 +40,16 @@ type CalculatorResponse = {
   deliveryToPoint?: CalculatorProviderGroup[];
   message?: string;
   description?: string;
+};
+
+type IntervalsTariff = {
+  tariffId?: number;
+  toIntervals?: Array<{ date?: string | null; from?: string; to?: string }>;
+};
+
+type IntervalsResponse = {
+  deliveryToDoor?: Array<{ providerKey?: string; tariffs?: IntervalsTariff[] }>;
+  deliveryToPoint?: Array<{ providerKey?: string; tariffs?: IntervalsTariff[] }>;
 };
 
 type PointsRow = {
@@ -155,6 +167,78 @@ function mapTariff(
   };
 }
 
+function mapDeliveryInterval(
+  slot: { date?: string | null; from?: string; to?: string },
+): DeliveryInterval | null {
+  if (!slot.from?.trim() || !slot.to?.trim()) {
+    return null;
+  }
+
+  return {
+    date: slot.date ?? null,
+    from: slot.from.trim(),
+    to: slot.to.trim(),
+  };
+}
+
+function extractIntervals(
+  data: IntervalsResponse,
+  providerKey: string,
+  tariffId: number,
+): DeliveryInterval[] {
+  for (const section of [data.deliveryToDoor, data.deliveryToPoint]) {
+    for (const group of section ?? []) {
+      if (group.providerKey !== providerKey) {
+        continue;
+      }
+
+      const tariff = group.tariffs?.find((item) => item.tariffId === tariffId);
+      if (!tariff?.toIntervals?.length) {
+        continue;
+      }
+
+      return tariff.toIntervals
+        .map(mapDeliveryInterval)
+        .filter((slot): slot is DeliveryInterval => slot != null);
+    }
+  }
+
+  return [];
+}
+
+function buildIntervalsPayload(
+  providerKey: string,
+  tariffId: number,
+  input: GetIntervalsInput,
+): Record<string, unknown> {
+  return {
+    from: {
+      countryCode: input.from.countryCode,
+      city: input.from.city,
+      region: input.from.region,
+      ...(input.from.addressString ? { addressString: input.from.addressString } : {}),
+    },
+    to: {
+      countryCode: input.to.countryCode,
+      city: input.to.city,
+      region: input.to.region,
+      ...(input.to.addressString ? { addressString: input.to.addressString } : {}),
+    },
+    weight: input.weightG,
+    width: input.widthCm,
+    height: input.heightCm,
+    length: input.lengthCm,
+    assessedCost: input.assessedCostRub,
+    deliveryTypes: input.deliveryTypes ?? [1, 2],
+    pickupTypes: input.pickupTypes ?? [1, 2],
+    providerKeys: [providerKey],
+    tariffIds: [tariffId],
+    ...(input.pointOutId != null ? { pointOutId: input.pointOutId } : {}),
+    ...(input.pickupDate ? { pickupDate: input.pickupDate } : {}),
+    ...(input.deliveryDate ? { deliveryDate: input.deliveryDate } : {}),
+  };
+}
+
 export class ApishipClient {
   constructor(private readonly config: ApishipConfig) {}
 
@@ -253,6 +337,20 @@ export class ApishipClient {
     const quotes = parseCalculatorResponse(data);
 
     return { quotes, rawResponse: data };
+  }
+
+  async getIntervals(
+    providerKey: string,
+    tariffId: number,
+    input: GetIntervalsInput,
+  ): Promise<DeliveryInterval[]> {
+    const payload = buildIntervalsPayload(providerKey, tariffId, input);
+    const data = await this.request<IntervalsResponse>("/calculator/intervals", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    return extractIntervals(data, providerKey, tariffId);
   }
 
   async listPoints(input: ListPointsInput): Promise<ListPointsResult> {
