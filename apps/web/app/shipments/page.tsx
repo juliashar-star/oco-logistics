@@ -27,6 +27,12 @@ type ShipmentRow = {
   carrier: { name: string } | null;
 };
 
+type TrackingEventRow = {
+  statusCode: string;
+  statusText: string;
+  eventAt: string;
+};
+
 const STATUS_OPTIONS: { value: ShipmentStatus | ""; label: string }[] = [
   { value: "", label: "Все статусы" },
   { value: "DRAFT", label: "Черновик" },
@@ -79,6 +85,17 @@ function formatPrice(kopecks: number | null): string {
   })} ₽`;
 }
 
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function ShipmentsSkeleton() {
   return (
     <TableBody>
@@ -106,6 +123,10 @@ export default function ShipmentsPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [selectedShipment, setSelectedShipment] = useState<ShipmentRow | null>(null);
+  const [events, setEvents] = useState<TrackingEventRow[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTrack(trackInput), 400);
@@ -117,6 +138,50 @@ export default function ShipmentsPage() {
     const timer = window.setTimeout(() => setSyncNotice(null), 3500);
     return () => window.clearTimeout(timer);
   }, [syncNotice]);
+
+  useEffect(() => {
+    if (!selectedShipment) {
+      document.body.style.overflow = "";
+      return;
+    }
+
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedShipment]);
+
+  const closeDrawer = () => {
+    setSelectedShipment(null);
+    setEvents([]);
+    setEventsLoading(false);
+    setEventsError(null);
+  };
+
+  const openDrawer = (shipment: ShipmentRow) => {
+    setSelectedShipment(shipment);
+    setEvents([]);
+    setEventsError(null);
+    setEventsLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/shipments/${shipment.id}/events`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          setEventsError(data.error ?? "Не удалось загрузить историю");
+          return;
+        }
+
+        setEvents(data.events ?? []);
+      } catch {
+        setEventsError("Не удалось связаться с сервером");
+      } finally {
+        setEventsLoading(false);
+      }
+    })();
+  };
 
   const hasActiveFilters = status !== "" || track.trim() !== "";
 
@@ -281,7 +346,11 @@ export default function ShipmentsPage() {
                 ) : total > 0 ? (
                   <TableBody>
                     {shipments.map((shipment) => (
-                      <TableRow key={shipment.id}>
+                      <TableRow
+                        key={shipment.id}
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => openDrawer(shipment)}
+                      >
                         <TableCell>{formatDate(shipment.createdAt)}</TableCell>
                         <TableCell>
                           <div className="font-medium">{shipment.recipientName}</div>
@@ -305,6 +374,7 @@ export default function ShipmentsPage() {
                               href={shipment.labelUrl}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={(event) => event.stopPropagation()}
                               className="inline-flex rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                             >
                               PDF
@@ -322,6 +392,130 @@ export default function ShipmentsPage() {
           )}
         </div>
       </main>
+
+      {selectedShipment && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <button
+            type="button"
+            aria-label="Закрыть"
+            className="absolute inset-0 bg-slate-900/30"
+            onClick={closeDrawer}
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="shipment-drawer-title"
+            className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl"
+          >
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h3 id="shipment-drawer-title" className="text-lg font-semibold text-slate-900">
+                  Отправление
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {formatDate(selectedShipment.createdAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDrawer}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-slate-500">Получатель</dt>
+                  <dd className="font-medium text-slate-900">
+                    {selectedShipment.recipientName}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Город</dt>
+                  <dd className="text-slate-900">{selectedShipment.destCity}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Перевозчик</dt>
+                  <dd className="text-slate-900">
+                    {selectedShipment.carrier?.name ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Трек-номер</dt>
+                  <dd className="font-mono text-slate-900">
+                    {selectedShipment.trackNumber ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Статус</dt>
+                  <dd className="mt-1">
+                    <Badge className={STATUS_BADGE_CLASS[selectedShipment.status]}>
+                      {STATUS_LABELS[selectedShipment.status]}
+                    </Badge>
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-8">
+                <h4 className="text-sm font-semibold text-slate-900">История статусов</h4>
+
+                {eventsLoading && (
+                  <div className="mt-4 space-y-4">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-10 animate-pulse rounded bg-slate-200" />
+                    ))}
+                  </div>
+                )}
+
+                {!eventsLoading && eventsError && (
+                  <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                    {eventsError}
+                  </p>
+                )}
+
+                {!eventsLoading && !eventsError && events.length === 0 && (
+                  <p className="mt-4 text-sm text-slate-600">
+                    История появится после первого обновления статусов
+                  </p>
+                )}
+
+                {!eventsLoading && !eventsError && events.length > 0 && (
+                  <ol className="relative mt-4 space-y-0 border-l border-slate-200 pl-4">
+                    {events.map((event, index) => {
+                      const isLatest = index === events.length - 1;
+
+                      return (
+                        <li key={`${event.statusCode}-${event.eventAt}`} className="relative pb-6 last:pb-0">
+                          <span
+                            className={`absolute -left-[1.375rem] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${
+                              isLatest ? "bg-slate-900" : "bg-slate-300"
+                            }`}
+                          />
+                          <p
+                            className={`text-sm ${
+                              isLatest
+                                ? "font-semibold text-slate-900"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            {event.statusText}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {formatDateTime(event.eventAt)}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
