@@ -58,6 +58,12 @@ export async function POST(request: Request) {
     const heightCm = Number(body.heightCm);
     const pointOutId = body.pointOutId != null ? Number(body.pointOutId) : undefined;
     const pvzCode = body.pvzCode != null ? String(body.pvzCode).trim() : undefined;
+    const deliveryDate =
+      body.deliveryDate != null ? String(body.deliveryDate).trim() || undefined : undefined;
+    const deliveryTimeStart =
+      body.deliveryTimeStart != null ? String(body.deliveryTimeStart).trim() || undefined : undefined;
+    const deliveryTimeEnd =
+      body.deliveryTimeEnd != null ? String(body.deliveryTimeEnd).trim() || undefined : undefined;
 
     if (!tariffQuoteId) {
       return NextResponse.json({ error: "Выберите вариант доставки" }, { status: 400 });
@@ -128,6 +134,9 @@ export async function POST(request: Request) {
       legalBasisConfirmed,
       declaredValueRub:
         body.declaredValueRub != null ? Number(body.declaredValueRub) : undefined,
+      deliveryDate,
+      deliveryTimeStart,
+      deliveryTimeEnd,
     });
 
     return NextResponse.json({

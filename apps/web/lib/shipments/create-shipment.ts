@@ -30,6 +30,9 @@ export type CreateShipmentInput = {
   selectionMode: SelectionMode;
   legalBasisConfirmed: boolean;
   declaredValueRub?: number;
+  deliveryDate?: string;
+  deliveryTimeStart?: string;
+  deliveryTimeEnd?: string;
 };
 
 export type CreateShipmentResult = {
@@ -186,6 +189,9 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
         city: input.destCity.trim(),
         addressString: recipientAddressString,
       },
+      ...(input.deliveryDate ? { deliveryDate: input.deliveryDate } : {}),
+      ...(input.deliveryTimeStart ? { deliveryTimeStart: input.deliveryTimeStart } : {}),
+      ...(input.deliveryTimeEnd ? { deliveryTimeEnd: input.deliveryTimeEnd } : {}),
     });
 
     apishipOrderId = order.orderId;

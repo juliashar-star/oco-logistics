@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
 
 type RankTag = "fast" | "cheap" | "optimal";
 
@@ -102,7 +104,11 @@ export function NewOrderForm() {
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<CreateResult | null>(null);
   const [recalculateHint, setRecalculateHint] = useState<string | null>(null);
+  const [intervals, setIntervals] = useState<DeliveryInterval[]>([]);
+  const [selectedInterval, setSelectedInterval] = useState<DeliveryInterval | null>(null);
+  const [intervalsLoading, setIntervalsLoading] = useState(false);
   const pointsRequestId = useRef(0);
+  const intervalsRequestId = useRef(0);
   const calculationSnapshot = useRef<CalculationSnapshot | null>(null);
 
   function clearQuoteSelection() {
@@ -110,7 +116,24 @@ export function NewOrderForm() {
     setQuoteIds({});
     setSelectedKey(null);
     setMeta(null);
+    setIntervals([]);
+    setSelectedInterval(null);
+    setIntervalsLoading(false);
     calculationSnapshot.current = null;
+  }
+
+  function shipmentParamsForIntervals() {
+    return {
+      weightG: Number(weightG),
+      lengthCm: Number(lengthCm),
+      widthCm: Number(widthCm),
+      heightCm: Number(heightCm),
+      destCity,
+      destAddress: pickupType === "COURIER" ? destAddress.trim() : undefined,
+      pickupType,
+      pointOutId:
+        pickupType === "PVZ" ? Number(pointOutId || meta?.pointOutId) : undefined,
+    };
   }
 
   function snapshotFromForm(): CalculationSnapshot {
@@ -250,6 +273,81 @@ export function NewOrderForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- сравниваем снимок расчёта с текущими полями
   }, [recipientName, recipientPhone, weightG, lengthCm, widthCm, heightCm, quotes.length]);
 
+  useEffect(() => {
+    if (!selectedKey) {
+      setIntervals([]);
+      setSelectedInterval(null);
+      setIntervalsLoading(false);
+      return;
+    }
+
+    const quote = quotes.find((q) => quoteRowKey(q) === selectedKey);
+    if (!quote) {
+      setIntervals([]);
+      setSelectedInterval(null);
+      setIntervalsLoading(false);
+      return;
+    }
+
+    const requestId = ++intervalsRequestId.current;
+    setIntervals([]);
+    setSelectedInterval(null);
+    setIntervalsLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/shipments/intervals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            providerKey: quote.providerKey,
+            tariffId: quote.tariffId,
+            ...shipmentParamsForIntervals(),
+          }),
+        });
+
+        if (requestId !== intervalsRequestId.current) {
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setIntervals([]);
+          setError(
+            typeof data.error === "string"
+              ? data.error
+              : "Не удалось загрузить интервалы доставки",
+          );
+          return;
+        }
+
+        setIntervals(data.intervals ?? []);
+      } catch {
+        if (requestId !== intervalsRequestId.current) {
+          return;
+        }
+        setIntervals([]);
+        setError("Не удалось загрузить интервалы доставки");
+      } finally {
+        if (requestId === intervalsRequestId.current) {
+          setIntervalsLoading(false);
+        }
+      }
+    })();
+  }, [
+    selectedKey,
+    quotes,
+    weightG,
+    lengthCm,
+    widthCm,
+    heightCm,
+    destCity,
+    destAddress,
+    pickupType,
+    pointOutId,
+    meta?.pointOutId,
+  ]);
+
   function selectQuote(quote: Quote, mode: SelectionMode) {
     setSelectedKey(quoteRowKey(quote));
     setSelectionMode(mode);
@@ -291,16 +389,7 @@ export function NewOrderForm() {
       const response = await fetch("/api/shipments/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weightG: Number(weightG),
-          lengthCm: Number(lengthCm),
-          widthCm: Number(widthCm),
-          heightCm: Number(heightCm),
-          destCity,
-          destAddress: pickupType === "COURIER" ? destAddress.trim() : undefined,
-          pickupType,
-          pointOutId: pickupType === "PVZ" ? Number(pointOutId) : undefined,
-        }),
+        body: JSON.stringify(shipmentParamsForIntervals()),
       });
 
       const data = await response.json();
@@ -386,6 +475,13 @@ export function NewOrderForm() {
           recipientPhone: recipientPhone.trim(),
           selectionMode,
           legalBasisConfirmed,
+          ...(selectedInterval
+            ? {
+                deliveryDate: selectedInterval.date ?? undefined,
+                deliveryTimeStart: selectedInterval.from,
+                deliveryTimeEnd: selectedInterval.to,
+              }
+            : {}),
         }),
       });
 
@@ -744,6 +840,20 @@ export function NewOrderForm() {
             </table>
           </div>
 
+          {intervalsLoading && (
+            <p className="mt-4 text-sm text-slate-600" role="status">
+              Загружаем интервалы доставки...
+            </p>
+          )}
+
+          <div className="mt-4">
+            <DeliveryIntervalPicker
+              intervals={intervals}
+              selected={selectedInterval}
+              onSelect={setSelectedInterval}
+            />
+          </div>
+
           <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <label className="flex items-start gap-2 text-sm text-slate-700">
               <input
@@ -760,7 +870,13 @@ export function NewOrderForm() {
             <button
               type="button"
               onClick={() => void handleCreateShipment()}
-              disabled={creating || !selectedKey || quotes.length === 0}
+              disabled={
+                creating ||
+                !selectedKey ||
+                quotes.length === 0 ||
+                intervalsLoading ||
+                (intervals.length > 0 && !selectedInterval)
+              }
               className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
             >
               {creating ? "Создаём отправление..." : "Создать отправление"}
