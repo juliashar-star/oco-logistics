@@ -103,11 +103,20 @@ export default function ShipmentsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTrack(trackInput), 400);
     return () => window.clearTimeout(timer);
   }, [trackInput]);
+
+  useEffect(() => {
+    if (!syncNotice) return;
+    const timer = window.setTimeout(() => setSyncNotice(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [syncNotice]);
 
   const hasActiveFilters = status !== "" || track.trim() !== "";
 
@@ -145,6 +154,35 @@ export default function ShipmentsPage() {
     void loadShipments();
   }, [loadShipments]);
 
+  const handleSyncStatuses = async () => {
+    setSyncing(true);
+    setSyncNotice(null);
+    setSyncError(null);
+
+    try {
+      const response = await fetch("/api/shipments/sync-statuses", { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setSyncError(
+          response.status === 502
+            ? "Не удалось обновить статусы, попробуйте позже"
+            : (data.error ?? "Не удалось обновить статусы, попробуйте позже"),
+        );
+        return;
+      }
+
+      setSyncNotice(
+        `Обновлено: ${data.updated ?? 0} статус(ов), ${data.events ?? 0} новых событий`,
+      );
+      await loadShipments();
+    } catch {
+      setSyncError("Не удалось обновить статусы, попробуйте позже");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-5xl px-6 py-10">
@@ -154,7 +192,7 @@ export default function ShipmentsPage() {
             Все заказы вашей компании — статус, трек-номер и этикетка.
           </p>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <select
               value={status}
               onChange={(event) =>
@@ -175,7 +213,27 @@ export default function ShipmentsPage() {
               onChange={(event) => setTrackInput(event.target.value)}
               className="sm:max-w-xs"
             />
+            <button
+              type="button"
+              onClick={() => void handleSyncStatuses()}
+              disabled={syncing}
+              className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60 sm:ml-auto"
+            >
+              {syncing ? "Обновляем..." : "Обновить статусы"}
+            </button>
           </div>
+
+          {syncNotice && (
+            <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+              {syncNotice}
+            </p>
+          )}
+
+          {syncError && (
+            <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+              {syncError}
+            </p>
+          )}
 
           {error && (
             <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
