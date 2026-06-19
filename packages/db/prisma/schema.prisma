@@ -168,6 +168,7 @@ model TrackingEvent {
   rawResponse Json?
   createdAt   DateTime @default(now())
 
+  @@unique([shipmentId, statusCode, eventAt])
   @@index([shipmentId])
 }
 
