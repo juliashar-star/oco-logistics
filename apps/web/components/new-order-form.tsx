@@ -22,6 +22,7 @@ type Quote = {
 type PickupPointOption = {
   id: number;
   providerKey: string;
+  code: string;
   name: string;
   address: string;
 };
