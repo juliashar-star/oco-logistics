@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
+import { STATUS_LABELS } from "@/lib/shipments/labels";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -44,17 +45,6 @@ const STATUS_OPTIONS: { value: ShipmentStatus | ""; label: string }[] = [
   { value: "CANCELED", label: "Отменено" },
   { value: "PROBLEM", label: "Проблема" },
 ];
-
-const STATUS_LABELS: Record<ShipmentStatus, string> = {
-  DRAFT: "Черновик",
-  CREATED: "Создано",
-  IN_TRANSIT: "В пути",
-  AT_PVZ: "На ПВЗ",
-  DELIVERED: "Доставлено",
-  RETURNED: "Возврат",
-  CANCELED: "Отменено",
-  PROBLEM: "Проблема",
-};
 
 const STATUS_BADGE_CLASS: Record<ShipmentStatus, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
@@ -121,8 +111,10 @@ export default function ShipmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [selectedShipment, setSelectedShipment] = useState<ShipmentRow | null>(null);
   const [events, setEvents] = useState<TrackingEventRow[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -219,6 +211,50 @@ export default function ShipmentsPage() {
     void loadShipments();
   }, [loadShipments]);
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    setExportError(null);
+
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (track.trim()) params.set("track", track.trim());
+
+    try {
+      const query = params.toString();
+      const response = await fetch(
+        query ? `/api/shipments/export?${query}` : "/api/shipments/export",
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setExportError(
+          typeof data.error === "string"
+            ? data.error
+            : "Не удалось экспортировать отправления",
+        );
+        return;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? "shipments.csv";
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Не удалось экспортировать отправления");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleSyncStatuses = async () => {
     setSyncing(true);
     setSyncNotice(null);
@@ -278,14 +314,24 @@ export default function ShipmentsPage() {
               onChange={(event) => setTrackInput(event.target.value)}
               className="sm:max-w-xs"
             />
-            <button
-              type="button"
-              onClick={() => void handleSyncStatuses()}
-              disabled={syncing}
-              className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60 sm:ml-auto"
-            >
-              {syncing ? "Обновляем..." : "Обновить статусы"}
-            </button>
+            <div className="flex gap-2 sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => void handleExportCsv()}
+                disabled={exporting}
+                className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {exporting ? "Экспортируем..." : "Экспорт CSV"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSyncStatuses()}
+                disabled={syncing}
+                className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {syncing ? "Обновляем..." : "Обновить статусы"}
+              </button>
+            </div>
           </div>
 
           {syncNotice && (
@@ -297,6 +343,12 @@ export default function ShipmentsPage() {
           {syncError && (
             <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
               {syncError}
+            </p>
+          )}
+
+          {exportError && (
+            <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+              {exportError}
             </p>
           )}
 
