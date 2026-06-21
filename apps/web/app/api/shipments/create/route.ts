@@ -4,6 +4,7 @@ import { ApishipError } from "@oco/apiship";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { canUseApiship } from "@/lib/apiship-client-for-company";
 import { prisma } from "@/lib/db";
+import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { createShipment } from "@/lib/shipments/create-shipment";
 import { STALE_TARIFF_QUOTES_ERROR } from "@/lib/tariff-quotes/persist-tariff-quotes";
 
@@ -80,6 +81,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedRecipientPhone = normalizeRecipientPhone(recipientPhone);
+    if (!normalizedRecipientPhone.ok) {
+      return NextResponse.json({ error: normalizedRecipientPhone.error }, { status: 400 });
+    }
+
     if (!legalBasisConfirmed) {
       return NextResponse.json(
         { error: "Подтвердите правовое основание обработки персональных данных" },
@@ -129,7 +135,7 @@ export async function POST(request: Request) {
       pvzCode: body.pvzCode,
       pickupType: pickupType === "COURIER" ? "COURIER" : "PVZ",
       recipientName,
-      recipientPhone,
+      recipientPhone: normalizedRecipientPhone.value,
       selectionMode,
       legalBasisConfirmed,
       declaredValueRub:
