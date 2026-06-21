@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABELS } from "@/lib/shipments/labels";
+import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -25,6 +25,7 @@ type ShipmentRow = {
   destCity: string;
   plannedCost: number | null;
   plannedDeliveryDays: number | null;
+  returnReason: string | null;
   carrier: { name: string } | null;
 };
 
@@ -91,7 +92,7 @@ function ShipmentsSkeleton() {
     <TableBody>
       {Array.from({ length: SKELETON_ROWS }).map((_, index) => (
         <TableRow key={index}>
-          {Array.from({ length: 7 }).map((__, cellIndex) => (
+          {Array.from({ length: 8 }).map((__, cellIndex) => (
             <TableCell key={cellIndex}>
               <div className="h-4 animate-pulse rounded bg-slate-200" />
             </TableCell>
@@ -387,6 +388,7 @@ export function ShipmentsPage() {
                   <TableHead>Получатель</TableHead>
                   <TableHead>Перевозчик</TableHead>
                   <TableHead>Статус</TableHead>
+                  <TableHead>Причина</TableHead>
                   <TableHead>Трек</TableHead>
                   <TableHead>Цена</TableHead>
                   <TableHead>Этикетка</TableHead>
@@ -414,6 +416,9 @@ export function ShipmentsPage() {
                         <Badge className={STATUS_BADGE_CLASS[shipment.status]}>
                           {STATUS_LABELS[shipment.status]}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {formatReturnReason(shipment.returnReason) || "—"}
                       </TableCell>
                       <TableCell className="font-mono text-sm">
                         {shipment.trackNumber ?? "—"}
@@ -507,6 +512,14 @@ export function ShipmentsPage() {
                     </Badge>
                   </dd>
                 </div>
+                {selectedShipment.returnReason && (
+                  <div>
+                    <dt className="text-slate-500">Причина</dt>
+                    <dd className="text-slate-900">
+                      {formatReturnReason(selectedShipment.returnReason)}
+                    </dd>
+                  </div>
+                )}
               </dl>
 
               <div className="mt-8">

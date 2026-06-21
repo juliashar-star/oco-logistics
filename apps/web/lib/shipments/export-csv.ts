@@ -1,5 +1,5 @@
 import type { PickupType, ShipmentStatus } from "@prisma/client";
-import { PICKUP_TYPE_LABELS, STATUS_LABELS } from "@/lib/shipments/labels";
+import { PICKUP_TYPE_LABELS, STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 
 const MOSCOW_TIMEZONE = "Europe/Moscow";
 const CSV_SEPARATOR = ";";
@@ -27,6 +27,7 @@ export type ShipmentExportRow = {
   plannedDeliveryDate: Date | null;
   actualCost: number | null;
   deliveredAt: Date | null;
+  returnReason: string | null;
 };
 
 type CsvColumn = {
@@ -195,6 +196,11 @@ const EXPORT_COLUMNS: CsvColumn[] = [
     header: "Факт. доставка",
     getValue: (row) => (row.deliveredAt ? formatDateTimeMoscow(row.deliveredAt) : ""),
     text: false,
+  },
+  {
+    header: "Причина возврата/отмены",
+    getValue: (row) => formatReturnReason(row.returnReason),
+    text: true,
   },
 ];
 

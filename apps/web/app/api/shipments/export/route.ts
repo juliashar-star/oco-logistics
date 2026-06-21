@@ -40,6 +40,7 @@ const exportSelect = {
   plannedDeliveryDate: true,
   actualCost: true,
   deliveredAt: true,
+  returnReason: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 
