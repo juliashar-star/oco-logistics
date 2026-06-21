@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
+import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 
 type RankTag = "fast" | "cheap" | "optimal";
 
@@ -70,6 +71,11 @@ function quoteRowKey(quote: Quote): string {
   return `${quote.providerKey}:${quote.tariffId}:${quote.deliveryMode}`;
 }
 
+function recipientPhoneForSnapshot(phone: string): string {
+  const result = normalizeRecipientPhone(phone);
+  return result.ok ? result.value : phone.trim();
+}
+
 export function NewOrderForm() {
   const [category, setCategory] = useState("OTHER");
   const [weightG, setWeightG] = useState("1000");
@@ -84,6 +90,7 @@ export function NewOrderForm() {
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [recipientPhoneError, setRecipientPhoneError] = useState("");
   const [legalBasisConfirmed, setLegalBasisConfirmed] = useState(false);
   const [points, setPoints] = useState<PickupPointOption[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
@@ -111,6 +118,10 @@ export function NewOrderForm() {
   const pointsRequestId = useRef(0);
   const intervalsRequestId = useRef(0);
   const calculationSnapshot = useRef<CalculationSnapshot | null>(null);
+
+  const recipientPhoneValidation = normalizeRecipientPhone(recipientPhone);
+  const isRecipientPhoneValid =
+    recipientPhoneValidation.ok && recipientPhoneValidation.value !== "";
 
   function clearQuoteSelection() {
     setQuotes([]);
@@ -140,7 +151,7 @@ export function NewOrderForm() {
   function snapshotFromForm(): CalculationSnapshot {
     return {
       recipientName: recipientName.trim(),
-      recipientPhone: recipientPhone.trim(),
+      recipientPhone: recipientPhoneForSnapshot(recipientPhone),
       weightG,
       lengthCm,
       widthCm,
@@ -442,6 +453,16 @@ export function NewOrderForm() {
       return;
     }
 
+    const phoneResult = normalizeRecipientPhone(recipientPhone);
+    if (!phoneResult.ok) {
+      setRecipientPhoneError(phoneResult.error);
+      return;
+    }
+    if (!phoneResult.value) {
+      setRecipientPhoneError("Укажите телефон получателя");
+      return;
+    }
+
     if (!legalBasisConfirmed) {
       setError("Подтвердите правовое основание обработки персональных данных");
       return;
@@ -473,7 +494,7 @@ export function NewOrderForm() {
               ? points.find((p) => String(p.id) === pointOutId)?.code
               : undefined,
           recipientName: recipientName.trim(),
-          recipientPhone: recipientPhone.trim(),
+          recipientPhone: phoneResult.value,
           selectionMode,
           legalBasisConfirmed,
           ...(selectedInterval
@@ -676,11 +697,34 @@ export function NewOrderForm() {
             </label>
             <input
               required
+              type="tel"
+              autoComplete="tel"
               value={recipientPhone}
-              onChange={(e) => setRecipientPhone(e.target.value)}
+              onChange={(e) => {
+                setRecipientPhone(e.target.value);
+                if (recipientPhoneError) {
+                  setRecipientPhoneError("");
+                }
+              }}
+              onBlur={() => {
+                if (!recipientPhone.trim()) {
+                  setRecipientPhoneError("");
+                  return;
+                }
+                const result = normalizeRecipientPhone(recipientPhone);
+                if (!result.ok) {
+                  setRecipientPhoneError(result.error);
+                }
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
               placeholder="+79991234567"
+              aria-invalid={Boolean(recipientPhoneError)}
             />
+            {recipientPhoneError && (
+              <p className="mt-2 text-sm text-red-700" role="alert">
+                {recipientPhoneError}
+              </p>
+            )}
           </div>
         </div>
 
@@ -876,7 +920,8 @@ export function NewOrderForm() {
                 !selectedKey ||
                 quotes.length === 0 ||
                 intervalsLoading ||
-                (intervals.length > 0 && !selectedInterval)
+                (intervals.length > 0 && !selectedInterval) ||
+                !isRecipientPhoneValid
               }
               className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
             >
