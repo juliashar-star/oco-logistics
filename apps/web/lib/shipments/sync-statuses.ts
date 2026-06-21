@@ -91,6 +91,9 @@ async function processSucceedOrder(
       status: true,
       arrivedAtPvzAt: true,
       deliveredAt: true,
+      isReturned: true,
+      isCanceled: true,
+      returnReason: true,
     },
   });
 
@@ -149,6 +152,21 @@ async function processSucceedOrder(
 
   if (mappedStatus !== shipment.status) {
     shipmentUpdates.status = mappedStatus;
+  }
+
+  if (mappedStatus === "RETURNED" && shipment.isReturned !== true) {
+    shipmentUpdates.isReturned = true;
+  }
+
+  if (mappedStatus === "CANCELED" && shipment.isCanceled !== true) {
+    shipmentUpdates.isCanceled = true;
+  }
+
+  if (
+    (mappedStatus === "RETURNED" || mappedStatus === "CANCELED") &&
+    (shipment.returnReason == null || shipment.returnReason.trim() === "")
+  ) {
+    shipmentUpdates.returnReason = statusCode;
   }
 
   if (Object.keys(shipmentUpdates).length === 0) {
