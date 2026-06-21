@@ -27,6 +27,9 @@ const shipmentSelect = {
   destCity: true,
   plannedCost: true,
   plannedDeliveryDays: true,
+  isReturned: true,
+  isCanceled: true,
+  returnReason: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 
