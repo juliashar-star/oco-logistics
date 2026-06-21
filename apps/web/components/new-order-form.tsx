@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DeliveryInterval } from "@oco/apiship";
+import type { DeliveryInterval, PickupPoint } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
@@ -18,14 +18,6 @@ type Quote = {
   deliveryDaysMax: number;
   deliveryMode: "door" | "point";
   tags: RankTag[];
-};
-
-type PickupPointOption = {
-  id: number;
-  providerKey: string;
-  code: string;
-  name: string;
-  address: string;
 };
 
 type SelectionMode = "FAST" | "CHEAP" | "OPTIMAL" | "MANUAL";
@@ -92,7 +84,7 @@ export function NewOrderForm() {
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipientPhoneError, setRecipientPhoneError] = useState("");
   const [legalBasisConfirmed, setLegalBasisConfirmed] = useState(false);
-  const [points, setPoints] = useState<PickupPointOption[]>([]);
+  const [points, setPoints] = useState<PickupPoint[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
   const [senderConfigured, setSenderConfigured] = useState(true);
