@@ -3,6 +3,16 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { validateRegistration } from "@/lib/auth/validation";
+import {
+  clearRegisterAttempts,
+  isRegisterBlocked,
+  recordRegisterAttempt,
+} from "@/lib/auth/rate-limit";
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() ?? "unknown";
+}
 
 export async function POST(request: Request) {
   try {
@@ -18,8 +28,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
     }
 
+    const key = clientIp(request);
+    if (isRegisterBlocked(key)) {
+      return NextResponse.json(
+        {
+          error: "Слишком много попыток регистрации. Попробуйте через час.",
+        },
+        { status: 429 },
+      );
+    }
+
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
+      recordRegisterAttempt(key);
       return NextResponse.json(
         { error: "Аккаунт с таким email уже существует" },
         { status: 409 },
@@ -54,6 +75,8 @@ export async function POST(request: Request) {
       email: result.user.email,
       role: result.user.role,
     });
+
+    clearRegisterAttempts(key);
 
     return NextResponse.json({
       ok: true,
