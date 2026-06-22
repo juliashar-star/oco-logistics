@@ -105,7 +105,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(suggestions);
   } catch (error) {
-    console.error("dadata suggest failed", error);
+    console.error("dadata suggest failed", {
+      status: error instanceof Error ? error.message : "unknown",
+    });
     return NextResponse.json(
       { error: "Сервис подсказок адреса временно недоступен" },
       { status: 502 },

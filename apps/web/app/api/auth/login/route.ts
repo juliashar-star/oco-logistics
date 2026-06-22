@@ -67,9 +67,10 @@ export async function POST(request: Request) {
       ok: true,
       redirect: "/dashboard",
     });
-  } catch (err) {
-    const errMessage = err instanceof Error ? err.message : String(err);
-    console.error("login failed", errMessage);
+  } catch (error) {
+    console.error("login failed", {
+      type: error instanceof Error ? error.constructor.name : "unknown",
+    });
     return NextResponse.json(
       { error: "Не удалось войти. Попробуйте позже." },
       { status: 500 },

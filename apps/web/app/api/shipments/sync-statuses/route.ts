@@ -14,11 +14,8 @@ export async function POST() {
       updated: result.updated,
       events: result.events,
     });
-  } catch (error) {
-    console.error("sync shipment statuses failed", {
-      companyId: user.companyId,
-      error: error instanceof Error ? error.message : "unknown",
-    });
+  } catch {
+    console.error("sync shipment statuses failed");
     return NextResponse.json(
       { error: "Не удалось обновить статусы" },
       { status: 502 },
