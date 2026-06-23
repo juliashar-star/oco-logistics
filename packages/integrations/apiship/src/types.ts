@@ -75,6 +75,22 @@ export type ListPointsResult = {
   limit: number;
 };
 
+export type ApishipProvider = {
+  key: string;
+  name: string;
+  description: string | null;
+};
+
+export type ApishipProvidersResponse = {
+  rows: ApishipProvider[];
+  meta: { total: number; offset: number; limit: number };
+};
+
+export type ApishipConnection = {
+  providerKey: string;
+  name: string;
+};
+
 export type DeliveryQuote = {
   providerKey: string;
   tariffId: number;

@@ -2,6 +2,9 @@ import { fetchApishipToken } from "./auth";
 import { buildCreateOrderPayload } from "./build-create-order";
 import type {
   ApishipConfig,
+  ApishipConnection,
+  ApishipProvider,
+  ApishipProvidersResponse,
   CalculateInput,
   CalculateResult,
   CreateOrderInput,
@@ -68,6 +71,20 @@ type PointsRow = {
 
 type PointsResponse = {
   rows?: PointsRow[];
+  meta?: {
+    total?: number;
+    offset?: number;
+    limit?: number;
+  };
+};
+
+type ConnectionsRow = {
+  providerKey?: string;
+  name?: string;
+};
+
+type ConnectionsResponse = {
+  rows?: ConnectionsRow[];
   meta?: {
     total?: number;
     offset?: number;
@@ -380,6 +397,22 @@ export class ApishipClient {
       offset: data.meta?.offset ?? offset,
       limit: data.meta?.limit ?? limit,
     };
+  }
+
+  async listProviders(): Promise<ApishipProvider[]> {
+    const data = await this.request<ApishipProvidersResponse>("/lists/providers");
+    return data.rows ?? [];
+  }
+
+  async listConnections(): Promise<ApishipConnection[]> {
+    const data = await this.request<ConnectionsResponse>("/connections");
+
+    return (data.rows ?? [])
+      .filter((row): row is ConnectionsRow & { providerKey: string } => Boolean(row.providerKey))
+      .map((row) => ({
+        providerKey: row.providerKey,
+        name: row.name ?? "",
+      }));
   }
 
   async createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
