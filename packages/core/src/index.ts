@@ -10,3 +10,12 @@ export {
   type RankQuotesOptions,
   type RankTag,
 } from "./rank-quotes";
+export {
+  rankCarriers,
+  type RankInput,
+  type RankResult,
+  type RankedCarrier,
+  type Priority,
+  type MethodFilter,
+  type RegionScope,
+} from "./carrier-picker/rank";
