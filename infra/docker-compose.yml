@@ -4,7 +4,7 @@ services:
     container_name: oco-postgres
     restart: unless-stopped
     ports:
-      - "5560:5432"
+      - "15432:5432"
     environment:
       POSTGRES_USER: oco
       POSTGRES_PASSWORD: oco_dev_password
