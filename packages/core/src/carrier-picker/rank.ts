@@ -3,6 +3,7 @@ import {
   CARRIER_REGISTRY,
   type ProfileId,
 } from "./registry";
+import type { CarrierScore } from "./score";
 
 export type Priority = "cheaper" | "faster" | "reliable" | "fewer_returns";
 export type MethodFilter = "pvz" | "courier" | "both";
@@ -20,6 +21,7 @@ export type RankedCarrier = {
   displayName: string;
   score: number;
   reasons: string[];
+  carrierScore?: CarrierScore;
 };
 
 export type RankResult = {

@@ -60,3 +60,30 @@ export function recordRegisterAttempt(key: string): void {
 export function clearRegisterAttempts(key: string): void {
   registerAttempts.delete(key);
 }
+
+const publicRecommendAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const PUBLIC_RECOMMEND_MAX_ATTEMPTS = 5;
+const PUBLIC_RECOMMEND_WINDOW_MS = 60 * 1000;
+
+export function isPublicRecommendBlocked(key: string): boolean {
+  const entry = publicRecommendAttempts.get(key);
+  if (!entry) return false;
+  if (Date.now() > entry.resetAt) {
+    publicRecommendAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= PUBLIC_RECOMMEND_MAX_ATTEMPTS;
+}
+
+export function recordPublicRecommendAttempt(key: string): void {
+  const now = Date.now();
+  const entry = publicRecommendAttempts.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    publicRecommendAttempts.set(key, { count: 1, resetAt: now + PUBLIC_RECOMMEND_WINDOW_MS });
+    return;
+  }
+
+  entry.count += 1;
+}

@@ -19,3 +19,9 @@ export {
   type MethodFilter,
   type RegionScope,
 } from "./carrier-picker/rank";
+export {
+  getCarrierScore,
+  applyCarrierScore,
+  type CarrierScore,
+} from "./carrier-picker/score";
+export { CATEGORY_TO_PROFILE } from "./carrier-picker/registry";
