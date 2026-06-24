@@ -6,6 +6,7 @@ import { LogoutButton } from "@/components/logout-button";
 const NAV = [
   { href: "/dashboard", label: "Дашборд" },
   { href: "/new-order", label: "Новый заказ" },
+  { href: "/dashboard/carrier-picker", label: "Подбор перевозчика" },
   { href: "/shipments", label: "Отправления", icon: Package },
   { href: "/settings", label: "Настройки" },
 ];
