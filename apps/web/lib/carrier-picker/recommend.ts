@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { applyCarrierScore, rankCarriers } from "@oco/core";
+import { getApishipClientForCompany } from "@/lib/apiship-client-for-company";
 
 const requestSchema = z.object({
   category: z.string().trim().min(1, "Укажите категорию"),
@@ -26,7 +27,20 @@ export type CarrierRecommendResult =
   | { ok: true; data: CarrierRecommendSuccess }
   | { ok: false; error: string; status: 400 | 500 };
 
-export function recommendCarriers(body: unknown): CarrierRecommendResult {
+async function fetchConnectedCarriers(companyId: string): Promise<string[] | undefined> {
+  try {
+    const client = await getApishipClientForCompany(companyId);
+    const connections = await client.listConnections();
+    return connections.map((connection) => connection.providerKey);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function recommendCarriers(
+  body: unknown,
+  companyId?: string,
+): Promise<CarrierRecommendResult> {
   const parsed = requestSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -37,7 +51,8 @@ export function recommendCarriers(body: unknown): CarrierRecommendResult {
   const { category, parcel } = parsed.data;
   const { weight, maxSideCm } = parcel;
 
-  // TODO: pass connectedCarriers from listConnections() — Task 4 gap
+  const connectedCarriers = companyId ? await fetchConnectedCarriers(companyId) : undefined;
+
   const ranked = rankCarriers({
     category,
     region: "all_russia",
@@ -45,6 +60,7 @@ export function recommendCarriers(body: unknown): CarrierRecommendResult {
     method: "both",
     weight,
     maxSideCm,
+    connectedCarriers,
   });
   const scored = applyCarrierScore(ranked);
 

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const result = recommendCarriers(body);
+    const result = await recommendCarriers(body);
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
