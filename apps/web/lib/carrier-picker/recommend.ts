@@ -6,6 +6,7 @@ const requestSchema = z.object({
   parcel: z.object({
     weight: z.coerce.number().positive("Вес должен быть больше 0"),
     value: z.coerce.number().min(0, "Стоимость не может быть отрицательной"),
+    maxSideCm: z.coerce.number().positive("Длинная сторона должна быть больше 0").optional(),
   }),
 });
 
@@ -33,13 +34,17 @@ export function recommendCarriers(body: unknown): CarrierRecommendResult {
     return { ok: false, error: message, status: 400 };
   }
 
-  const { category } = parsed.data;
+  const { category, parcel } = parsed.data;
+  const { weight, maxSideCm } = parcel;
 
+  // TODO: pass connectedCarriers from listConnections() — Task 4 gap
   const ranked = rankCarriers({
     category,
     region: "all_russia",
     priority: "reliable",
     method: "both",
+    weight,
+    maxSideCm,
   });
   const scored = applyCarrierScore(ranked);
 

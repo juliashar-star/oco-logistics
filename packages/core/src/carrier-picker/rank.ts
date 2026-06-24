@@ -1,6 +1,7 @@
 import {
   CATEGORY_TO_PROFILE,
   CARRIER_REGISTRY,
+  type Carrier,
   type ProfileId,
 } from "./registry";
 import type { CarrierScore } from "./score";
@@ -14,6 +15,9 @@ export type RankInput = {
   region: RegionScope;
   priority: Priority;
   method: MethodFilter;
+  weight?: number; // kg
+  maxSideCm?: number; // longest side in cm
+  connectedCarriers?: string[];
 };
 
 export type RankedCarrier = {
@@ -28,12 +32,19 @@ export type RankResult = {
   profile: ProfileId | ProfileId[] | null;
   ambiguous: boolean;
   ranked: RankedCarrier[];
+  reason?: string;
 };
 
 const SCORE_REGION = 10;
 const SCORE_METHOD = 10;
 const SCORE_PRIORITY = 10;
 const TOP_N = 3;
+
+const FIXED_PROFILE_ORDER: Record<"P5" | "P6" | "P7", string[]> = {
+  P5: ["dpd", "cdek", "dellin", "baikalsr", "vozovoz", "rupost"],
+  P6: ["dellin", "baikalsr", "pecom", "vozovoz", "cdek"],
+  P7: ["yataxi", "dostavista", "logsis"],
+};
 
 const REGION_WIDE_COVERAGE_CARRIERS = new Set(["rupost", "cdek"]);
 const REGION_CITY_CARRIERS = new Set(["yataxi", "dostavista", "logsis"]);
@@ -167,14 +178,51 @@ function scoreCarrier(providerKey: string, input: RankInput): { score: number; r
   return { score, reasons };
 }
 
-export function rankCarriers(input: RankInput): RankResult {
-  const mapping = CATEGORY_TO_PROFILE.find((m) => m.category === input.category);
-  if (!mapping) {
-    return { profile: null, ambiguous: false, ranked: [] };
+function categoryTouchesP5OrP6(profiles: ProfileId[]): boolean {
+  return profiles.some((p) => p === "P5" || p === "P6");
+}
+
+function rankFixedProfile(
+  profile: "P5" | "P6" | "P7",
+  input: RankInput,
+): RankResult {
+  const order = FIXED_PROFILE_ORDER[profile];
+  const connectedKeys = (input as RankInput & { connectedCarriers?: string[] })
+    .connectedCarriers;
+  const connected =
+    connectedKeys !== undefined ? new Set(connectedKeys) : null;
+
+  const carriers: Carrier[] = [];
+  for (const providerKey of order) {
+    if (connected && !connected.has(providerKey)) continue;
+    const carrier = CARRIER_REGISTRY.find((c) => c.providerKey === providerKey);
+    if (carrier) carriers.push(carrier);
   }
 
-  const categoryProfiles = mapping.profiles;
-  const ambiguous = categoryProfiles.length > 1;
+  if (carriers.length === 0) {
+    return {
+      profile: null,
+      ambiguous: false,
+      ranked: [],
+      reason: "no_carrier_connected",
+    };
+  }
+
+  const ranked = carriers.slice(0, TOP_N).map((carrier, index) => ({
+    providerKey: carrier.providerKey,
+    displayName: carrier.displayName,
+    score: carriers.length - index,
+    reasons: [] as string[],
+  }));
+
+  return { profile, ambiguous: false, ranked };
+}
+
+function rankWithScoreCards(
+  input: RankInput,
+  categoryProfiles: ProfileId[],
+  ambiguous: boolean,
+): RankResult {
   const profile: ProfileId | ProfileId[] =
     categoryProfiles.length === 1 ? categoryProfiles[0]! : categoryProfiles;
 
@@ -199,4 +247,59 @@ export function rankCarriers(input: RankInput): RankResult {
     .slice(0, TOP_N);
 
   return { profile, ambiguous, ranked };
+}
+
+export function rankCarriers(input: RankInput): RankResult {
+  const mapping = CATEGORY_TO_PROFILE.find((m) => m.category === input.category);
+  if (!mapping) {
+    return { profile: null, ambiguous: false, ranked: [] };
+  }
+
+  const categoryProfiles = mapping.profiles;
+
+  if (categoryTouchesP5OrP6(categoryProfiles) && input.weight === undefined) {
+    return {
+      profile: null,
+      ambiguous: false,
+      ranked: [],
+      reason: "weight_required",
+    };
+  }
+
+  const { weight, maxSideCm } = input;
+
+  if (
+    (maxSideCm !== undefined && maxSideCm > 120) ||
+    (weight !== undefined && weight > 30)
+  ) {
+    return rankFixedProfile("P6", input);
+  }
+
+  if (
+    weight !== undefined &&
+    weight >= 15 &&
+    weight <= 30 &&
+    (maxSideCm === undefined || maxSideCm <= 120)
+  ) {
+    return rankFixedProfile("P5", input);
+  }
+
+  if (
+    weight !== undefined &&
+    weight < 5 &&
+    maxSideCm !== undefined &&
+    maxSideCm >= 60 &&
+    maxSideCm <= 120
+  ) {
+    return rankWithScoreCards(input, ["P4"], false);
+  }
+
+  if (categoryProfiles.length === 1) {
+    const onlyProfile = categoryProfiles[0]!;
+    if (onlyProfile === "P5" || onlyProfile === "P6" || onlyProfile === "P7") {
+      return rankFixedProfile(onlyProfile, input);
+    }
+  }
+
+  return rankWithScoreCards(input, categoryProfiles, categoryProfiles.length > 1);
 }
