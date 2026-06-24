@@ -15,9 +15,13 @@
     "db:push": "prisma db push --schema packages/db/prisma/schema.prisma",
     "docker:up": "docker compose -f infra/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker-compose.yml down",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.scripts.json && npm run typecheck -w @oco/web",
+    "carrier:drift": "node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/check-carrier-drift.ts"
   },
   "devDependencies": {
-    "prisma": "^6.9.0"
+    "prisma": "^6.9.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5"
   }
 }
