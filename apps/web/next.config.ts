@@ -6,6 +6,9 @@ loadEnvConfig(path.join(__dirname, "../.."));
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@oco/db", "@oco/shared", "@oco/core", "@oco/apiship"],
+  devIndicators: {
+    position: "bottom-right",
+  },
   async headers() {
     return [
       {
