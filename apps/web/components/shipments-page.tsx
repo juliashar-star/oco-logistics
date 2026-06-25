@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -104,6 +105,7 @@ function ShipmentsSkeleton() {
 }
 
 export function ShipmentsPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<ShipmentStatus | "">("");
   const [trackInput, setTrackInput] = useState("");
   const [track, setTrack] = useState("");
@@ -359,18 +361,13 @@ export function ShipmentsPage() {
         )}
 
         {!loading && !error && total === 0 && !hasActiveFilters && (
-          <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <p className="font-medium text-slate-900">Здесь будет ваша логистика</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Создайте первое отправление — OCO рассчитает тарифы и выберет лучшего перевозчика.
-            </p>
-            <Link
-              href="/new-order"
-              className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover"
-            >
-              Создать первое отправление
-            </Link>
-          </div>
+          <EmptyState
+            illustration="shipments"
+            title="Здесь будет ваша логистика"
+            description="Создайте первое отправление — OCO рассчитает тарифы и выберет лучшего перевозчика."
+            actionLabel="+ Создать отправление"
+            onAction={() => router.push("/new-order")}
+          />
         )}
 
         {!loading && !error && total === 0 && hasActiveFilters && (
