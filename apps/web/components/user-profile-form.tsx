@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Input } from "@/components/ui/input";
 
 type UserProfileFormProps = {
@@ -14,6 +15,7 @@ export function UserProfileForm({
 }: UserProfileFormProps) {
   const [name, setName] = useState(initialName);
   const [warehouseAddress, setWarehouseAddress] = useState(initialWarehouseAddress);
+  const [warehouseAddressDisplayValue, setWarehouseAddressDisplayValue] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,6 +41,7 @@ export function UserProfileForm({
 
       setName(data.user?.name ?? name);
       setWarehouseAddress(data.user?.warehouseAddress ?? warehouseAddress);
+      setWarehouseAddressDisplayValue("");
       setMessage("Профиль сохранён");
     } catch {
       setError("Не удалось сохранить профиль");
@@ -63,20 +66,22 @@ export function UserProfileForm({
       </div>
 
       <div>
-        <label
-          htmlFor="warehouse-address"
-          className="mb-1 block text-sm font-medium text-slate-700"
-        >
+        <label className="mb-1 block text-sm font-medium text-slate-700">
           Адрес склада отправления
         </label>
-        <textarea
-          id="warehouse-address"
+        <AddressAutocomplete
           value={warehouseAddress}
-          onChange={(e) => setWarehouseAddress(e.target.value)}
-          rows={3}
-          maxLength={500}
+          displayValue={warehouseAddressDisplayValue || undefined}
+          onChange={(raw) => {
+            setWarehouseAddress(raw);
+            setWarehouseAddressDisplayValue("");
+          }}
+          onSelect={(result) => {
+            setWarehouseAddress(result.fullAddress);
+            setWarehouseAddressDisplayValue(result.fullAddress);
+          }}
           placeholder="Город, улица, склад"
-          className="flex w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={loading}
         />
       </div>
 
