@@ -10,7 +10,7 @@ export default function LoginPage() {
           ← OCO Logistics
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-slate-900">Вход в кабинет OCO</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-text-3">
           Email и пароль, которые вы указали при регистрации компании.{" "}
           <strong>Это не логин APIShip</strong> (тот настраивается отдельно в «Настройках» после входа).
         </p>
