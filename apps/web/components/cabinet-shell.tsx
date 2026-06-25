@@ -19,7 +19,7 @@ const MAIN_NAV = [
 ];
 
 const SETTINGS_NAV = {
-  href: "/settings",
+  href: "/dashboard/settings",
   label: "Настройки",
   icon: Settings,
 };

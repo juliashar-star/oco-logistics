@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { validateChangePassword } from "@/lib/auth/validation";
+import { prisma } from "@/lib/db";
+
+const WRONG_PASSWORD_ERROR = "Не удалось сменить пароль. Проверьте текущий пароль.";
+
+export async function PATCH(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const currentPassword = String(body.currentPassword ?? "");
+    const newPassword = String(body.newPassword ?? "");
+
+    const errors = validateChangePassword({ currentPassword, newPassword });
+    if (errors.length > 0) {
+      return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
+    }
+
+    const stored = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { passwordHash: true },
+    });
+
+    if (!stored) {
+      return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
+    }
+
+    const valid = await verifyPassword(currentPassword, stored.passwordHash);
+    if (!valid) {
+      return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.userId },
+      data: { passwordHash },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch {
+    console.error("user password change failed");
+    return NextResponse.json(
+      { error: "Не удалось сменить пароль" },
+      { status: 500 },
+    );
+  }
+}

@@ -68,6 +68,8 @@ model User {
   company                 Company              @relation(fields: [companyId], references: [id])
   email                   String               @unique
   passwordHash            String
+  name                    String?
+  warehouseAddress        String?
   role                    UserRole             @default(OWNER)
   emailVerified           Boolean              @default(false)
   verificationToken       String?              @unique

@@ -60,6 +60,48 @@ export function validateForgotPassword(input: { email: string }): AuthInputError
   return errors;
 }
 
+export function validateUserProfile(input: {
+  name?: string;
+  warehouseAddress?: string;
+}): AuthInputError[] {
+  const errors: AuthInputError[] = [];
+
+  if (input.name !== undefined && input.name.length > 100) {
+    errors.push({ field: "name", message: "Имя — не более 100 символов" });
+  }
+
+  if (input.warehouseAddress !== undefined && input.warehouseAddress.length > 500) {
+    errors.push({
+      field: "warehouseAddress",
+      message: "Адрес склада — не более 500 символов",
+    });
+  }
+
+  return errors;
+}
+
+export function validateChangePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): AuthInputError[] {
+  const errors: AuthInputError[] = [];
+
+  if (!input.currentPassword) {
+    errors.push({ field: "currentPassword", message: "Укажите текущий пароль" });
+  }
+
+  if (!input.newPassword) {
+    errors.push({ field: "newPassword", message: "Укажите новый пароль" });
+  } else if (input.newPassword.length < 8) {
+    errors.push({
+      field: "newPassword",
+      message: "Пароль — минимум 8 символов",
+    });
+  }
+
+  return errors;
+}
+
 export function validateResetPassword(input: {
   token: string;
   password: string;
