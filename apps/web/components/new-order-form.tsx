@@ -414,7 +414,7 @@ export function NewOrderForm() {
       });
 
       if (nextQuotes.length === 0) {
-        setError("APIShip не вернул вариантов для этих параметров");
+        setError("Перевозчики не дали тариф для этих параметров — проверьте вес и габариты.");
         return;
       }
 
@@ -783,7 +783,7 @@ export function NewOrderForm() {
           disabled={loading || !senderConfigured}
           className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          {loading ? "Считаем тарифы..." : "Рассчитать тарифы"}
+          {loading ? "Запрашиваем тарифы у перевозчиков..." : "Рассчитать тарифы"}
         </button>
       </form>
 
@@ -936,7 +936,7 @@ export function NewOrderForm() {
               </li>
             ) : (
               <li>
-                Трек-номер появится в карточке отправления после регистрации в службе доставки.
+                Трек-номер появится после регистрации у перевозчика.
               </li>
             )}
             {createResult.plannedCostRub != null && (

@@ -144,7 +144,7 @@ export default async function CarrierPickerDashboardPage() {
 
     var carriers = (data.carriers || []).slice(0, 3);
     if (carriers.length === 0) {
-      resultEl.innerHTML = '<p class="text-sm text-slate-600">Подходящих перевозчиков не найдено.</p>';
+      resultEl.innerHTML = '<p class="text-sm text-slate-600">Для этих параметров перевозчиков не нашлось — попробуйте другую категорию или уточните вес.</p>';
       return;
     }
 
@@ -222,7 +222,7 @@ export default async function CarrierPickerDashboardPage() {
         renderResult(result.data, weightProvided);
       })
       .catch(function () {
-        showError("Не удалось подобрать перевозчиков. Попробуйте позже.");
+        showError("Что-то пошло не так. Обновите страницу или попробуйте через минуту.");
       })
       .finally(function () {
         submitBtn.disabled = false;

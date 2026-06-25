@@ -61,7 +61,7 @@ export default function CarrierPickerPage() {
 
       setResult(data);
     } catch {
-      setError("Не удалось подобрать перевозчиков. Попробуйте позже.");
+      setError("Что-то пошло не так. Попробуйте через минуту.");
     } finally {
       setLoading(false);
     }
@@ -75,10 +75,10 @@ export default function CarrierPickerPage() {
         </Link>
 
         <h1 className="mt-4 text-2xl font-semibold text-slate-900">
-          Подберите перевозчика для вашего товара
+          Какой перевозчик подойдёт для вашего товара?
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          Инструмент для малого e-commerce — бесплатно
+          Укажите категорию и вес — покажем подходящих перевозчиков
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -140,7 +140,7 @@ export default function CarrierPickerPage() {
             )}
 
             {result.carriers.length === 0 ? (
-              <p className="text-sm text-slate-600">Подходящих перевозчиков не найдено.</p>
+              <p className="text-sm text-slate-600">Для этих параметров перевозчиков не нашлось — попробуйте другую категорию или уточните вес.</p>
             ) : (
               <ul className="space-y-3">
                 {result.carriers.map((carrier) => (

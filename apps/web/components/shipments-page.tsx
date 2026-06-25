@@ -169,7 +169,7 @@ export function ShipmentsPage() {
 
         setEvents(data.events ?? []);
       } catch {
-        setEventsError("Не удалось связаться с сервером");
+        setEventsError("Что-то пошло не так. Обновите страницу или попробуйте через минуту.");
       } finally {
         setEventsLoading(false);
       }
@@ -200,7 +200,7 @@ export function ShipmentsPage() {
       setShipments(data.shipments ?? []);
       setTotal(data.total ?? 0);
     } catch {
-      setError("Не удалось связаться с сервером");
+      setError("Что-то пошло не так. Обновите страницу или попробуйте через минуту.");
       setShipments([]);
       setTotal(0);
     } finally {
@@ -275,7 +275,7 @@ export function ShipmentsPage() {
       }
 
       setSyncNotice(
-        `Обновлено: ${data.updated ?? 0} статус(ов), ${data.events ?? 0} новых событий`,
+        `Статусы обновлены: ${data.updated ?? 0} посылок, ${data.events ?? 0} новых событий`,
       );
       await loadShipments();
     } catch {
@@ -360,9 +360,9 @@ export function ShipmentsPage() {
 
         {!loading && !error && total === 0 && !hasActiveFilters && (
           <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <p className="font-medium text-slate-900">Отправлений пока нет</p>
+            <p className="font-medium text-slate-900">Здесь будет ваша логистика</p>
             <p className="mt-2 text-sm text-slate-600">
-              Создайте первый заказ — он появится в этом списке.
+              Создайте первое отправление — OCO рассчитает тарифы и выберет лучшего перевозчика.
             </p>
             <Link
               href="/new-order"
@@ -375,7 +375,7 @@ export function ShipmentsPage() {
 
         {!loading && !error && total === 0 && hasActiveFilters && (
           <p className="mt-8 text-center text-sm text-slate-600">
-            Ничего не найдено — попробуйте изменить фильтры.
+            По этому фильтру ничего нет — попробуйте другой статус или сбросьте поиск.
           </p>
         )}
 
