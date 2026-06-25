@@ -1,15 +1,55 @@
 import Link from "next/link";
-import { Package } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Plus,
+  Settings,
+  Truck,
+  type LucideIcon,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { LogoutButton } from "@/components/logout-button";
 
-const NAV = [
-  { href: "/dashboard", label: "Дашборд" },
-  { href: "/new-order", label: "Новый заказ" },
-  { href: "/dashboard/carrier-picker", label: "Подбор перевозчика" },
+const MAIN_NAV = [
+  { href: "/dashboard", label: "Дашборд", icon: LayoutDashboard },
+  { href: "/new-order", label: "Новый заказ", icon: Plus },
   { href: "/shipments", label: "Отправления", icon: Package },
-  { href: "/settings", label: "Настройки" },
+  { href: "/dashboard/carrier-picker", label: "Подбор перевозчика", icon: Truck },
 ];
+
+const SETTINGS_NAV = {
+  href: "/settings",
+  label: "Настройки",
+  icon: Settings,
+};
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  active?: string;
+}) {
+  const isActive = active === href;
+
+  return (
+    <Link
+      href={href}
+      className={`flex cursor-pointer flex-row items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
+        isActive
+          ? "bg-primary-soft font-semibold text-primary"
+          : "text-text-2 hover:bg-surface-2"
+      }`}
+    >
+      <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
+      {label}
+    </Link>
+  );
+}
 
 export async function CabinetShell({
   children,
@@ -22,33 +62,32 @@ export async function CabinetShell({
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-slate-500">OCO Logistics</p>
-            <h1 className="text-lg font-semibold text-slate-900">{user.companyName}</h1>
+    <div className="flex min-h-screen bg-bg">
+      <aside className="flex min-h-screen w-[280px] shrink-0 flex-col bg-surface shadow-sm">
+        <div className="p-6">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 shrink-0 rounded-full bg-primary" aria-hidden />
+            <span className="text-xl font-bold text-text">
+              oco<span className="text-primary">.</span>
+            </span>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${
-                  active === item.href
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {item.icon && <item.icon className="h-4 w-4 shrink-0" aria-hidden />}
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <LogoutButton />
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
+
+        <nav className="flex flex-1 flex-col gap-1 px-3">
+          {MAIN_NAV.map((item) => (
+            <NavLink key={item.href} {...item} active={active} />
+          ))}
+
+          <div className="mt-auto pb-4">
+            <NavLink {...SETTINGS_NAV} active={active} />
+            <div className="mt-2 px-3">
+              <LogoutButton />
+            </div>
+          </div>
+        </nav>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto p-8">{children}</main>
     </div>
   );
 }

@@ -21,14 +21,14 @@ function formatRubles(amount: number): string {
 
 function StatsSkeleton() {
   return (
-    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
       {Array.from({ length: 4 }, (_, index) => (
         <div
           key={index}
-          className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-5"
+          className="animate-pulse rounded-lg border border-border bg-surface p-5"
         >
-          <div className="h-4 w-28 rounded bg-slate-200" />
-          <div className="mt-3 h-8 w-20 rounded bg-slate-200" />
+          <div className="mb-1 h-3 w-28 rounded bg-surface-2" />
+          <div className="mt-1 h-8 w-20 rounded bg-surface-2" />
         </div>
       ))}
     </div>
@@ -89,105 +89,112 @@ export function DashboardStats({
   const showOnboarding = !loading && stats?.totalShipments === 0;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <h2 className="text-2xl font-semibold text-slate-900">Всё готово, {companyName}</h2>
+    <div>
+      <h2 className="text-2xl font-semibold text-text">Всё готово, {companyName}</h2>
 
       {loading && (
         <>
-          <p className="mt-8 text-sm text-slate-500">Загрузка...</p>
+          <p className="mt-8 text-sm text-text-3">Загрузка...</p>
           <StatsSkeleton />
         </>
       )}
 
       {error && !loading && (
-        <p className="mt-8 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mt-8 rounded-lg border border-error bg-error-soft px-3 py-2 text-sm text-error">
           {error}
         </p>
       )}
 
       {stats && !loading && (
         <>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">Всего отправлений</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
+                Всего отправлений
+              </p>
+              <p className="font-mono text-2xl font-bold text-text">
                 {stats.totalShipments.toLocaleString("ru-RU")}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">За 30 дней</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">За 30 дней</p>
+              <p className="font-mono text-2xl font-bold text-text">
                 {stats.shipmentsLast30Days.toLocaleString("ru-RU")}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">Расходы всего</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
+                Расходы всего
+              </p>
+              <p className="font-mono text-2xl font-bold text-text">
                 {formatRubles(stats.totalSpend)}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">Расходы за 30 дней</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
+                Расходы за 30 дней
+              </p>
+              <p className="font-mono text-2xl font-bold text-text">
                 {formatRubles(stats.spendLast30Days)}
               </p>
             </div>
           </div>
 
           {stats.topCarriers.length > 0 && (
-            <div className="mt-8">
-              <h3 className="font-medium text-slate-900">Топ перевозчиков</h3>
-              <ol className="mt-4 space-y-3">
+            <div className="mt-4 rounded-lg border border-border bg-surface p-5">
+              <h3 className="mb-3 text-sm font-semibold text-text">Топ перевозчиков</h3>
+              <ul>
                 {stats.topCarriers.map((carrier, index) => (
                   <li
                     key={`${carrier.name}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                    className="flex items-center justify-between border-b border-border py-2 last:border-0"
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
-                        {index + 1}
-                      </span>
-                      <p className="font-medium text-slate-900">{carrier.name}</p>
-                    </div>
-                    <p className="text-sm text-slate-600">
-                      {carrier.count.toLocaleString("ru-RU")}{" "}
-                      {carrier.count === 1
-                        ? "отправление"
-                        : carrier.count >= 2 && carrier.count <= 4
-                          ? "отправления"
-                          : "отправлений"}
-                    </p>
+                    <span className="text-sm text-text">{carrier.name}</span>
+                    <span className="font-mono text-sm text-text-3">
+                      {carrier.count.toLocaleString("ru-RU")}
+                    </span>
                   </li>
                 ))}
-              </ol>
+              </ul>
             </div>
           )}
         </>
       )}
 
       {showOnboarding && (
-        <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
-          <h3 className="font-medium text-slate-900">Три шага до первой доставки</h3>
-          <ol className="mt-4 space-y-3 text-sm text-slate-600">
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
-                1
-              </span>
-              <Link href="/settings" className="text-slate-900 underline-offset-2 hover:underline">
+        <div className="mt-4 rounded-lg bg-primary-soft p-5">
+          <h3 className="mb-3 text-sm font-semibold text-primary">
+            Три шага до первой доставки
+          </h3>
+          <ol>
+            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
+              <input
+                type="checkbox"
+                readOnly
+                className="h-4 w-4 shrink-0 rounded border-border"
+                aria-hidden
+              />
+              <Link href="/settings" className="underline-offset-2 hover:underline">
                 Подключить APIShip — это займёт минуту
               </Link>
             </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
-                2
-              </span>
+            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
+              <input
+                type="checkbox"
+                readOnly
+                className="h-4 w-4 shrink-0 rounded border-border"
+                aria-hidden
+              />
               Указать адрес, откуда отправляете посылки
             </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
-                3
-              </span>
-              <Link href="/new-order" className="text-slate-900 underline-offset-2 hover:underline">
+            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
+              <input
+                type="checkbox"
+                readOnly
+                className="h-4 w-4 shrink-0 rounded border-border"
+                aria-hidden
+              />
+              <Link href="/new-order" className="underline-offset-2 hover:underline">
                 Создать первую посылку
               </Link>
             </li>
