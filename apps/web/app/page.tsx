@@ -20,7 +20,7 @@ export default async function Home() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
             href="/register"
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-slate-800"
+            className="rounded-lg bg-primary px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-primary-hover"
           >
             Создать аккаунт
           </Link>
