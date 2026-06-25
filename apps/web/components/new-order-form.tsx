@@ -780,7 +780,7 @@ export function NewOrderForm() {
 
         <button
           type="submit"
-          disabled={loading || !senderConfigured}
+          disabled={loading}
           className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
         >
           {loading ? "Запрашиваем тарифы у перевозчиков..." : "Рассчитать тарифы"}
