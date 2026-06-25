@@ -16,6 +16,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
+  if (!user.emailVerified) {
+    return NextResponse.json({ error: "Email не подтверждён" }, { status: 403 });
+  }
+
   const company = await prisma.company.findFirst({
     where: { id: user.companyId },
     select: {

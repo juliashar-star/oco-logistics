@@ -3,6 +3,7 @@ import { getSession, type SessionPayload } from "./session";
 
 export type CurrentUser = SessionPayload & {
   companyName: string;
+  emailVerified: boolean;
 };
 
 /** Текущий пользователь из сессии + название компании. null — не авторизован. */
@@ -17,6 +18,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       companyId: true,
       email: true,
       role: true,
+      emailVerified: true,
       company: { select: { name: true } },
     },
   });
@@ -28,6 +30,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     companyId: user.companyId,
     email: user.email,
     role: user.role,
+    emailVerified: user.emailVerified,
     companyName: user.company.name,
   };
 }

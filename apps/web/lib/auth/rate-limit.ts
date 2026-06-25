@@ -87,3 +87,30 @@ export function recordPublicRecommendAttempt(key: string): void {
 
   entry.count += 1;
 }
+
+const sendVerificationAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const SEND_VERIFICATION_MAX_ATTEMPTS = 5;
+const SEND_VERIFICATION_WINDOW_MS = 60 * 1000;
+
+export function isSendVerificationBlocked(key: string): boolean {
+  const entry = sendVerificationAttempts.get(key);
+  if (!entry) return false;
+  if (Date.now() > entry.resetAt) {
+    sendVerificationAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= SEND_VERIFICATION_MAX_ATTEMPTS;
+}
+
+export function recordSendVerificationAttempt(key: string): void {
+  const now = Date.now();
+  const entry = sendVerificationAttempts.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    sendVerificationAttempts.set(key, { count: 1, resetAt: now + SEND_VERIFICATION_WINDOW_MS });
+    return;
+  }
+
+  entry.count += 1;
+}

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { LogoutButton } from "@/components/logout-button";
+import { VerificationBanner } from "@/components/VerificationBanner";
 
 const MAIN_NAV = [
   { href: "/dashboard", label: "Дашборд", icon: LayoutDashboard },
@@ -61,6 +62,8 @@ export async function CabinetShell({
   const user = await getCurrentUser();
   if (!user) return null;
 
+  const showBanner = !user.emailVerified;
+
   return (
     <div className="flex min-h-screen bg-bg">
       <aside className="flex min-h-screen w-[280px] shrink-0 flex-col overflow-y-auto bg-surface shadow-sm">
@@ -87,7 +90,10 @@ export async function CabinetShell({
         </nav>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <div className="flex min-h-screen flex-1 flex-col overflow-hidden">
+        {showBanner && <VerificationBanner />}
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      </div>
     </div>
   );
 }

@@ -58,6 +58,26 @@
 - [ ] Единый экран регистрации (autosignup APIShip + white-label) — перед запуском
 - [ ] ЗАРАНЕЕ: запрос в поддержку APIShip (autosignup, agent_key/platform_key, согласие с офертой через UI)
 - [ ] ЗАРАНЕЕ: консультация юриста по 152-ФЗ (согласие + APIShip как обработчик)
+
+### M4 — Auth & Account (backlog from 2026-06-25 session)
+- [ ] Verification banner must show on ALL dashboard tabs, not just /dashboard
+- [ ] Graceful registration: account must be created even if email send
+      fails; user lands on /verify-email with resend option (currently
+      returns 500 on send failure)
+- [ ] Password reset via token link (NOT password-in-email — security/152-ФЗ)
+- [ ] Rate limiting on password reset endpoint
+- [ ] User settings page (profile, change password, company data)
+- [ ] Login lockout after N failed attempts (brute-force protection)
+- [ ] Optional 2FA (architecture should allow it)
+- [ ] Support widget / contact form + support workspace
+- [ ] Email notifications for key events (order created, delivery status)
+- [ ] Account activity log (security + support)
+- [ ] In-cabinet tariffs/billing page
+- [ ] Session management (logout all devices)
+- [ ] Cookie consent banner + Privacy Policy page (152-ФЗ)
+- [ ] DB backups on production VPS (152-ФЗ data preservation duty)
+- [ ] Monitoring & alerts for service downtime
+
 **Готово, когда:** пройден чек-лист «можно пускать первого клиента».
 
 ---

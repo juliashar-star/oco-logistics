@@ -50,6 +50,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
+  if (!user.emailVerified) {
+    return NextResponse.json({ error: "Email не подтверждён" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status")?.trim();
   const track = searchParams.get("track")?.trim();

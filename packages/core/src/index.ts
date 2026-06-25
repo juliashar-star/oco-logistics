@@ -25,3 +25,4 @@ export {
   type CarrierScore,
 } from "./carrier-picker/score";
 export { CATEGORY_TO_PROFILE } from "./carrier-picker/registry";
+export { sendVerificationEmail } from "../lib/email";

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { validateRegistration } from "@/lib/auth/validation";
+import { issueVerificationToken } from "@/lib/auth/verification";
 import {
   clearRegisterAttempts,
   isRegisterBlocked,
@@ -76,11 +77,16 @@ export async function POST(request: Request) {
       role: result.user.role,
     });
 
+    const { emailSent } = await issueVerificationToken(result.user.id, result.user.email);
+    if (!emailSent) {
+      console.error("verification email send failed after register");
+    }
+
     clearRegisterAttempts(key);
 
     return NextResponse.json({
       ok: true,
-      redirect: "/dashboard",
+      redirect: "/verify-email",
     });
   } catch {
     console.error("register failed");

@@ -99,6 +99,23 @@
 
 2026-06-24 · `dellin`, `baikalsr`, `vozovoz`, `pecom` в `registry.ts` на P5/P6 — подтверждено; TODO «Variant A» (исключение грузовых) устарел
 
+## ADR: Email verification (2026-06-25)
+
+- SMTP provider: Unisender Go (Russian, 152-ФЗ compliant, servers in RF)
+- API endpoint: go2.unisender.ru cluster (NOT go1 — key is cluster-specific)
+- UX model: Variant A — user can log in, sees sticky banner,
+  some actions gated (shipment create, tariff calculate, CSV export)
+- Token TTL 24h, resend cooldown 60s server-enforced
+- Dev/test: sandbox domain (unigosendbox.com), sends only to
+  confirmed addresses added manually in Unisender Go
+- Prod (M4): switch FROM_EMAIL to noreply@useoco.ru after domain
+  verified with SPF/DKIM in Unisender Go
+- Legal: Unisender Go license agreement section 14 covers PD processing
+  (152-ФЗ) — no separate DPA needed. Sign as ИП before production sending.
+- Implementation: packages/core/lib/email.ts,
+  /api/auth/send-verification, /api/auth/verify-email,
+  VerificationBanner component, /verify-email pages
+
 ## Проверка типов перед коммитом
 Решение: перед каждым коммитом прогонять `npm run typecheck` (`tsc --noEmit`).
 Dev-сервер использует SWC и строгие ошибки типов не показывает — они всплывают

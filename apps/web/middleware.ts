@@ -6,14 +6,19 @@ const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/new-order", "/shipments
 
 const AUTH_PAGES = ["/login", "/register"];
 
+function isProtectedPath(pathname: string): boolean {
+  if (pathname === "/verify-email") return true;
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = await readSessionToken(token);
 
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  const isProtected = isProtectedPath(pathname);
   const isAuthPage = AUTH_PAGES.includes(pathname);
 
   if (isProtected && !session) {
@@ -35,6 +40,7 @@ export const config = {
     "/settings/:path*",
     "/new-order/:path*",
     "/shipments/:path*",
+    "/verify-email",
     "/login",
     "/register",
   ],
