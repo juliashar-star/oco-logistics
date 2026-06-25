@@ -3,19 +3,59 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary: #0d8f99;
+  --primary-hover: #0a7880;
+  --primary-soft: #d9f0f1;
+  --primary-text: #ffffff;
+
+  --info: #3b82f6;
+  --info-soft: #dbeafe;
+  --success: #1f9d6b;
+  --success-soft: #d1fae5;
+  --warning: #d97706;
+  --warning-soft: #fef3c7;
+  --error: #dc2626;
+  --error-soft: #fee2e2;
+
+  --bg: #eef4f3;
+  --surface: #ffffff;
+  --surface-2: #f3f8f8;
+
+  --border: #e3ecea;
+  --border-strong: #c5d4d2;
+
+  --text: #111827;
+  --text-2: #4b5563;
+  --text-3: #9ca3af;
+
+  --r: 12px;
+  --r-sm: 8px;
+  --r-lg: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-mode="dark"] {
+  --bg: #0f1a1a;
+  --surface: #1a2626;
+  --surface-2: #1f2e2e;
+  --border: #2a3c3c;
+  --border-strong: #3a5050;
+  --text: #f0f9f9;
+  --text-2: #9dbdbd;
+  --text-3: #5a8080;
 }
+
+.text-display { font-size: 54px; font-weight: 800; line-height: 1.1; }
+.text-heading  { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.text-body     { font-size: 15px; font-weight: 400; line-height: 1.6; }
+.text-caption  { font-size: 13px; font-weight: 500; line-height: 1.4; }
+.text-mono     { font-family: var(--font-mono), monospace; font-size: 14px; }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+code, .mono {
+  font-family: var(--font-mono), monospace;
 }
