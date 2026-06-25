@@ -14,12 +14,12 @@ export default async function SettingsPage() {
       <div className="space-y-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <h2 className="text-2xl font-semibold text-slate-900">Настройки</h2>
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-text-3">
             Профиль компании и подключение APIShip для расчёта тарифов.
           </p>
           <div className="mt-8 max-w-md">
             <h3 className="font-medium text-slate-900">Адрес отправителя</h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-text-3">
               Используется при расчёте и создании отправлений по умолчанию.
             </p>
             <div className="mt-4">
@@ -31,7 +31,7 @@ export default async function SettingsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="max-w-md">
             <h3 className="font-medium text-slate-900">APIShip</h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-text-3">
               Логин и пароль для расчёта тарифов и создания отправлений.
             </p>
             <div className="mt-4">
@@ -43,7 +43,7 @@ export default async function SettingsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="max-w-md">
             <h3 className="font-medium text-slate-900">Резервная копия</h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-text-3">
               Экспорт и восстановление всех настроек кабинета.
             </p>
             <div className="mt-4">

@@ -632,7 +632,7 @@ export function NewOrderForm() {
                 type="button"
                 onClick={() => void loadPoints(destCity)}
                 disabled={pointsLoading || destCity.trim().length < MIN_CITY_LENGTH_FOR_PVZ}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                className="rounded-lg border border-primary bg-white px-3 py-2 text-sm text-primary hover:bg-primary-soft disabled:opacity-60"
               >
                 {pointsLoading ? "Загрузка..." : "Загрузить ПВЗ"}
               </button>
@@ -781,7 +781,7 @@ export function NewOrderForm() {
         <button
           type="submit"
           disabled={loading || !senderConfigured}
-          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
         >
           {loading ? "Запрашиваем тарифы у перевозчиков..." : "Рассчитать тарифы"}
         </button>
@@ -813,8 +813,8 @@ export function NewOrderForm() {
                   onClick={() => handleQuickSelect(tag, mode)}
                   className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
                     selectionMode === mode
-                      ? "bg-slate-900 text-white"
-                      : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+                      ? "bg-primary text-white"
+                      : "border border-border bg-white text-text-2 hover:bg-surface-2"
                   }`}
                 >
                   {label}
@@ -915,7 +915,7 @@ export function NewOrderForm() {
                 (intervals.length > 0 && !selectedInterval) ||
                 !isRecipientPhoneValid
               }
-              className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
             >
               {creating ? "Создаём отправление..." : "Создать отправление"}
             </button>

@@ -102,13 +102,13 @@ export function CompanySettingsForm() {
       )}
 
       {configured && (
-        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+        <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
           Адрес отправителя указан — он подставляется в расчёт тарифов.
         </p>
       )}
 
       {!configured && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
           Укажите город и адрес склада или офиса, откуда вы отгружаете посылки. Без этого расчёт
           тарифов будет неточным.
         </p>
@@ -186,7 +186,7 @@ export function CompanySettingsForm() {
           <button
             type="button"
             onClick={() => void loadCompanyProfile()}
-            className="underline"
+            className="rounded-lg bg-primary px-2 py-0.5 text-white hover:bg-primary-hover"
           >
             Повторить
           </button>
@@ -194,7 +194,7 @@ export function CompanySettingsForm() {
       )}
 
       {message && (
-        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+        <p className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success" role="status">
           {message}
         </p>
       )}
@@ -202,7 +202,7 @@ export function CompanySettingsForm() {
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
       >
         {loading ? "Сохранение..." : "Сохранить адрес отправителя"}
       </button>
