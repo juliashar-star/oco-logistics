@@ -34,7 +34,7 @@ export default async function CarrierPickerDashboardPage() {
             <select
               id="category"
               name="category"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus:border-primary focus:outline-none"
               defaultValue=""
             >
               <option value="">Выберите категорию</option>
@@ -57,7 +57,7 @@ export default async function CarrierPickerDashboardPage() {
               min={0.1}
               step={0.1}
               placeholder="Необязательно"
-              className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+              className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text placeholder:text-text-3 focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -72,7 +72,7 @@ export default async function CarrierPickerDashboardPage() {
               min={1}
               step={1}
               placeholder="Необязательно"
-              className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+              className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text placeholder:text-text-3 focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -84,7 +84,7 @@ export default async function CarrierPickerDashboardPage() {
           <button
             id="carrier-picker-submit"
             type="submit"
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             Подобрать перевозчика
           </button>

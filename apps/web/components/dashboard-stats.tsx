@@ -109,31 +109,25 @@ export function DashboardStats({
         <>
           <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div className="rounded-lg border border-border bg-surface p-5">
-              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
-                Всего отправлений
-              </p>
+              <p className="mb-1 text-sm text-text-3">Всего отправлений</p>
               <p className="font-mono text-2xl font-bold text-text">
                 {stats.totalShipments.toLocaleString("ru-RU")}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-5">
-              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">За 30 дней</p>
+              <p className="mb-1 text-sm text-text-3">За 30 дней</p>
               <p className="font-mono text-2xl font-bold text-text">
                 {stats.shipmentsLast30Days.toLocaleString("ru-RU")}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-5">
-              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
-                Расходы всего
-              </p>
+              <p className="mb-1 text-sm text-text-3">Расходы всего</p>
               <p className="font-mono text-2xl font-bold text-text">
                 {formatRubles(stats.totalSpend)}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-5">
-              <p className="text-caption mb-1 uppercase tracking-wide text-text-3">
-                Расходы за 30 дней
-              </p>
+              <p className="mb-1 text-sm text-text-3">Расходы за 30 дней</p>
               <p className="font-mono text-2xl font-bold text-text">
                 {formatRubles(stats.spendLast30Days)}
               </p>
@@ -150,7 +144,7 @@ export function DashboardStats({
                     className="flex items-center justify-between border-b border-border py-2 last:border-0"
                   >
                     <span className="text-sm text-text">{carrier.name}</span>
-                    <span className="font-mono text-sm text-text-3">
+                    <span className="font-mono text-sm text-text-2">
                       {carrier.count.toLocaleString("ru-RU")}
                     </span>
                   </li>

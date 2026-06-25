@@ -319,7 +319,7 @@ export function ShipmentsPage() {
               type="button"
               onClick={() => void handleExportCsv()}
               disabled={exporting}
-              className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-lg border border-border px-4 py-2 text-sm text-text-2 hover:bg-surface-2 disabled:opacity-60"
             >
               {exporting ? "Экспортируем..." : "Экспорт CSV"}
             </button>
@@ -327,7 +327,7 @@ export function ShipmentsPage() {
               type="button"
               onClick={() => void handleSyncStatuses()}
               disabled={syncing}
-              className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-lg border border-border px-4 py-2 text-sm text-text-2 hover:bg-surface-2 disabled:opacity-60"
             >
               {syncing ? "Обновляем..." : "Обновить статусы"}
             </button>
@@ -366,7 +366,7 @@ export function ShipmentsPage() {
             </p>
             <Link
               href="/new-order"
-              className="mt-4 inline-flex rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+              className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary-hover"
             >
               Создать первое отправление
             </Link>

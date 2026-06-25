@@ -63,7 +63,7 @@ export async function CabinetShell({
 
   return (
     <div className="flex min-h-screen bg-bg">
-      <aside className="flex min-h-screen w-[280px] shrink-0 flex-col bg-surface shadow-sm">
+      <aside className="flex min-h-screen w-[280px] shrink-0 flex-col overflow-y-auto bg-surface shadow-sm">
         <div className="p-6">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 shrink-0 rounded-full bg-primary" aria-hidden />
@@ -78,7 +78,7 @@ export async function CabinetShell({
             <NavLink key={item.href} {...item} active={active} />
           ))}
 
-          <div className="mt-auto pb-4">
+          <div className="mt-auto pb-6">
             <NavLink {...SETTINGS_NAV} active={active} />
             <div className="mt-2 px-3">
               <LogoutButton />
