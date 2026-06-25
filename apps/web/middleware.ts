@@ -6,6 +6,8 @@ const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/new-order", "/shipments
 
 const AUTH_PAGES = ["/login", "/register"];
 
+const PASSWORD_FLOW_PAGES = ["/forgot-password", "/reset-password"];
+
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/verify-email") return true;
   return PROTECTED_PREFIXES.some(
@@ -20,6 +22,10 @@ export async function middleware(request: NextRequest) {
 
   const isProtected = isProtectedPath(pathname);
   const isAuthPage = AUTH_PAGES.includes(pathname);
+
+  if (PASSWORD_FLOW_PAGES.includes(pathname)) {
+    return NextResponse.next();
+  }
 
   if (isProtected && !session) {
     const loginUrl = new URL("/login", request.url);
@@ -43,5 +49,7 @@ export const config = {
     "/verify-email",
     "/login",
     "/register",
+    "/forgot-password",
+    "/reset-password",
   ],
 };

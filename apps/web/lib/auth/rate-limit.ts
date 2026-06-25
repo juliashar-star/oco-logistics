@@ -114,3 +114,30 @@ export function recordSendVerificationAttempt(key: string): void {
 
   entry.count += 1;
 }
+
+const forgotPasswordAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
+const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+
+export function isForgotPasswordBlocked(key: string): boolean {
+  const entry = forgotPasswordAttempts.get(key);
+  if (!entry) return false;
+  if (Date.now() > entry.resetAt) {
+    forgotPasswordAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= FORGOT_PASSWORD_MAX_ATTEMPTS;
+}
+
+export function recordForgotPasswordAttempt(key: string): void {
+  const now = Date.now();
+  const entry = forgotPasswordAttempts.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    forgotPasswordAttempts.set(key, { count: 1, resetAt: now + FORGOT_PASSWORD_WINDOW_MS });
+    return;
+  }
+
+  entry.count += 1;
+}

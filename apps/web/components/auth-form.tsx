@@ -89,9 +89,19 @@ export function AuthForm({ mode }: AuthFormProps) {
       </div>
 
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
-          Пароль
-        </label>
+        <div className="mb-1 flex items-center justify-between">
+          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            Пароль
+          </label>
+          {mode === "login" && (
+            <Link
+              href="/forgot-password"
+              className="text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+            >
+              Забыли пароль?
+            </Link>
+          )}
+        </div>
         <input
           id="password"
           type="password"
