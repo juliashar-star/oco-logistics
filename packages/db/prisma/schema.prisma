@@ -144,6 +144,7 @@ model Shipment {
 
   status          ShipmentStatus  @default(DRAFT)
   legalBasisConfirmed Boolean     @default(false)
+  isAnonymized    Boolean         @default(false)
 
   quotes          TariffQuote[]
   trackingEvents  TrackingEvent[]

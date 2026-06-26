@@ -30,6 +30,7 @@ const shipmentSelect = {
   isReturned: true,
   isCanceled: true,
   returnReason: true,
+  isAnonymized: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 

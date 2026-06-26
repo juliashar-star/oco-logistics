@@ -27,6 +27,7 @@ type ShipmentRow = {
   plannedCost: number | null;
   plannedDeliveryDays: number | null;
   returnReason: string | null;
+  isAnonymized: boolean;
   carrier: { name: string } | null;
 };
 
@@ -122,6 +123,8 @@ export function ShipmentsPage() {
   const [events, setEvents] = useState<TrackingEventRow[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [anonymizing, setAnonymizing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTrack(trackInput), 400);
@@ -151,6 +154,7 @@ export function ShipmentsPage() {
     setEvents([]);
     setEventsLoading(false);
     setEventsError(null);
+    setConfirmOpen(false);
   };
 
   const openDrawer = (shipment: ShipmentRow) => {
@@ -257,6 +261,26 @@ export function ShipmentsPage() {
       setExporting(false);
     }
   };
+
+  async function handleAnonymize() {
+    if (!selectedShipment) return;
+
+    setAnonymizing(true);
+    try {
+      const res = await fetch(`/api/shipments/${selectedShipment.id}/anonymize`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error();
+      closeDrawer();
+      router.refresh();
+      await loadShipments();
+    } catch {
+      // show nothing — button re-enables
+    } finally {
+      setAnonymizing(false);
+      setConfirmOpen(false);
+    }
+  }
 
   const handleSyncStatuses = async () => {
     setSyncing(true);
@@ -482,13 +506,17 @@ export function ShipmentsPage() {
                 <div>
                   <dt className="text-slate-500">Получатель</dt>
                   <dd className="font-medium text-slate-900">
-                    {selectedShipment.recipientName}
+                    {selectedShipment.isAnonymized
+                      ? "Данные получателя удалены"
+                      : selectedShipment.recipientName}
                   </dd>
                 </div>
-                <div>
-                  <dt className="text-slate-500">Город</dt>
-                  <dd className="text-slate-900">{selectedShipment.destCity}</dd>
-                </div>
+                {!selectedShipment.isAnonymized && (
+                  <div>
+                    <dt className="text-slate-500">Город</dt>
+                    <dd className="text-slate-900">{selectedShipment.destCity}</dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-slate-500">Перевозчик</dt>
                   <dd className="text-slate-900">
@@ -572,6 +600,44 @@ export function ShipmentsPage() {
                   </ol>
                 )}
               </div>
+
+              {!selectedShipment.isAnonymized && (
+                <div className="mt-8 border-t border-slate-200 pt-6">
+                  {!confirmOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmOpen(true)}
+                      className="text-sm text-slate-500 hover:text-slate-700"
+                    >
+                      Удалить данные получателя
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">
+                        Данные получателя будут заменены на «УДАЛЕНО». Это действие необратимо.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmOpen(false)}
+                          disabled={anonymizing}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleAnonymize()}
+                          disabled={anonymizing}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {anonymizing ? "Удаляем..." : "Удалить"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </aside>
         </div>
