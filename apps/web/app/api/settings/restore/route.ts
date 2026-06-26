@@ -24,9 +24,9 @@ export async function POST(request: Request) {
         senderCity: data.senderCity,
         senderAddress: data.senderAddress,
         senderPhone: data.senderPhone,
-        apishipLogin: data.apishipLogin,
-        apishipPasswordEnc: data.apishipPasswordEnc,
-        apishipConnectedAt: data.apishipConnectedAt,
+        apishipLogin: null,
+        apishipPasswordEnc: null,
+        apishipConnectedAt: null,
       },
     });
 
@@ -35,7 +35,8 @@ export async function POST(request: Request) {
       restoredFrom: payload.exportedAt,
       companyName: payload.company.name,
       senderConfigured: Boolean(data.senderCity),
-      apishipConnected: Boolean(data.apishipLogin && data.apishipPasswordEnc),
+      apishipConnected: false,
+      requiresApishipReconnect: true,
     });
   } catch (error) {
     if (error instanceof SettingsBackupError) {

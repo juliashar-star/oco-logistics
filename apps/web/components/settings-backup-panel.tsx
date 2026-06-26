@@ -1,13 +1,23 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const APISHIP_RECONNECT_NOTICE_KEY = "oco-settings-restore-apiship-reconnect";
 
 export function SettingsBackupPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [apishipReconnectNotice, setApishipReconnectNotice] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem(APISHIP_RECONNECT_NOTICE_KEY) === "1") {
+      sessionStorage.removeItem(APISHIP_RECONNECT_NOTICE_KEY);
+      setApishipReconnectNotice(true);
+    }
+  }, []);
 
   async function handleDownload() {
     setError("");
@@ -78,6 +88,10 @@ export function SettingsBackupPanel() {
         return;
       }
 
+      if (data.requiresApishipReconnect === true) {
+        sessionStorage.setItem(APISHIP_RECONNECT_NOTICE_KEY, "1");
+      }
+
       const parts: string[] = ["Настройки восстановлены"];
       if (typeof data.companyName === "string") {
         parts.push(`из копии компании «${data.companyName}»`);
@@ -102,6 +116,13 @@ export function SettingsBackupPanel() {
         Файл содержит зашифрованный пароль APIShip и данные компании. Не отправляйте его в чат и
         не публикуйте — храните как секрет (Bitwarden, зашифрованная папка).
       </p>
+
+      {apishipReconnectNotice && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+          Резервная копия восстановлена. Подключение APIShip сброшено — введите пароль APIShip
+          повторно в настройках интеграций.
+        </p>
+      )}
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
