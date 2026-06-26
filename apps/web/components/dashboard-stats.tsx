@@ -38,9 +38,11 @@ function StatsSkeleton() {
 export function DashboardStats({
   userEmail: _userEmail,
   companyName,
+  emailVerified,
 }: {
   userEmail: string;
   companyName: string;
+  emailVerified: boolean;
 }) {
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,7 +92,9 @@ export function DashboardStats({
 
   return (
     <div>
-      <h2 className="text-2xl font-semibold text-text">Всё готово, {companyName}</h2>
+      <h2 className="text-2xl font-semibold text-text">
+        {emailVerified ? "Всё готово" : "Добро пожаловать"}, {companyName}
+      </h2>
 
       {loading && (
         <>
@@ -158,9 +162,36 @@ export function DashboardStats({
       {showOnboarding && (
         <div className="mt-4 rounded-lg bg-primary-soft p-5">
           <h3 className="mb-3 text-sm font-semibold text-primary">
-            Три шага до первой доставки
+            Четыре шага до первой доставки
           </h3>
           <ol>
+            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
+              {emailVerified ? (
+                <span
+                  className="flex h-4 w-4 shrink-0 items-center justify-center text-sm font-bold text-success"
+                  aria-hidden
+                >
+                  ✓
+                </span>
+              ) : (
+                <span
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-warning text-[10px] font-bold leading-none text-warning"
+                  aria-hidden
+                >
+                  !
+                </span>
+              )}
+              {emailVerified ? (
+                <span>Email подтверждён</span>
+              ) : (
+                <span>
+                  Подтвердите email —{" "}
+                  <Link href="/verify-email" className="underline-offset-2 hover:underline">
+                    отправить письмо повторно
+                  </Link>
+                </span>
+              )}
+            </li>
             <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
               <input
                 type="checkbox"

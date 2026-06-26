@@ -9,7 +9,11 @@ export default async function DashboardPage() {
 
   return (
     <CabinetShell active="/dashboard">
-      <DashboardStats userEmail={user.email} companyName={user.companyName} />
+      <DashboardStats
+        userEmail={user.email}
+        companyName={user.companyName}
+        emailVerified={user.emailVerified}
+      />
     </CabinetShell>
   );
 }
