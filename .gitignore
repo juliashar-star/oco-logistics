@@ -47,3 +47,5 @@ coverage/
 
 # Turbo / cache
 .turbo/
+
+AUDIT_BUNDLE.md
