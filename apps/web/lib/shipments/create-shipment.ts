@@ -3,6 +3,7 @@ import { ApishipError } from "@oco/apiship";
 import { prisma } from "@/lib/db";
 import { getApishipClientForCompany } from "@/lib/apiship-client-for-company";
 import { formatAddressForApiship, resolveSenderLocation } from "@/lib/sender-address";
+import { encryptShipmentRecipientFields } from "@/lib/recipient-pii";
 import { linkTariffQuotesToShipment } from "@/lib/tariff-quotes/persist-tariff-quotes";
 
 /**
@@ -108,6 +109,12 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
   const plannedDeliveryDate =
     plannedDeliveryDays != null ? addDays(new Date(), plannedDeliveryDays) : null;
 
+  const encryptedRecipient = encryptShipmentRecipientFields({
+    recipientName: input.recipientName,
+    recipientPhone: input.recipientPhone,
+    destAddress: input.destAddress,
+  });
+
   const shipment = await prisma.shipment.create({
     data: {
       companyId: input.companyId,
@@ -122,11 +129,11 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
           ? Math.round(input.declaredValueRub * 100)
           : null,
       destCity: input.destCity.trim(),
-      destAddress: input.destAddress?.trim() || null,
+      destAddress: encryptedRecipient.destAddress,
       pvzCode: input.pvzCode?.trim() || null,
       pickupType: input.pickupType,
-      recipientName: input.recipientName.trim(),
-      recipientPhone: input.recipientPhone.trim(),
+      recipientName: encryptedRecipient.recipientName,
+      recipientPhone: encryptedRecipient.recipientPhone,
       carrierId: selectedQuote.carrierId,
       selectionMode: input.selectionMode,
       serviceCode: selectedQuote.serviceCode,

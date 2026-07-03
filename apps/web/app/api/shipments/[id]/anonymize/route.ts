@@ -49,7 +49,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         data: {
           recipientName: "УДАЛЕНО",
           recipientPhone: "УДАЛЕНО",
-          destAddress: null,
+          destAddress: "УДАЛЕНО",
           pvzCode: null,
           destCity: "УДАЛЕНО",
           isAnonymized: true,

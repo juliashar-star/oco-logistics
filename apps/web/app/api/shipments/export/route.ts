@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
+import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 import {
   buildShipmentsCsv,
   shipmentsExportFilename,
@@ -41,6 +42,7 @@ const exportSelect = {
   actualCost: true,
   deliveredAt: true,
   returnReason: true,
+  isAnonymized: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 
@@ -83,7 +85,7 @@ export async function GET(request: Request) {
     });
 
     const exportedAt = new Date();
-    const body = buildShipmentsCsv(shipments);
+    const body = buildShipmentsCsv(shipments.map(decryptShipmentRecipientPii));
 
     return new NextResponse(body, {
       status: 200,
