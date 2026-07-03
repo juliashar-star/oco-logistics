@@ -10,6 +10,8 @@ function clientIp(request: Request): string {
   return forwarded?.split(",")[0]?.trim() ?? "unknown";
 }
 
+// Same Origin/Referer CSRF check as all mutating API routes (middleware).
+// Not exempt: today the UI calls this same-origin only; cross-origin embed would need an explicit decision.
 export async function POST(request: Request) {
   const key = clientIp(request);
   if (isPublicRecommendBlocked(key)) {
