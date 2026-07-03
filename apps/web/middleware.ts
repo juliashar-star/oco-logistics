@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { readSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 import { isAllowedRequestOrigin, isMutatingMethod } from "@/lib/security/csrf";
+import { nextPageWithCsp } from "@/lib/security/csp";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/new-order", "/shipments"];
 
@@ -23,7 +24,7 @@ function isProtectedPath(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // --- API branch: CSRF Origin check only; session page redirects never run here. ---
+  // --- API branch: CSRF Origin check only; no CSP on JSON responses. ---
   if (isApiPath(pathname)) {
     if (isMutatingMethod(request.method) && !isAllowedRequestOrigin(request)) {
       return NextResponse.json({ error: "csrf_origin_mismatch" }, { status: 403 });
@@ -31,7 +32,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // --- Page branch: unchanged session redirect scope (protected + auth pages only). ---
+  // --- Page branch: session redirects (unchanged scope) + per-request CSP nonce. ---
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = await readSessionToken(token);
 
@@ -39,7 +40,7 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = AUTH_PAGES.includes(pathname);
 
   if (PASSWORD_FLOW_PAGES.includes(pathname)) {
-    return NextResponse.next();
+    return nextPageWithCsp(request);
   }
 
   if (isProtected && !session) {
@@ -52,20 +53,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  return NextResponse.next();
+  return nextPageWithCsp(request);
 }
 
 export const config = {
   matcher: [
-    "/api/:path*",
-    "/dashboard/:path*",
-    "/settings/:path*",
-    "/new-order/:path*",
-    "/shipments/:path*",
-    "/verify-email",
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/reset-password",
+    {
+      source: "/((?!_next/static|_next/image|favicon\\.ico).*)",
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };

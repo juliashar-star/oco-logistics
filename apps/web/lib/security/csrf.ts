@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
-const DEV_FALLBACK_ORIGIN = "http://localhost:3000";
+const APP_ORIGIN_ERROR = "APP_ORIGIN must be set and be a valid URL origin";
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -14,21 +14,13 @@ function normalizeOrigin(value: string): string | null {
 
 function resolveAllowedOrigin(): string {
   const configured = process.env.APP_ORIGIN?.trim();
-  const isProduction = process.env.NODE_ENV === "production";
-
   if (!configured) {
-    if (isProduction) {
-      throw new Error("APP_ORIGIN must be set in production for CSRF Origin checks");
-    }
-    return DEV_FALLBACK_ORIGIN;
+    throw new Error(APP_ORIGIN_ERROR);
   }
 
   const normalized = normalizeOrigin(configured);
   if (!normalized) {
-    if (isProduction) {
-      throw new Error("APP_ORIGIN must be a valid URL origin in production for CSRF Origin checks");
-    }
-    return DEV_FALLBACK_ORIGIN;
+    throw new Error(APP_ORIGIN_ERROR);
   }
 
   return normalized;
@@ -41,10 +33,6 @@ function getAllowedOrigin(): string {
     cachedAllowedOrigin = resolveAllowedOrigin();
   }
   return cachedAllowedOrigin;
-}
-
-if (process.env.NODE_ENV === "production") {
-  getAllowedOrigin();
 }
 
 function getRequestOrigin(request: NextRequest): string | null {

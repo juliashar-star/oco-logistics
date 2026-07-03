@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description: "Веб-кабинет для сравнения доставки и управления отправлениями",
 };
 
+// Nonce-based CSP requires per-request rendering so Next.js can read x-nonce / CSP headers.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
