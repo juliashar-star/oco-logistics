@@ -7,6 +7,57 @@ import {
   SettingsBackupError,
 } from "@/lib/settings/backup";
 
+const MAX_RESTORE_BODY_BYTES = 65_536;
+
+async function readJsonBodyWithLimit(request: Request, maxBytes: number): Promise<unknown> {
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader !== null) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      throw new BodyTooLargeError();
+    }
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return null;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new BodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const text = new TextDecoder().decode(body);
+  if (!text.trim()) {
+    return null;
+  }
+
+  return JSON.parse(text) as unknown;
+}
+
+class BodyTooLargeError extends Error {
+  constructor() {
+    super("BODY_TOO_LARGE");
+    this.name = "BodyTooLargeError";
+  }
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
@@ -14,7 +65,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const raw = await request.json();
+    const raw = await readJsonBodyWithLimit(request, MAX_RESTORE_BODY_BYTES);
     const payload = parseSettingsBackup(raw);
     const data = restoreDataFromBackup(payload);
 
@@ -39,8 +90,17 @@ export async function POST(request: Request) {
       requiresApishipReconnect: true,
     });
   } catch (error) {
+    if (error instanceof BodyTooLargeError) {
+      return NextResponse.json(
+        { error: "Файл резервной копии слишком большой" },
+        { status: 413 },
+      );
+    }
     if (error instanceof SettingsBackupError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Файл не является корректным JSON" }, { status: 400 });
     }
     console.error("settings restore failed");
     return NextResponse.json(

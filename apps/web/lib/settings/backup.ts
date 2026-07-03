@@ -32,9 +32,6 @@ export type RestoreSettingsData = {
   senderCity: string | null;
   senderAddress: string | null;
   senderPhone: string | null;
-  apishipLogin: string | null;
-  apishipPasswordEnc: string | null;
-  apishipConnectedAt: Date | null;
 };
 
 import { normalizeRuPhone } from "@/lib/phone/ru-phone";
@@ -154,21 +151,10 @@ export function parseSettingsBackup(raw: unknown): SettingsBackupPayload {
 }
 
 export function restoreDataFromBackup(payload: SettingsBackupPayload): RestoreSettingsData {
-  const connectedAt = payload.company.apishipConnectedAt
-    ? new Date(payload.company.apishipConnectedAt)
-    : null;
-
-  if (connectedAt && Number.isNaN(connectedAt.getTime())) {
-    throw new SettingsBackupError("Некорректная дата подключения APIShip");
-  }
-
   return {
     senderCity: payload.company.senderCity,
     senderAddress: payload.company.senderAddress,
     senderPhone: payload.company.senderPhone,
-    apishipLogin: payload.company.apishipLogin,
-    apishipPasswordEnc: payload.company.apishipPasswordEnc,
-    apishipConnectedAt: connectedAt,
   };
 }
 
