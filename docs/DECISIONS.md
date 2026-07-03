@@ -173,3 +173,79 @@ ETL-пайплайны, таблицы агрегатов.
 
 **Связанные:** ADR P5/P6 heavy-freight ranking spec · ADR registry-drift
 monitoring · ADR Email verification (2026-06-25)
+
+## ADR: CSRF Origin/Referer — без ветвления по NODE_ENV (2026-07-04)
+
+**Статус:** Принято (P0-SEC2 · fb45d57)
+
+**Контекст.** CSRF-защита на мутирующих API-роутах проверяет заголовки
+`Origin` / `Referer` против `APP_ORIGIN`. Ранний вариант мог отключать
+проверку в dev через ветку `process.env.NODE_ENV !== 'production'`.
+
+**Проблема.** Webpack в Next.js инлайнит `process.env.NODE_ENV` как
+build-time константу в бандле middleware. Если production-сборка
+запускается на машине с dev-`.env`, в бандл может навсегда попасть
+`isProduction = false` — и fail-closed проверка молча перестаёт работать
+на проде.
+
+**Решение.** `APP_ORIGIN` обязателен и валидируется безусловно во всех
+окружениях; ветвления по `NODE_ENV` в `csrf.ts` нет. Это убирает класс
+ошибок целиком, а не обходит его условиями.
+
+**Отвергли:** оставить dev-исключение с «осторожной» сборкой на CI —
+одна ошибочная сборка снова отключает защиту без явного сигнала.
+
+**Реализация:** `apps/web/lib/security/csrf.ts`, вызов из
+`apps/web/middleware.ts`.
+
+## ADR: CSP — nonce в middleware вместо next.config.ts (2026-07-04)
+
+**Статус:** Принято (P0-SEC3 · 7f5575a)
+
+**Контекст.** Политика CSP должна убрать `unsafe-eval` и
+`unsafe-inline` в production, перейдя на per-request nonce для inline-
+скриптов Next.js.
+
+**Проблема.** `headers()` в `next.config.ts` вычисляется на этапе сборки
+и не может выдавать свежий nonce на каждый запрос — nonce-based CSP
+требует генерации заголовка в runtime.
+
+**Решение.** CSP перенесена в `middleware.ts`: на каждый запрос
+генерируется nonce, заголовок `Content-Security-Policy` выставляется
+там же, nonce прокидывается в layout через request header /
+`x-nonce`. Логика политики — в `apps/web/lib/security/csp.ts`.
+Из `next.config.ts` CSP удалена.
+
+**Принятый tradeoff.** Пять маршрутов потеряли static prerendering
+из-за `force-dynamic` на root layout (per-request nonce): login,
+register, forgot-password, carrier-picker, verify-email/error.
+
+**На будущее.** `carrier-picker` планируется как публичная SEO-страница
+(P0-KN5 в master plan) — если static generation станет критичной,
+рассмотреть hash-based CSP только для этого маршрута.
+
+**Отвергли:** оставить CSP в `next.config.ts` с `unsafe-inline` —
+не закрывает audit finding.
+
+## ADR: CSP dev relaxations — двойной gate (2026-07-04)
+
+**Статус:** Принято (P0-SEC3 · 7f5575a)
+
+**Контекст.** В локальной разработке иногда нужны ослабления CSP
+(например, для devtools или hot reload), но production-политика должна
+оставаться строгой.
+
+**Проблема.** Одной переменной `CSP_DEV_RELAXATIONS=1` достаточно, чтобы
+ослабить CSP — если она случайно попадёт в production `.env`, политика
+на проде ослабится без явной ошибки деплоя.
+
+**Решение.** Ослабления включаются только при **обоих** условиях:
+`CSP_DEV_RELAXATIONS=1` **и** `APP_ORIGIN` указывает на localhost /
+127.0.0.1. Stray `CSP_DEV_RELAXATIONS=1` на боевом сервере не меняет
+production CSP.
+
+**Отвергли:** доверять только `NODE_ENV` или только флагу env — оба
+варианта дают silent failure при misconfiguration.
+
+**Реализация:** `apps/web/lib/security/csp.ts`, переменные в
+`infra/.env.example`.
