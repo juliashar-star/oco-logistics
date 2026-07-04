@@ -1,12 +1,27 @@
 import { NextResponse } from "next/server";
 import { hashPassword } from "@/lib/auth/password";
 import { consumePasswordResetToken } from "@/lib/auth/password-reset";
+import {
+  isResetPasswordBlocked,
+  recordResetPasswordAttempt,
+} from "@/lib/auth/rate-limit";
 import { validateResetPassword } from "@/lib/auth/validation";
 import { logAuditEvent } from "@/lib/audit/log";
+import { getClientIp } from "@/lib/http/client-ip";
 
 const GENERIC_ERROR = "Ссылка недействительна или истекла. Запросите сброс пароля заново.";
 
 export async function POST(request: Request) {
+  const key = getClientIp(request);
+  if (await isResetPasswordBlocked(key)) {
+    return NextResponse.json(
+      { error: "Слишком много попыток. Попробуйте через 15 минут." },
+      { status: 429 },
+    );
+  }
+
+  await recordResetPasswordAttempt(key);
+
   try {
     const body = await request.json();
     const token = String(body.token ?? "").trim();

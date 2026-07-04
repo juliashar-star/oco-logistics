@@ -16,11 +16,15 @@ const SEND_VERIFICATION_WINDOW_MS = 60 * 1000;
 const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
 const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 
+const RESET_PASSWORD_MAX_ATTEMPTS = 5;
+const RESET_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+
 const BUCKET_LOGIN = "login";
 const BUCKET_REGISTER = "register";
 const BUCKET_PUBLIC_RECOMMEND = "public-recommend";
 const BUCKET_SEND_VERIFICATION = "send-verification";
 const BUCKET_FORGOT_PASSWORD = "forgot-password";
+const BUCKET_RESET_PASSWORD = "reset-password";
 
 async function isBlocked(bucket: string, key: string, maxAttempts: number): Promise<boolean> {
   const row = await prisma.rateLimitBucket.findUnique({
@@ -101,4 +105,12 @@ export async function isForgotPasswordBlocked(key: string): Promise<boolean> {
 
 export async function recordForgotPasswordAttempt(key: string): Promise<void> {
   await recordAttempt(BUCKET_FORGOT_PASSWORD, key, FORGOT_PASSWORD_WINDOW_MS);
+}
+
+export async function isResetPasswordBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_RESET_PASSWORD, key, RESET_PASSWORD_MAX_ATTEMPTS);
+}
+
+export async function recordResetPasswordAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_RESET_PASSWORD, key, RESET_PASSWORD_WINDOW_MS);
 }
