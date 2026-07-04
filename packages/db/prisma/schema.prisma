@@ -209,10 +209,12 @@ model CarrierScore {
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
+  companyId  String?
   action     String
   entityType String?
   entityId   String?
   createdAt  DateTime @default(now())
 
   @@index([userId])
+  @@index([companyId])
 }
