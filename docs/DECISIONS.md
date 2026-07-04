@@ -283,3 +283,64 @@ read-back из БД.
 **Реализация:** `apps/web/lib/recipient-pii-credentials.ts`,
 `apps/web/lib/recipient-pii.ts`, `create-shipment.ts`, read-path в API
 списка и CSV-экспорта; переменная в `infra/.env.example`.
+
+## ADR: AuditLog — companyId, отобранные события, без списка отправлений (2026-07-04)
+
+**Статус:** Принято (P0-SEC5 · 797f486, 66bf718)
+
+**Контекст.** Модель `AuditLog` существовала в схеме (`userId`, `action`,
+`entityType`, `entityId`, `createdAt`), но ни один роут в неё не писал
+(аудит §2.2 #10). Журнал нужен для регламента реагирования на инцидент
+24/72ч (152-ФЗ).
+
+**Проблема.** У `AuditLog` не было `companyId` и связей с `User`/`Company`
+— разбор инцидента по конкретному продавцу требовал бы восстанавливать
+компанию через `userId`, а он бывает `null` (например, попытка входа с
+несуществующим email).
+
+**Решение.**
+1. В схему добавлено `companyId String?` + `@@index([companyId])`,
+   отдельно от существующего `@@index([userId])`. Поле nullable — часть
+   событий не имеет ни известного пользователя, ни компании.
+2. Создан helper `logAuditEvent()` (`apps/web/lib/audit/log.ts`) —
+   никогда не бросает исключение (сбой записи лога не должен ронять
+   основной запрос); при ошибке в консоль пишется только `action`, без
+   payload.
+3. Инструментированы фиксированные action-строки: `auth.login.success`,
+   `auth.login.failure`, `auth.password_reset.request`,
+   `auth.password_reset.consume`, `user.password.change`,
+   `shipment.create`, `shipment.export`, `shipment.anonymize`,
+   `settings.restore`. При неверном пароле (пользователь найден)
+   userId/companyId пишутся; при несуществующем email — оба `null`,
+   сам email нигде не логируется.
+4. `GET /api/shipments` (список) сознательно не логируется как «доступ
+   к ПДн» — вызывается при каждой загрузке кабинета, логирование раздуло
+   бы таблицу без сигнала для инцидента (доступ и так скопирован
+   собственной `companyId`, не межпродавцовый). Логируется только
+   экспорт CSV (`shipment.export`) — компактный высокорисковый путь
+   массовой выгрузки.
+5. `consumePasswordResetToken()` (`apps/web/lib/auth/password-reset.ts`)
+   изменена: раньше возвращала `boolean`, теперь
+   `{ ok: true; userId; companyId } | { ok: false }` — чтобы роут
+   `reset-password` мог залогировать реального актора без повторного
+   похода в БД.
+6. Ветки anti-enumeration (forgot-password с несуществующим email,
+   reset-password с невалидным токеном, смена пароля с неверным текущим
+   паролем) намеренно НЕ логируются — чтобы не создавать по таймингу
+   лога сигнал для угадывания существующих email/токенов.
+
+**Отвергли:** логировать каждый `GET /api/shipments` — избыточный объём
+без ценности для инцидента. Логировать submitted email при неудачном
+входе — новая точка хранения ПДн в обход шифрования P0-SEC12.
+
+**Отдельная находка (не в скоупе, заведена отдельно):**
+`TariffQuote.rawResponse` и `TrackingEvent.rawResponse` хранят полный
+JSON-ответ APIShip в открытом виде, вероятно включая `destAddress` —
+периметр вне P0-SEC12. См. P0-SEC14 в ROADMAP.
+
+**Реализация:** `apps/web/lib/audit/log.ts`,
+`packages/db/prisma/schema.prisma` (миграция
+`20260704120000_add_audit_log_company_id`), роуты `auth/login`,
+`auth/forgot-password`, `auth/reset-password`, `user/password`,
+`shipments/create`, `shipments/export`, `shipments/[id]/anonymize`,
+`settings/restore`; `apps/web/lib/auth/password-reset.ts`.
