@@ -1,143 +1,104 @@
-/** Простая защита от перебора паролей (в памяти, для MVP). */
-const attempts = new Map<string, { count: number; resetAt: number }>();
+import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/db";
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 
-const registerAttempts = new Map<string, { count: number; resetAt: number }>();
-
 const REGISTER_MAX_ATTEMPTS = 5;
 const REGISTER_WINDOW_MS = 60 * 60 * 1000;
-
-export function isLoginBlocked(key: string): boolean {
-  const entry = attempts.get(key);
-  if (!entry) return false;
-  if (Date.now() > entry.resetAt) {
-    attempts.delete(key);
-    return false;
-  }
-  return entry.count >= MAX_ATTEMPTS;
-}
-
-export function recordFailedLogin(key: string): void {
-  const now = Date.now();
-  const entry = attempts.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return;
-  }
-
-  entry.count += 1;
-}
-
-export function clearLoginAttempts(key: string): void {
-  attempts.delete(key);
-}
-
-export function isRegisterBlocked(key: string): boolean {
-  const entry = registerAttempts.get(key);
-  if (!entry) return false;
-  if (Date.now() > entry.resetAt) {
-    registerAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= REGISTER_MAX_ATTEMPTS;
-}
-
-export function recordRegisterAttempt(key: string): void {
-  const now = Date.now();
-  const entry = registerAttempts.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    registerAttempts.set(key, { count: 1, resetAt: now + REGISTER_WINDOW_MS });
-    return;
-  }
-
-  entry.count += 1;
-}
-
-export function clearRegisterAttempts(key: string): void {
-  registerAttempts.delete(key);
-}
-
-const publicRecommendAttempts = new Map<string, { count: number; resetAt: number }>();
 
 const PUBLIC_RECOMMEND_MAX_ATTEMPTS = 5;
 const PUBLIC_RECOMMEND_WINDOW_MS = 60 * 1000;
 
-export function isPublicRecommendBlocked(key: string): boolean {
-  const entry = publicRecommendAttempts.get(key);
-  if (!entry) return false;
-  if (Date.now() > entry.resetAt) {
-    publicRecommendAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= PUBLIC_RECOMMEND_MAX_ATTEMPTS;
-}
-
-export function recordPublicRecommendAttempt(key: string): void {
-  const now = Date.now();
-  const entry = publicRecommendAttempts.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    publicRecommendAttempts.set(key, { count: 1, resetAt: now + PUBLIC_RECOMMEND_WINDOW_MS });
-    return;
-  }
-
-  entry.count += 1;
-}
-
-const sendVerificationAttempts = new Map<string, { count: number; resetAt: number }>();
-
 const SEND_VERIFICATION_MAX_ATTEMPTS = 5;
 const SEND_VERIFICATION_WINDOW_MS = 60 * 1000;
-
-export function isSendVerificationBlocked(key: string): boolean {
-  const entry = sendVerificationAttempts.get(key);
-  if (!entry) return false;
-  if (Date.now() > entry.resetAt) {
-    sendVerificationAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= SEND_VERIFICATION_MAX_ATTEMPTS;
-}
-
-export function recordSendVerificationAttempt(key: string): void {
-  const now = Date.now();
-  const entry = sendVerificationAttempts.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    sendVerificationAttempts.set(key, { count: 1, resetAt: now + SEND_VERIFICATION_WINDOW_MS });
-    return;
-  }
-
-  entry.count += 1;
-}
-
-const forgotPasswordAttempts = new Map<string, { count: number; resetAt: number }>();
 
 const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
 const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 
-export function isForgotPasswordBlocked(key: string): boolean {
-  const entry = forgotPasswordAttempts.get(key);
-  if (!entry) return false;
-  if (Date.now() > entry.resetAt) {
-    forgotPasswordAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= FORGOT_PASSWORD_MAX_ATTEMPTS;
+const BUCKET_LOGIN = "login";
+const BUCKET_REGISTER = "register";
+const BUCKET_PUBLIC_RECOMMEND = "public-recommend";
+const BUCKET_SEND_VERIFICATION = "send-verification";
+const BUCKET_FORGOT_PASSWORD = "forgot-password";
+
+async function isBlocked(bucket: string, key: string, maxAttempts: number): Promise<boolean> {
+  const row = await prisma.rateLimitBucket.findUnique({
+    where: { bucket_key: { bucket, key } },
+  });
+  if (!row) return false;
+  if (row.resetAt < new Date()) return false;
+  return row.count >= maxAttempts;
 }
 
-export function recordForgotPasswordAttempt(key: string): void {
-  const now = Date.now();
-  const entry = forgotPasswordAttempts.get(key);
+/** IDs for raw INSERT: crypto.randomUUID() — no pgcrypto dependency in migrations. */
+async function recordAttempt(bucket: string, key: string, windowMs: number): Promise<void> {
+  const newResetAt = new Date(Date.now() + windowMs);
+  const id = randomUUID();
 
-  if (!entry || now > entry.resetAt) {
-    forgotPasswordAttempts.set(key, { count: 1, resetAt: now + FORGOT_PASSWORD_WINDOW_MS });
-    return;
-  }
+  await prisma.$executeRaw`
+    INSERT INTO "RateLimitBucket" (id, bucket, key, count, "resetAt")
+    VALUES (${id}, ${bucket}, ${key}, 1, ${newResetAt})
+    ON CONFLICT (bucket, key) DO UPDATE SET
+      count = CASE
+        WHEN "RateLimitBucket"."resetAt" < now() THEN 1
+        ELSE "RateLimitBucket".count + 1
+      END,
+      "resetAt" = CASE
+        WHEN "RateLimitBucket"."resetAt" < now() THEN ${newResetAt}
+        ELSE "RateLimitBucket"."resetAt"
+      END
+  `;
+}
 
-  entry.count += 1;
+async function clearAttempts(bucket: string, key: string): Promise<void> {
+  await prisma.rateLimitBucket.deleteMany({ where: { bucket, key } });
+}
+
+export async function isLoginBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_LOGIN, key, MAX_ATTEMPTS);
+}
+
+export async function recordFailedLogin(key: string): Promise<void> {
+  await recordAttempt(BUCKET_LOGIN, key, WINDOW_MS);
+}
+
+export async function clearLoginAttempts(key: string): Promise<void> {
+  await clearAttempts(BUCKET_LOGIN, key);
+}
+
+export async function isRegisterBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_REGISTER, key, REGISTER_MAX_ATTEMPTS);
+}
+
+export async function recordRegisterAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_REGISTER, key, REGISTER_WINDOW_MS);
+}
+
+export async function clearRegisterAttempts(key: string): Promise<void> {
+  await clearAttempts(BUCKET_REGISTER, key);
+}
+
+export async function isPublicRecommendBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_PUBLIC_RECOMMEND, key, PUBLIC_RECOMMEND_MAX_ATTEMPTS);
+}
+
+export async function recordPublicRecommendAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_PUBLIC_RECOMMEND, key, PUBLIC_RECOMMEND_WINDOW_MS);
+}
+
+export async function isSendVerificationBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_SEND_VERIFICATION, key, SEND_VERIFICATION_MAX_ATTEMPTS);
+}
+
+export async function recordSendVerificationAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_SEND_VERIFICATION, key, SEND_VERIFICATION_WINDOW_MS);
+}
+
+export async function isForgotPasswordBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_FORGOT_PASSWORD, key, FORGOT_PASSWORD_MAX_ATTEMPTS);
+}
+
+export async function recordForgotPasswordAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_FORGOT_PASSWORD, key, FORGOT_PASSWORD_WINDOW_MS);
 }
