@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
@@ -47,16 +47,7 @@ const exportSelect = {
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 
-export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
-  if (!user.emailVerified) {
-    return NextResponse.json({ error: "Email не подтверждён" }, { status: 403 });
-  }
-
+export const GET = withAuth(async (request, user) => {
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status")?.trim();
   const track = searchParams.get("track")?.trim();
@@ -111,4 +102,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+}, { requireEmailVerified: true });

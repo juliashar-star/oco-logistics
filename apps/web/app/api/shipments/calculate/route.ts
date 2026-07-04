@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_DECISION_WEIGHTS, rankQuotes } from "@oco/core";
 import { ApishipError } from "@oco/apiship";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import {
   canUseApiship,
@@ -10,16 +10,7 @@ import {
 import { resolveSenderLocation, formatAddressForApiship } from "@/lib/sender-address";
 import { persistTariffQuotes } from "@/lib/tariff-quotes/persist-tariff-quotes";
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
-  if (!user.emailVerified) {
-    return NextResponse.json({ error: "Email не подтверждён" }, { status: 403 });
-  }
-
+export const POST = withAuth(async (request, user) => {
   const company = await prisma.company.findFirst({
     where: { id: user.companyId },
     select: {
@@ -162,4 +153,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+}, { requireEmailVerified: true });

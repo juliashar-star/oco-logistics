@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SelectionMode } from "@prisma/client";
 import { ApishipError } from "@oco/apiship";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { canUseApiship } from "@/lib/apiship-client-for-company";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
@@ -11,16 +11,7 @@ import { STALE_TARIFF_QUOTES_ERROR } from "@/lib/tariff-quotes/persist-tariff-qu
 
 const SELECTION_MODES = new Set<SelectionMode>(["FAST", "CHEAP", "OPTIMAL", "MANUAL"]);
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
-  if (!user.emailVerified) {
-    return NextResponse.json({ error: "Email не подтверждён" }, { status: 403 });
-  }
-
+export const POST = withAuth(async (request, user) => {
   const company = await prisma.company.findFirst({
     where: { id: user.companyId },
     select: {
@@ -194,4 +185,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+}, { requireEmailVerified: true });

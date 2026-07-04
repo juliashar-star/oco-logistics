@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 
@@ -42,12 +42,7 @@ function parseLimit(raw: string | null): number {
   return Math.min(parsed, MAX_LIMIT);
 }
 
-export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const GET = withAuth(async (request, user) => {
   const { searchParams } = new URL(request.url);
   const statusParam = searchParams.get("status")?.trim();
   const track = searchParams.get("track")?.trim();
@@ -91,4 +86,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});

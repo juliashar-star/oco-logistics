@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { syncShipmentStatuses } from "@/lib/shipments/sync-statuses";
 
-export async function POST() {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const POST = withAuth(async (request, user) => {
   try {
     const result = await syncShipmentStatuses(user.companyId);
     return NextResponse.json({
@@ -21,4 +16,4 @@ export async function POST() {
       { status: 502 },
     );
   }
-}
+});

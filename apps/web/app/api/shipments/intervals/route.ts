@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ApishipError } from "@oco/apiship";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import {
   canUseApiship,
@@ -8,12 +8,7 @@ import {
 } from "@/lib/apiship-client-for-company";
 import { resolveSenderLocation, formatAddressForApiship } from "@/lib/sender-address";
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const POST = withAuth(async (request, user) => {
   const company = await prisma.company.findFirst({
     where: { id: user.companyId },
     select: {
@@ -142,4 +137,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});
