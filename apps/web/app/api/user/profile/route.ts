@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { validateUserProfile } from "@/lib/auth/validation";
 import { prisma } from "@/lib/db";
 
-export async function PATCH(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const PATCH = withAuth(async (request, user) => {
   try {
     const body = await request.json();
     const name =
@@ -57,4 +52,4 @@ export async function PATCH(request: Request) {
       { status: 500 },
     );
   }
-}
+});

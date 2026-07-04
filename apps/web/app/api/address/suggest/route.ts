@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 
 const DADATA_SUGGEST_URL =
   "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address";
@@ -55,12 +55,7 @@ function mapSuggestion(suggestion: DadataSuggestion): AddressSuggestion | null {
   };
 }
 
-export async function GET(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const GET = withAuth(async (request, user) => {
   const apiKey = process.env.DADATA_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
@@ -113,4 +108,4 @@ export async function GET(request: Request) {
       { status: 502 },
     );
   }
-}
+});

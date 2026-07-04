@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { validateChangePassword } from "@/lib/auth/validation";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
 
 const WRONG_PASSWORD_ERROR = "Не удалось сменить пароль. Проверьте текущий пароль.";
 
-export async function PATCH(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const PATCH = withAuth(async (request, user) => {
   try {
     const body = await request.json();
     const currentPassword = String(body.currentPassword ?? "");
@@ -59,4 +54,4 @@ export async function PATCH(request: Request) {
       { status: 500 },
     );
   }
-}
+});
