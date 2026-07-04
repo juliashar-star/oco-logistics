@@ -93,6 +93,7 @@ _Источник: OCO_Deep_Audit_2026-06-26.md_
 - [x] P0-SEC1 · ef74667 · Починить `settings/restore`: не доверять `apishipPasswordEnc` из файла; проверять расшифровку или требовать повторного ввода пароля APIShip (ранняя частичная правка: 7cec9dc)
 
 **Безопасность — до или сразу после запуска:**
+- [x] P0-SEC12 · 05dd1c0 · Шифрование `recipientName` / `recipientPhone` / `destAddress` на уровне приложения (как `apishipPasswordEnc`, отдельный `RECIPIENT_PII_ENCRYPTION_KEY`; в скоуп также включён `destAddress` — сверх исходной формулировки только name/phone)
 - [x] P0-SEC3 · 7f5575a · Ужесточить CSP: убрать `unsafe-eval`, перейти на nonce (Next.js 15 поддерживает)
 - [x] P0-SEC2 · fb45d57 · CSRF-защита: проверка заголовка `Origin` на всех мутирующих роутах (POST/PATCH/DELETE)
 - [ ] Rate-limit перенести из памяти процесса в БД; зафиксировать в деплой-инструкции: nginx перезаписывает `X-Forwarded-For`
@@ -105,7 +106,6 @@ _Источник: OCO_Deep_Audit_2026-06-26.md_
 - [ ] Хелпер `withAuth(handler)` — централизовать проверку авторизации, убрать повторение в каждом роуте
 - [ ] Индекс `companyId + createdAt` на таблице `Shipment` (под запросы дашборда за 7/30 дней)
 - [ ] Убрать мёртвое поле `apishipKeyRef` из схемы Prisma
-- [ ] Рассмотреть шифрование `recipientName` / `recipientPhone` на уровне приложения (как `apishipPasswordEnc`)
 
 **UX — до запуска:**
 - [ ] Онбординг-чеклист на пустых экранах дашборда и списка отправлений (US-5.3)

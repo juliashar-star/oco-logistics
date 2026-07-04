@@ -249,3 +249,37 @@ production CSP.
 
 **Реализация:** `apps/web/lib/security/csp.ts`, переменные в
 `infra/.env.example`.
+
+## ADR: Recipient PII encryption — scope expanded to include destAddress;
+separate key from APIShip credentials (2026-07-04)
+
+**Статус:** Принято (P0-SEC12 · 05dd1c0)
+
+**Контекст.** Аудит (§2.3 / §3.2): поля `recipientName` и
+`recipientPhone` в таблице `Shipment` хранились в открытом виде при
+том, что пароль APIShip уже шифруется на уровне приложения
+(`apishipPasswordEnc`).
+
+**Решение.** Тот же паттерн AES-256-GCM, что и для `apishipPasswordEnc`,
+но с отдельным ключом `RECIPIENT_PII_ENCRYPTION_KEY` — иной blast radius
+от `APIShip_ENCRYPTION_KEY` (компрометация одного не раскрывает другое).
+Скоуп расширен до реализации: помимо `recipientName` и `recipientPhone`
+зашифрован также `destAddress` (та же класс чувствительности — полный
+физический адрес). `destCity` и `pvzCode` сознательно оставлены plaintext
+(сами по себе ниже идентифицирующей ценности). Шифрование при записи,
+расшифровка при чтении (список отправлений, CSV-экспорт); для
+анонимизированных строк (`isAnonymized`) расшифровка пропускается.
+Вызов APIShip при создании отправления использует plaintext из запроса, не
+read-back из БД.
+
+**APIShip retention (открытый вопрос, P0-DOC7).** APIShip хранит свою
+копию данных получателя на своих серверах после создания заказа; API
+удаления/анонимизации на их стороне нет. Обезличивание в OCO покрывает
+только нашу базу — вопрос для юриста.
+
+**Отвергли:** backfill существующих dev-данных — данные сброшены (до
+запуска production-данных не было).
+
+**Реализация:** `apps/web/lib/recipient-pii-credentials.ts`,
+`apps/web/lib/recipient-pii.ts`, `create-shipment.ts`, read-path в API
+списка и CSV-экспорта; переменная в `infra/.env.example`.
