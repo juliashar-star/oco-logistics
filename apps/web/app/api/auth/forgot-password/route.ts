@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/rate-limit";
 import { issuePasswordResetToken } from "@/lib/auth/password-reset";
 import { validateForgotPassword } from "@/lib/auth/validation";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const SUCCESS_MESSAGE =
   "Если этот email зарегистрирован, вы получите письмо со ссылкой для сброса пароля.";
@@ -39,11 +40,18 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true },
+      select: { id: true, email: true, companyId: true },
     });
 
     if (user) {
       await issuePasswordResetToken(user.id, user.email);
+      void logAuditEvent({
+        userId: user.id,
+        companyId: user.companyId,
+        action: "auth.password_reset.request",
+        entityType: "user",
+        entityId: user.id,
+      });
     }
 
     return NextResponse.json({ success: true, message: SUCCESS_MESSAGE });

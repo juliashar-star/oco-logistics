@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { validateChangePassword } from "@/lib/auth/validation";
 import { prisma } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const WRONG_PASSWORD_ERROR = "Не удалось сменить пароль. Проверьте текущий пароль.";
 
@@ -40,6 +41,14 @@ export async function PATCH(request: Request) {
     await prisma.user.update({
       where: { id: user.userId },
       data: { passwordHash },
+    });
+
+    void logAuditEvent({
+      userId: user.userId,
+      companyId: user.companyId,
+      action: "user.password.change",
+      entityType: "user",
+      entityId: user.userId,
     });
 
     return NextResponse.json({ success: true });

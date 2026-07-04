@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hashPassword } from "@/lib/auth/password";
 import { consumePasswordResetToken } from "@/lib/auth/password-reset";
 import { validateResetPassword } from "@/lib/auth/validation";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const GENERIC_ERROR = "Ссылка недействительна или истекла. Запросите сброс пароля заново.";
 
@@ -17,11 +18,19 @@ export async function POST(request: Request) {
     }
 
     const passwordHash = await hashPassword(password);
-    const ok = await consumePasswordResetToken(token, passwordHash);
+    const result = await consumePasswordResetToken(token, passwordHash);
 
-    if (!ok) {
+    if (!result.ok) {
       return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
     }
+
+    void logAuditEvent({
+      userId: result.userId,
+      companyId: result.companyId,
+      action: "auth.password_reset.consume",
+      entityType: "user",
+      entityId: result.userId,
+    });
 
     return NextResponse.json({ success: true });
   } catch {

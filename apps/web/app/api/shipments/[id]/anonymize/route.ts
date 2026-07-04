@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit/log";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -60,6 +61,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
         data: { rawResponse: Prisma.DbNull },
       }),
     ]);
+
+    void logAuditEvent({
+      userId: user.userId,
+      companyId: user.companyId,
+      action: "shipment.anonymize",
+      entityType: "shipment",
+      entityId: shipmentId,
+    });
 
     return NextResponse.json({ ok: true });
   } catch {

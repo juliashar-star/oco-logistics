@@ -33,10 +33,14 @@ export async function issuePasswordResetToken(
   }
 }
 
+export type ConsumePasswordResetTokenResult =
+  | { ok: true; userId: string; companyId: string }
+  | { ok: false };
+
 export async function consumePasswordResetToken(
   rawToken: string,
   newPasswordHash: string,
-): Promise<boolean> {
+): Promise<ConsumePasswordResetTokenResult> {
   const tokenHash = hashPasswordResetToken(rawToken);
   const now = new Date();
 
@@ -47,11 +51,12 @@ export async function consumePasswordResetToken(
       userId: true,
       expiresAt: true,
       usedAt: true,
+      user: { select: { companyId: true } },
     },
   });
 
   if (!resetToken || resetToken.usedAt || resetToken.expiresAt < now) {
-    return false;
+    return { ok: false };
   }
 
   await prisma.$transaction([
@@ -71,5 +76,9 @@ export async function consumePasswordResetToken(
     }),
   ]);
 
-  return true;
+  return {
+    ok: true,
+    userId: resetToken.userId,
+    companyId: resetToken.user.companyId,
+  };
 }

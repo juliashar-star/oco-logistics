@@ -4,6 +4,7 @@ import { ApishipError } from "@oco/apiship";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { canUseApiship } from "@/lib/apiship-client-for-company";
 import { prisma } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit/log";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { createShipment } from "@/lib/shipments/create-shipment";
 import { STALE_TARIFF_QUOTES_ERROR } from "@/lib/tariff-quotes/persist-tariff-quotes";
@@ -147,6 +148,14 @@ export async function POST(request: Request) {
       deliveryDate,
       deliveryTimeStart,
       deliveryTimeEnd,
+    });
+
+    void logAuditEvent({
+      userId: user.userId,
+      companyId: user.companyId,
+      action: "shipment.create",
+      entityType: "shipment",
+      entityId: result.shipmentId,
     });
 
     return NextResponse.json({

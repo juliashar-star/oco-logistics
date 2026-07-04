@@ -8,6 +8,7 @@ import {
   isLoginBlocked,
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
+import { logAuditEvent } from "@/lib/audit/log";
 
 function clientKey(request: Request, email: string): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -46,8 +47,26 @@ export async function POST(request: Request) {
 
     const passwordOk = Boolean(user && (await verifyPassword(password, user.passwordHash)));
 
-    if (!user || !passwordOk) {
+    if (!user) {
       recordFailedLogin(key);
+      void logAuditEvent({
+        userId: null,
+        companyId: null,
+        action: "auth.login.failure",
+      });
+      return NextResponse.json(
+        { error: "Неверный email или пароль" },
+        { status: 401 },
+      );
+    }
+
+    if (!passwordOk) {
+      recordFailedLogin(key);
+      void logAuditEvent({
+        userId: user.id,
+        companyId: user.companyId,
+        action: "auth.login.failure",
+      });
       return NextResponse.json(
         { error: "Неверный email или пароль" },
         { status: 401 },
@@ -55,6 +74,12 @@ export async function POST(request: Request) {
     }
 
     clearLoginAttempts(key);
+
+    void logAuditEvent({
+      userId: user.id,
+      companyId: user.companyId,
+      action: "auth.login.success",
+    });
 
     await createSession({
       userId: user.id,

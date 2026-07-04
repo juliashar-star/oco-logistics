@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit/log";
 import {
   parseSettingsBackup,
   restoreDataFromBackup,
@@ -79,6 +80,14 @@ export async function POST(request: Request) {
         apishipPasswordEnc: null,
         apishipConnectedAt: null,
       },
+    });
+
+    void logAuditEvent({
+      userId: user.userId,
+      companyId: user.companyId,
+      action: "settings.restore",
+      entityType: "company",
+      entityId: user.companyId,
     });
 
     return NextResponse.json({

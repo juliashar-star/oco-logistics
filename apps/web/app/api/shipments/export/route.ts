@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
+import { logAuditEvent } from "@/lib/audit/log";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 import {
   buildShipmentsCsv,
@@ -86,6 +87,14 @@ export async function GET(request: Request) {
 
     const exportedAt = new Date();
     const body = buildShipmentsCsv(shipments.map(decryptShipmentRecipientPii));
+
+    void logAuditEvent({
+      userId: user.userId,
+      companyId: user.companyId,
+      action: "shipment.export",
+      entityType: "company",
+      entityId: user.companyId,
+    });
 
     return new NextResponse(body, {
       status: 200,
