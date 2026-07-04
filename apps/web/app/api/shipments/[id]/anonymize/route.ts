@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
-
-type RouteParams = {
-  params: Promise<{ id: string }>;
-};
 
 /**
  * Anonymizes recipient PII on a Shipment and linked TariffQuote.rawResponse.
@@ -14,12 +10,7 @@ type RouteParams = {
  * servers after order creation — there is no delete/anonymize API on their side.
  * TrackingEvent.rawResponse is left unchanged (low PII risk).
  */
-export async function POST(_request: Request, { params }: RouteParams) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const POST = withAuth<{ id: string }>(async (_request, user, { params }) => {
   const { id } = await params;
   const shipmentId = id.trim();
   if (!shipmentId) {
@@ -78,4 +69,4 @@ export async function POST(_request: Request, { params }: RouteParams) {
       { status: 500 },
     );
   }
-}
+});
