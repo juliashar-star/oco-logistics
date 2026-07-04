@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
 import {
@@ -59,12 +59,7 @@ class BodyTooLargeError extends Error {
   }
 }
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const POST = withAuth(async (request, user) => {
   try {
     const raw = await readJsonBodyWithLimit(request, MAX_RESTORE_BODY_BYTES);
     const payload = parseSettingsBackup(raw);
@@ -117,4 +112,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});
