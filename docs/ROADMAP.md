@@ -65,7 +65,7 @@
       fails; user lands on /verify-email with resend option (currently
       returns 500 on send failure)
 - [ ] Password reset via token link (NOT password-in-email — security/152-ФЗ)
-- [ ] Rate limiting on password reset endpoint — перенесено в блок «Безопасность» выше (пункт при P0-SEC4, соответствует P0-SEC10 из мастер-плана)
+- [x] Rate limiting on password reset endpoint — реализовано, см. блок «Безопасность» (P0-SEC10 остаток · 49e9bdb)
 - [ ] User settings page (profile, change password, company data)
 - [x] Login lockout after N failed attempts (brute-force protection) — реализовано, P0-SEC4 (`auth/login`, бакет `login`, 5 попыток / 15 минут)
 - [ ] Optional 2FA (architecture should allow it)
@@ -102,15 +102,15 @@ _Источник: OCO_Deep_Audit_2026-06-26.md_
 - [x] P0-SEC6 · 00c4d10 · `npm audit` — 2 умеренные (CVSS 6.1, GHSA-qx2v-qp2m-jg93, вложенный `postcss` внутри `next`) закрыты через `overrides` в корневом `package.json`; `next` обновлён до последнего патча 15.5.20; `engines.node` + `.nvmrc` зафиксированы. См. ADR.
 - [ ] Трекер ошибок (GlitchTip или Sentry-совместимый) — поднять до первых клиентов
 - [ ] P0-SEC14 · `TariffQuote.rawResponse` и `TrackingEvent.rawResponse` хранят полный JSON-ответ APIShip в открытом виде — вероятно, включает `destAddress` из тела calculate/create-запроса. Периметр не закрыт P0-SEC12 (найдено при инвентаризации P0-SEC5). Требует отдельного решения: шифровать целиком / редактировать перед записью / не хранить raw.
-- [ ] Nginx должен явно перезаписывать `X-Forwarded-For` (не доверять клиентскому значению) — требование к деплою на хостинге. До этого IP-based rate-limit (все 5 бакетов) обходится подменой заголовка. Зафиксировать в деплой-инструкции P1-HOST.
-- [ ] Rate-limit на `/api/auth/reset-password` — отдельная задача (отложено при P0-SEC4). Токен 256 бит, брутфорс практически невозможен, но соответствует P0-SEC10 из мастер-плана.
+- [ ] Nginx должен явно перезаписывать `X-Forwarded-For` (не доверять клиентскому значению) — требование к деплою на хостинге. До этого IP-based rate-limit (все 6 бакетов) обходится подменой заголовка. Зафиксировать в деплой-инструкции P1-HOST.
+- [x] P0-SEC10 (остаток) · 49e9bdb · Rate-limit на `/api/auth/reset-password` добавлен — 6-й bucket (`reset-password`, 5 попыток/15 мин, ключ IP-only), по тому же паттерну, что и остальные 5 (P0-SEC4). Токен 256 бит, брутфорс маловероятен, но соответствует P0-SEC10 из мастер-плана.
 - [ ] Rate-limit на `/api/user/password` и `/api/auth/verify-email` — отдельная задача (отложено при P0-SEC4). `user/password` защищён сессией, `verify-email` — токеном; не критично для MVP.
 - [ ] Повторный `npm audit` перед каждым деплоем и периодически в разработке — разовая проверка (P0-SEC6) не гарантирует отсутствие новых CVE в будущем; пока без автоматизации (CI/Dependabot), см. ADR.
 
 **Оптимизация кода — малая кровь:**
 - [ ] Хелпер `withAuth(handler)` — централизовать проверку авторизации, убрать повторение в каждом роуте
-- [ ] Индекс `companyId + createdAt` на таблице `Shipment` (под запросы дашборда за 7/30 дней)
-- [ ] Убрать мёртвое поле `apishipKeyRef` из схемы Prisma
+- [x] P0-SEC8 · 237bdc8 · Индекс `companyId + createdAt` на таблице `Shipment` — покрывает список отправлений и CSV-экспорт (сортировка по `createdAt` в рамках `companyId`). Индекс под дашборд (`companyId + status`) уже существовал отдельно.
+- [x] P0-SEC9 · 237bdc8 · Убрать мёртвое поле `apishipKeyRef` из схемы Prisma — ноль обращений в коде, 0 непустых legacy-значений в БД перед удалением.
 
 **UX — до запуска:**
 - [ ] Онбординг-чеклист на пустых экранах дашборда и списка отправлений (US-5.3)
