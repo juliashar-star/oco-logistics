@@ -9,11 +9,7 @@ import {
   isRegisterBlocked,
   recordRegisterAttempt,
 } from "@/lib/auth/rate-limit";
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() ?? "unknown";
-}
+import { getClientIp } from "@/lib/http/client-ip";
 
 export async function POST(request: Request) {
   try {
@@ -29,8 +25,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
     }
 
-    const key = clientIp(request);
-    if (isRegisterBlocked(key)) {
+    const key = getClientIp(request);
+    if (await isRegisterBlocked(key)) {
       return NextResponse.json(
         {
           error: "Слишком много попыток регистрации. Попробуйте через час.",
@@ -41,7 +37,7 @@ export async function POST(request: Request) {
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      recordRegisterAttempt(key);
+      await recordRegisterAttempt(key);
       return NextResponse.json(
         { error: "Аккаунт с таким email уже существует" },
         { status: 409 },
@@ -82,7 +78,7 @@ export async function POST(request: Request) {
       console.error("verification email send failed after register");
     }
 
-    clearRegisterAttempts(key);
+    await clearRegisterAttempts(key);
 
     return NextResponse.json({
       ok: true,

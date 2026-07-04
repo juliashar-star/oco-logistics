@@ -4,24 +4,20 @@ import {
   isPublicRecommendBlocked,
   recordPublicRecommendAttempt,
 } from "@/lib/auth/rate-limit";
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() ?? "unknown";
-}
+import { getClientIp } from "@/lib/http/client-ip";
 
 // Same Origin/Referer CSRF check as all mutating API routes (middleware).
 // Not exempt: today the UI calls this same-origin only; cross-origin embed would need an explicit decision.
 export async function POST(request: Request) {
-  const key = clientIp(request);
-  if (isPublicRecommendBlocked(key)) {
+  const key = getClientIp(request);
+  if (await isPublicRecommendBlocked(key)) {
     return NextResponse.json(
       { error: "Слишком много запросов. Попробуйте через минуту." },
       { status: 429 },
     );
   }
 
-  recordPublicRecommendAttempt(key);
+  await recordPublicRecommendAttempt(key);
 
   try {
     const body = await request.json();

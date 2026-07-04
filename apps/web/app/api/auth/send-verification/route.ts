@@ -10,22 +10,18 @@ import {
   issueVerificationToken,
   resendCooldownRemainingSec,
 } from "@/lib/auth/verification";
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() ?? "unknown";
-}
+import { getClientIp } from "@/lib/http/client-ip";
 
 export async function POST(request: Request) {
-  const key = clientIp(request);
-  if (isSendVerificationBlocked(key)) {
+  const key = getClientIp(request);
+  if (await isSendVerificationBlocked(key)) {
     return NextResponse.json(
       { error: "Слишком много запросов. Попробуйте через минуту." },
       { status: 429 },
     );
   }
 
-  recordSendVerificationAttempt(key);
+  await recordSendVerificationAttempt(key);
 
   const session = await getSession();
   if (!session) {

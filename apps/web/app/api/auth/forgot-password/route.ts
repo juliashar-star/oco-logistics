@@ -7,25 +7,21 @@ import {
 import { issuePasswordResetToken } from "@/lib/auth/password-reset";
 import { validateForgotPassword } from "@/lib/auth/validation";
 import { logAuditEvent } from "@/lib/audit/log";
+import { getClientIp } from "@/lib/http/client-ip";
 
 const SUCCESS_MESSAGE =
   "Если этот email зарегистрирован, вы получите письмо со ссылкой для сброса пароля.";
 
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() ?? "unknown";
-}
-
 export async function POST(request: Request) {
-  const key = clientIp(request);
-  if (isForgotPasswordBlocked(key)) {
+  const key = getClientIp(request);
+  if (await isForgotPasswordBlocked(key)) {
     return NextResponse.json(
       { error: "Слишком много запросов. Попробуйте через 15 минут." },
       { status: 429 },
     );
   }
 
-  recordForgotPasswordAttempt(key);
+  await recordForgotPasswordAttempt(key);
 
   try {
     const body = await request.json();

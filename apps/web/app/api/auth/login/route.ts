@@ -9,11 +9,10 @@ import {
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
 import { logAuditEvent } from "@/lib/audit/log";
+import { getClientIp } from "@/lib/http/client-ip";
 
 function clientKey(request: Request, email: string): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
-  return `${ip}:${email}`;
+  return `${getClientIp(request)}:${email}`;
 }
 
 export async function POST(request: Request) {
@@ -30,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     const key = clientKey(request, email);
-    if (isLoginBlocked(key)) {
+    if (await isLoginBlocked(key)) {
       return NextResponse.json(
         {
           error:
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
     const passwordOk = Boolean(user && (await verifyPassword(password, user.passwordHash)));
 
     if (!user) {
-      recordFailedLogin(key);
+      await recordFailedLogin(key);
       void logAuditEvent({
         userId: null,
         companyId: null,
@@ -61,7 +60,7 @@ export async function POST(request: Request) {
     }
 
     if (!passwordOk) {
-      recordFailedLogin(key);
+      await recordFailedLogin(key);
       void logAuditEvent({
         userId: user.id,
         companyId: user.companyId,
@@ -73,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    clearLoginAttempts(key);
+    await clearLoginAttempts(key);
 
     void logAuditEvent({
       userId: user.id,
