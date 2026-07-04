@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 
 function kopecksToRubles(kopecks: number): number {
   return kopecks / 100;
 }
 
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
-  }
-
+export const GET = withAuth(async (_request, user) => {
   const now = new Date();
   const last30Days = new Date(now);
   last30Days.setDate(last30Days.getDate() - 30);
@@ -90,4 +85,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
