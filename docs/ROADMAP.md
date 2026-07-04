@@ -65,9 +65,9 @@
       fails; user lands on /verify-email with resend option (currently
       returns 500 on send failure)
 - [ ] Password reset via token link (NOT password-in-email — security/152-ФЗ)
-- [ ] Rate limiting on password reset endpoint
+- [ ] Rate limiting on password reset endpoint — перенесено в блок «Безопасность» выше (пункт при P0-SEC4, соответствует P0-SEC10 из мастер-плана)
 - [ ] User settings page (profile, change password, company data)
-- [ ] Login lockout after N failed attempts (brute-force protection)
+- [x] Login lockout after N failed attempts (brute-force protection) — реализовано, P0-SEC4 (`auth/login`, бакет `login`, 5 попыток / 15 минут)
 - [ ] Optional 2FA (architecture should allow it)
 - [ ] Support widget / contact form + support workspace
 - [ ] Email notifications for key events (order created, delivery status)
@@ -96,12 +96,15 @@ _Источник: OCO_Deep_Audit_2026-06-26.md_
 - [x] P0-SEC12 · 05dd1c0 · Шифрование `recipientName` / `recipientPhone` / `destAddress` на уровне приложения (как `apishipPasswordEnc`, отдельный `RECIPIENT_PII_ENCRYPTION_KEY`; в скоуп также включён `destAddress` — сверх исходной формулировки только name/phone)
 - [x] P0-SEC3 · 7f5575a · Ужесточить CSP: убрать `unsafe-eval`, перейти на nonce (Next.js 15 поддерживает)
 - [x] P0-SEC2 · fb45d57 · CSRF-защита: проверка заголовка `Origin` на всех мутирующих роутах (POST/PATCH/DELETE)
-- [ ] Rate-limit перенести из памяти процесса в БД; зафиксировать в деплой-инструкции: nginx перезаписывает `X-Forwarded-For`
+- [x] P0-SEC4 · fa24e27, 8592530 · Rate-limit перенесён из памяти процесса в Postgres (`RateLimitBucket`, атомарный upsert через `$executeRaw`, единый `getClientIp()` helper). Nginx-требование к `X-Forwarded-For` остаётся открытым — см. отдельный пункт ниже.
 - [ ] Лимит размера тела запроса на всех роутах (особенно `restore`) — ЧАСТИЧНО: лимит 64KB на `settings/restore` реализован (P0-SEC1 · ef74667). Остальные мутирующие роуты — не в скоупе, отдельная задача.
 - [x] P0-SEC5 · 797f486, 66bf718 · AuditLog — запись ключевых событий: вход (успех/неудача), смена пароля, запрос/подтверждение сброса пароля, создание отправления, экспорт CSV, обезличивание, восстановление настроек. `companyId` добавлен в схему для сегментации по продавцам. Список отправлений (`GET /api/shipments`) сознательно не логируется — см. ADR.
 - [ ] `npm audit` + обновление зависимостей до патч-версий; повторять при каждом деплое
 - [ ] Трекер ошибок (GlitchTip или Sentry-совместимый) — поднять до первых клиентов
 - [ ] P0-SEC14 · `TariffQuote.rawResponse` и `TrackingEvent.rawResponse` хранят полный JSON-ответ APIShip в открытом виде — вероятно, включает `destAddress` из тела calculate/create-запроса. Периметр не закрыт P0-SEC12 (найдено при инвентаризации P0-SEC5). Требует отдельного решения: шифровать целиком / редактировать перед записью / не хранить raw.
+- [ ] Nginx должен явно перезаписывать `X-Forwarded-For` (не доверять клиентскому значению) — требование к деплою на хостинге. До этого IP-based rate-limit (все 5 бакетов) обходится подменой заголовка. Зафиксировать в деплой-инструкции P1-HOST.
+- [ ] Rate-limit на `/api/auth/reset-password` — отдельная задача (отложено при P0-SEC4). Токен 256 бит, брутфорс практически невозможен, но соответствует P0-SEC10 из мастер-плана.
+- [ ] Rate-limit на `/api/user/password` и `/api/auth/verify-email` — отдельная задача (отложено при P0-SEC4). `user/password` защищён сессией, `verify-email` — токеном; не критично для MVP.
 
 **Оптимизация кода — малая кровь:**
 - [ ] Хелпер `withAuth(handler)` — централизовать проверку авторизации, убрать повторение в каждом роуте
