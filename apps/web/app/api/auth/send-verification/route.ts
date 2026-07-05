@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
 import {
   isSendVerificationBlocked,
@@ -23,39 +23,30 @@ export async function POST(request: Request) {
 
   await recordSendVerificationAttempt(key);
 
-  const session = await getSession();
-  if (!session) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        email: true,
-        emailVerified: true,
-        verificationTokenExpiry: true,
-      },
-    });
-
-    if (!user || user.id !== session.userId) {
-      return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
-    }
-
     if (user.emailVerified) {
       return NextResponse.json({ error: "Email уже подтверждён" }, { status: 400 });
     }
 
-    if (isResendCooldownActive(user.verificationTokenExpiry)) {
-      const retryAfter = resendCooldownRemainingSec(user.verificationTokenExpiry);
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { verificationTokenExpiry: true },
+    });
+
+    if (isResendCooldownActive(dbUser?.verificationTokenExpiry ?? null)) {
+      const retryAfter = resendCooldownRemainingSec(dbUser?.verificationTokenExpiry ?? null);
       return NextResponse.json(
         { error: `Подождите ${retryAfter} сек. перед повторной отправкой` },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },
       );
     }
 
-    const { emailSent } = await issueVerificationToken(user.id, user.email);
+    const { emailSent } = await issueVerificationToken(user.userId, user.email);
 
     if (!emailSent) {
       console.error("send-verification email delivery failed");
