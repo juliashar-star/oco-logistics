@@ -48,4 +48,6 @@ coverage/
 # Turbo / cache
 .turbo/
 
+cookies.txt
+
 AUDIT_BUNDLE.md
