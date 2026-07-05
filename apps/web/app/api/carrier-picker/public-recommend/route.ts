@@ -9,17 +9,17 @@ import { getClientIp } from "@/lib/http/client-ip";
 // Same Origin/Referer CSRF check as all mutating API routes (middleware).
 // Not exempt: today the UI calls this same-origin only; cross-origin embed would need an explicit decision.
 export async function POST(request: Request) {
-  const key = getClientIp(request);
-  if (await isPublicRecommendBlocked(key)) {
-    return NextResponse.json(
-      { error: "Слишком много запросов. Попробуйте через минуту." },
-      { status: 429 },
-    );
-  }
-
-  await recordPublicRecommendAttempt(key);
-
   try {
+    const key = getClientIp(request);
+    if (await isPublicRecommendBlocked(key)) {
+      return NextResponse.json(
+        { error: "Слишком много запросов. Попробуйте через минуту." },
+        { status: 429 },
+      );
+    }
+
+    await recordPublicRecommendAttempt(key);
+
     const body = await request.json();
     const result = await recommendCarriers(body);
 
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(result.data);
-  } catch {
-    console.error("carrier-picker public-recommend failed");
+  } catch (error) {
+    console.error("carrier-picker public-recommend failed", error);
     return NextResponse.json(
       { error: "Не удалось подобрать перевозчиков. Попробуйте позже." },
       { status: 500 },

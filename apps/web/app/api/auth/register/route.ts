@@ -84,8 +84,8 @@ export async function POST(request: Request) {
       ok: true,
       redirect: "/verify-email",
     });
-  } catch {
-    console.error("register failed");
+  } catch (error) {
+    console.error("register failed", error);
     return NextResponse.json(
       { error: "Не удалось создать аккаунт. Попробуйте позже." },
       { status: 500 },
