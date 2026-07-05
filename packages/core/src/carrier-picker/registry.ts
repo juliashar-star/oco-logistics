@@ -88,14 +88,22 @@ export const CATEGORY_TO_PROFILE: CategoryMapping[] = [
 
 export type DeliveryMethod = "pvz" | "courier" | "postamat" | "terminal";
 
+export type CarrierHealthStatus = "active" | "issues" | "discontinued";
+
 export type Carrier = {
   providerKey: string;
   displayName: string;
   profiles: ProfileId[];
   methods: DeliveryMethod[];
   notes: string;
+  healthStatus: CarrierHealthStatus;
+  healthNote?: string;
 };
 
+// TODO: verify current status — DPD ownership/brand change since 2022
+// (unverified hypothesis per master plan §7, not yet confirmed)
+// TODO: verify current status — Boxberry cited as a cautionary example in
+// master plan risk section (context unclear, verify before changing healthStatus)
 /** Только СД с providerKey в каталоге APIShip (без СберЛогистика, Grastin, КИТ, Желдорэкспедиция, Энергия). */
 export const CARRIER_REGISTRY: Carrier[] = [
   {
@@ -105,6 +113,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "courier", "postamat"],
     notes:
       "самая развитая коммерческая сеть ПВЗ, 1100+ городов, курьер/ПВЗ/постамат, КГТ, международная; тарифы растут",
+    healthStatus: "active",
   },
   {
     providerKey: "rupost",
@@ -112,6 +121,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P1", "P2", "P3", "P4", "P5"],
     methods: ["pvz", "courier"],
     notes: "рекордное географическое покрытие — малые города, сёла, отдалённые регионы",
+    healthStatus: "active",
   },
   {
     providerKey: "boxberry",
@@ -120,6 +130,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "courier"],
     notes:
       "только малогабарит (макс. 15 кг, сумма сторон 250 см), ПВЗ 650 городов / курьер 375, e-comm фокус",
+    healthStatus: "active",
   },
   {
     providerKey: "yataxi",
@@ -127,6 +138,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P4", "P7"],
     methods: ["courier"],
     notes: "город и пригород, скорость, день-в-день",
+    healthStatus: "active",
   },
   {
     providerKey: "dpd",
@@ -134,6 +146,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P4", "P5"],
     methods: ["pvz", "terminal"],
     notes: "100 г – 250 кг, РФ и СНГ за 1–3 дня, ПВЗ + терминалы",
+    healthStatus: "active",
   },
   {
     providerKey: "x5",
@@ -141,6 +154,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P1", "P4"],
     methods: ["postamat", "pvz"],
     notes: "постаматы и ПВЗ-сети, дешёвый самовывоз",
+    healthStatus: "active",
   },
   {
     providerKey: "dostavista",
@@ -148,6 +162,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P4", "P7"],
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
+    healthStatus: "active",
   },
   {
     providerKey: "logsis",
@@ -155,6 +170,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P4", "P7"],
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
+    healthStatus: "active",
   },
   {
     providerKey: "pecom",
@@ -162,6 +178,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P6"],
     methods: ["terminal", "courier"],
     notes: "тяжёлое и КГТ, паллеты, от 15 кг, терминал/дверь, хранение/возврат",
+    healthStatus: "active",
   },
   {
     providerKey: "dellin",
@@ -169,6 +186,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P5", "P6"],
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
+    healthStatus: "active",
   },
   {
     providerKey: "baikalsr",
@@ -176,6 +194,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P5", "P6"],
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
+    healthStatus: "active",
   },
   {
     providerKey: "vozovoz",
@@ -183,5 +202,6 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P5", "P6"],
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
+    healthStatus: "active",
   },
 ];
