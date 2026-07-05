@@ -683,3 +683,20 @@ user/password).
   роутами.
 
 **Реализация:** `apps/web/app/api/auth/send-verification/route.ts`.
+
+### 2026-07-05 · Carrier Score stub layer (Task 3) — уже реализован, задокументирован задним числом
+
+Статус: ✅ Сделано (обнаружено при read-only инвентаризации, не новый код)
+
+При инвентаризации перед стартом Task 3 обнаружено, что стаб-слой уже полностью реализован попутно со сборкой rank.ts (коммит 93e5172cdc99c1dcecbfeaadecbdf93620feebad, "feat: carrier picker public teaser page (Task 5)"):
+- packages/core/src/carrier-picker/score.ts — getCarrierScore() возвращает hasData: false для всех providerKey.
+- rank.ts импортирует CarrierScore через import type (без runtime circular dependency — оба файла type-only друг относительно друга).
+- applyCarrierScore() добавляет поле carrierScore через .map() без сортировки/фильтрации — порядок ранжирования rankCarriers() не меняется. Подтверждено прямым вызовом: rupost(20) → boxberry(10) → cdek(10), carrierScore приклеен поверх без реордеринга.
+- Подключено в apps/web/lib/carrier-picker/recommend.ts и экспортировано из @oco/core.
+
+Важно (зафиксировать во избежание путаницы при P0-AN2): в кодовой базе есть три разные сущности с именем «CarrierScore», не связанные напрямую:
+1. Prisma-модель CarrierScore (schema.prisma) — carrierId, category, region, onTimeRate, score:Int, computedAt — будущая реальная БД-статистика.
+2. Тип CarrierScore в carrier-picker/score.ts — providerKey, avgDeliveryDays, hasData — текущая заглушка picker'а.
+3. Поле carrierScore?: number в rank-quotes.ts — качество 0..100 в формуле Decision Engine для ранжирования тарифных котировок, отдельная подсистема.
+
+Поля (1) и (2) НЕ совпадают по форме и не должны напрямую подключаться друг к другу без явного маппинга. Это учесть при реализации P0-AN2.
