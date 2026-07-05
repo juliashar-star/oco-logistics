@@ -580,3 +580,68 @@ shipments/calculate, shipments/create, shipments/export,
 shipments/intervals, shipments/points, shipments/sync-statuses,
 shipments/[id]/anonymize, shipments/[id]/events, user/profile,
 user/password).
+
+## ADR: Baseline Prisma migration history (2026-07-05)
+
+**Статус:** Принято (P0-SEC13 · ffe344c)
+
+**Контекст.** С 2026-06-18 сознательно жили на `prisma db push` без
+истории миграций (см. запись от 2026-06-18: «схема ещё активно растёт
+и реальных данных нет — `db push` даёт быстро итерироваться, а baseline
+дешевле и чище сделать один раз на устоявшейся схеме»). К 2026-07-05
+схема устоялась (после SEC5, SEC4, SEC8/SEC9) — момент настал.
+`migrate dev` весь этот период падал на shadow DB drift при каждой
+попытке (см. ADR P0-SEC5, P0-SEC4, P0-SEC8/SEC9) — таблица
+`_prisma_migrations` не существовала вообще, реальная БД была впереди
+записанной истории миграций.
+
+**Решение.**
+1. Два существующих incremental-файла (`add_audit_log_company_id`,
+   `add_rate_limit_bucket`) удалены — их содержимое полностью вошло в
+   единый baseline. Сами файлы остаются в истории git (коммиты SEC5,
+   SEC4) — не потеряны, просто не дублируются в live-папке миграций.
+2. Сгенерирован один baseline-файл (`20260705000000_baseline`) —
+   полный diff «от пустой схемы до текущей», описывающий состояние на
+   момент baselining целиком (все 10 моделей, включая `AuditLog.companyId`,
+   `RateLimitBucket`, `Shipment(companyId, createdAt)`, без
+   `apishipKeyRef`).
+3. Помечен как «применённый» через `prisma migrate resolve --applied`
+   (без выполнения SQL — БД уже в этом состоянии через `db push`).
+4. **Приёмочный тест, а не просто зелёный статус:** добавлено временное
+   тестовое поле на `Company`, прогнан `prisma migrate dev` (создание),
+   затем откат тем же способом (удаление поля + новый `migrate dev`) —
+   оба прошли без единой ошибки shadow DB или checksum. Тестовые
+   миграции (`sec13_acceptance_test`, `revert_sec13_acceptance_test`)
+   сознательно оставлены на диске как живое доказательство, а не
+   squash'нуты — итоговая схема идентична, лишних данных не создают.
+
+**Уроки (пригодятся при следующем baselining, если понадобится):**
+- Windows PowerShell (`Out-File -Encoding utf8`) добавляет BOM
+  (byte-order mark) в начало файла — Postgres не может выполнить SQL с
+  этим символом при воспроизведении на shadow DB (`Error: P3006`,
+  «syntax error at or near ""»). Писать файлы миграций нужно через
+  `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))`, не
+  `Out-File`.
+- `prisma migrate resolve --applied` вычисляет контрольную сумму файла
+  **на момент вызова** и не обновляет её автоматически, если файл
+  изменился позже (даже при том же имени) — вторая попытка `resolve`
+  на уже применённой миграции падает с `P3008`. Если нужно
+  перегенерировать применённый baseline-файл — сначала удалить строку
+  из `_prisma_migrations` (только служебная таблица, не данные), затем
+  заново `resolve --applied`; **не** `--rolled-back` — этот флаг только
+  для миграций, реально не применившихся (`P3012` иначе).
+- Правильный порядок при baselining: до `resolve --applied` полностью
+  проверить содержимое сгенерированного файла (кодировку, полноту) —
+  пометка «применено» должна идти после проверки, не до.
+
+**Отвергли:**
+- `prisma migrate reset` — сбросил бы весь тестовый датасет (3
+  отправления, 28 пользователей на момент задачи) ради проблемы, не
+  требующей потери данных.
+- Ручную запись SHA-256 контрольной суммы в `_prisma_migrations` —
+  хрупко (риск неверно посчитать хэш тем же алгоритмом); удаление
+  строки + `resolve --applied` делегирует вычисление самому Prisma.
+
+**Реализация:** `packages/db/prisma/migrations/20260705000000_baseline/`,
+`packages/db/prisma/migrations/20260705085011_sec13_acceptance_test/`,
+`packages/db/prisma/migrations/20260705085058_revert_sec13_acceptance_test/`.
