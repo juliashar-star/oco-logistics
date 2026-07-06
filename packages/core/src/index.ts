@@ -24,5 +24,16 @@ export {
   applyCarrierScore,
   type CarrierScore,
 } from "./carrier-picker/score";
-export { CATEGORY_TO_PROFILE } from "./carrier-picker/registry";
+export {
+  CATEGORY_TO_PROFILE,
+  CARRIER_REGISTRY,
+  type Carrier,
+  type CarrierHealthStatus,
+  type CoverageLevel,
+  type DeliveryMethod,
+  type SourcedFact,
+  type SpecialMode,
+  type WeightLimits,
+} from "./carrier-picker/registry";
+export { deriveFactBasedProfiles } from "./carrier-picker/profile-fit";
 export { sendPasswordResetEmail, sendVerificationEmail } from "../lib/email";

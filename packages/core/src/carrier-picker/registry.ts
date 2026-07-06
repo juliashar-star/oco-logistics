@@ -131,6 +131,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     notes:
       "самая развитая коммерческая сеть ПВЗ, 1100+ городов, курьер/ПВЗ/постамат, КГТ, международная; тарифы растут",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "rupost",
@@ -139,6 +140,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "courier"],
     notes: "рекордное географическое покрытие — малые города, сёла, отдалённые регионы",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "boxberry",
@@ -148,6 +150,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     notes:
       "только малогабарит (макс. 15 кг, сумма сторон 250 см), ПВЗ 650 городов / курьер 375, e-comm фокус",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "yataxi",
@@ -156,6 +159,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "город и пригород, скорость, день-в-день",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "dpd",
@@ -164,6 +168,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "terminal"],
     notes: "100 г – 250 кг, РФ и СНГ за 1–3 дня, ПВЗ + терминалы",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "x5",
@@ -172,6 +177,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["postamat", "pvz"],
     notes: "постаматы и ПВЗ-сети, дешёвый самовывоз",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "dostavista",
@@ -180,6 +186,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "logsis",
@@ -188,6 +195,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "pecom",
@@ -196,6 +204,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "тяжёлое и КГТ, паллеты, от 15 кг, терминал/дверь, хранение/возврат",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "dellin",
@@ -204,6 +213,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "baikalsr",
@@ -212,6 +222,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
+    connectableViaOco: true,
   },
   {
     providerKey: "vozovoz",
@@ -220,5 +231,6 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
+    connectableViaOco: true,
   },
 ];
