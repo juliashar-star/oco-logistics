@@ -11,13 +11,10 @@ function isDiscontinued(carrier) {
 function rankFixedProfileFixture(order, registry, connectedKeys) {
   const connected = connectedKeys !== undefined ? new Set(connectedKeys) : null;
   const carriers = [];
-  let connectionMatchedCount = 0;
 
   for (const providerKey of order) {
-    if (connected && !connected.has(providerKey)) continue;
     const carrier = registry.find((c) => c.providerKey === providerKey);
     if (!carrier) continue;
-    connectionMatchedCount++;
     if (isDiscontinued(carrier)) continue;
     carriers.push(carrier);
   }
@@ -25,10 +22,7 @@ function rankFixedProfileFixture(order, registry, connectedKeys) {
   if (carriers.length === 0) {
     return {
       ranked: [],
-      reason:
-        connectionMatchedCount > 0
-          ? "no_active_carrier_connected"
-          : "no_carrier_connected",
+      reason: "no_active_carrier",
     };
   }
 
@@ -41,6 +35,7 @@ function rankFixedProfileFixture(order, registry, connectedKeys) {
     ranked: carriers.map((carrier) => ({
       providerKey: carrier.providerKey,
       healthStatus: carrier.healthStatus,
+      isConnected: connected ? connected.has(carrier.providerKey) : false,
     })),
   };
 }
@@ -102,14 +97,14 @@ test("discontinued carrier never appears in ranked[]", () => {
   );
 });
 
-test("all connected carriers discontinued yields no_active_carrier_connected", () => {
+test("all carriers in fixed order discontinued yields no_active_carrier", () => {
   const result = rankFixedProfileFixture(
     ["discontinued-b"],
     fixtureRegistry,
     ["discontinued-b"],
   );
 
-  assert.equal(result.reason, "no_active_carrier_connected");
+  assert.equal(result.reason, "no_active_carrier");
   assert.equal(result.ranked.length, 0);
 });
 

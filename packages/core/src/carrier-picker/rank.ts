@@ -4,6 +4,7 @@ import {
   type Carrier,
   type CarrierHealthStatus,
   type ProfileId,
+  type SourcedFact,
 } from "./registry";
 import type { CarrierScore } from "./score";
 
@@ -34,6 +35,9 @@ export type RankedCarrier = {
   reasons: string[];
   healthStatus: CarrierHealthStatus;
   healthNote?: string;
+  isConnected: boolean;
+  carrierContractEstimate?: SourcedFact<string>;
+  ocoConnectionEstimate?: string;
   carrierScore?: CarrierScore;
 };
 
@@ -47,7 +51,6 @@ export type RankResult = {
 const SCORE_REGION = 10;
 const SCORE_METHOD = 10;
 const SCORE_PRIORITY = 10;
-const TOP_N = 3;
 
 const FIXED_PROFILE_ORDER: Record<"P5" | "P6" | "P7", string[]> = {
   P5: ["dpd", "cdek", "dellin", "baikalsr", "vozovoz", "rupost"],
@@ -187,6 +190,38 @@ function scoreCarrier(providerKey: string, input: RankInput): { score: number; r
   return { score, reasons };
 }
 
+function connectedSetFromInput(input: RankInput): Set<string> | null {
+  const connectedKeys = input.connectedCarriers;
+  return connectedKeys !== undefined ? new Set(connectedKeys) : null;
+}
+
+function toRankedCarrier(
+  carrier: Carrier,
+  score: number,
+  reasons: string[],
+  connected: Set<string> | null,
+): RankedCarrier {
+  const isConnected = connected ? connected.has(carrier.providerKey) : false;
+  const ranked: RankedCarrier = {
+    providerKey: carrier.providerKey,
+    displayName: carrier.displayName,
+    score,
+    reasons,
+    healthStatus: carrier.healthStatus,
+    healthNote: carrier.healthNote,
+    isConnected,
+  };
+  if (!isConnected) {
+    if (carrier.carrierContractEstimate) {
+      ranked.carrierContractEstimate = carrier.carrierContractEstimate;
+    }
+    if (carrier.ocoConnectionEstimate) {
+      ranked.ocoConnectionEstimate = carrier.ocoConnectionEstimate;
+    }
+  }
+  return ranked;
+}
+
 function categoryTouchesP5OrP6(profiles: ProfileId[]): boolean {
   return profiles.some((p) => p === "P5" || p === "P6");
 }
@@ -196,18 +231,12 @@ function rankFixedProfile(
   input: RankInput,
 ): RankResult {
   const order = FIXED_PROFILE_ORDER[profile];
-  const connectedKeys = (input as RankInput & { connectedCarriers?: string[] })
-    .connectedCarriers;
-  const connected =
-    connectedKeys !== undefined ? new Set(connectedKeys) : null;
+  const connected = connectedSetFromInput(input);
 
   const carriers: Carrier[] = [];
-  let connectionMatchedCount = 0;
   for (const providerKey of order) {
-    if (connected && !connected.has(providerKey)) continue;
     const carrier = CARRIER_REGISTRY.find((c) => c.providerKey === providerKey);
     if (!carrier) continue;
-    connectionMatchedCount++;
     if (isDiscontinued(carrier)) continue;
     carriers.push(carrier);
   }
@@ -217,10 +246,7 @@ function rankFixedProfile(
       profile: null,
       ambiguous: false,
       ranked: [],
-      reason:
-        connectionMatchedCount > 0
-          ? "no_active_carrier_connected"
-          : "no_carrier_connected",
+      reason: "no_active_carrier",
     };
   }
 
@@ -229,14 +255,9 @@ function rankFixedProfile(
     return healthRank(a) - healthRank(b);
   });
 
-  const ranked = carriers.slice(0, TOP_N).map((carrier, index) => ({
-    providerKey: carrier.providerKey,
-    displayName: carrier.displayName,
-    score: carriers.length - index,
-    reasons: [] as string[],
-    healthStatus: carrier.healthStatus,
-    healthNote: carrier.healthNote,
-  }));
+  const ranked = carriers.map((carrier, index) =>
+    toRankedCarrier(carrier, carriers.length - index, [], connected),
+  );
 
   return { profile, ambiguous: false, ranked };
 }
@@ -248,6 +269,7 @@ function rankWithScoreCards(
 ): RankResult {
   const profile: ProfileId | ProfileId[] =
     categoryProfiles.length === 1 ? categoryProfiles[0]! : categoryProfiles;
+  const connected = connectedSetFromInput(input);
 
   const eligible = CARRIER_REGISTRY.filter(
     (carrier) =>
@@ -262,20 +284,12 @@ function rankWithScoreCards(
         carrier.healthStatus === "issues"
           ? Math.max(0, baseScore - SCORE_HEALTH_ISSUES_PENALTY)
           : baseScore;
-      return {
-        providerKey: carrier.providerKey,
-        displayName: carrier.displayName,
-        score,
-        reasons,
-        healthStatus: carrier.healthStatus,
-        healthNote: carrier.healthNote,
-      };
+      return toRankedCarrier(carrier, score, reasons, connected);
     })
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return a.providerKey.localeCompare(b.providerKey);
-    })
-    .slice(0, TOP_N);
+    });
 
   return { profile, ambiguous, ranked };
 }
