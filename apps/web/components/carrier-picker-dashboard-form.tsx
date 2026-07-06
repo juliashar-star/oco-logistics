@@ -1,28 +1,38 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CATEGORY_TO_PROFILE } from "@oco/core";
+import { CATEGORY_TO_PROFILE, type RankedCarrier } from "@oco/core";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
 const PROFILE_NULL_REASONS: Record<string, string> = {
   weight_required: "Укажите вес",
   no_carrier_connected: "Нет подключённых перевозчиков",
+  no_active_carrier: "Подходящих активных перевозчиков для этой категории пока нет.",
 };
 
 const P5_P6_CATEGORIES = CATEGORY_TO_PROFILE.filter((item) =>
   item.profiles.some((profile) => profile === "P5" || profile === "P6"),
 ).map((item) => item.category);
 
-type RecommendCarrier = {
-  displayName: string;
-};
-
 type RecommendResponse = {
   profile: string | null;
-  carriers?: RecommendCarrier[];
+  carriers?: RankedCarrier[];
   reason?: string;
   error?: string;
 };
+
+function formatConnectionEstimates(carrier: RankedCarrier): string | null {
+  const parts: string[] = [];
+  if (carrier.ocoConnectionEstimate) {
+    parts.push(`подключение к OCO — ${carrier.ocoConnectionEstimate}`);
+  }
+  if (carrier.carrierContractEstimate?.value) {
+    parts.push(`договор с перевозчиком — ${carrier.carrierContractEstimate.value}`);
+  }
+  if (parts.length === 0) return null;
+  return `Ориентировочно: ${parts.join(" · ")}`;
+}
 
 function categoryNeedsWeight(category: string): boolean {
   return P5_P6_CATEGORIES.includes(category);
@@ -104,7 +114,7 @@ export function CarrierPickerDashboardForm() {
     }
   }
 
-  const carriers = result?.carriers?.slice(0, 3) ?? [];
+  const carriers = result?.carriers ?? [];
 
   return (
     <>
@@ -192,17 +202,43 @@ export function CarrierPickerDashboardForm() {
             />
           ) : (
             <ol className="space-y-3">
-              {carriers.map((carrier, index) => (
-                <li
-                  key={`${carrier.displayName}-${index}`}
-                  className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
-                    {index + 1}
-                  </span>
-                  <p className="font-medium text-slate-900">{carrier.displayName}</p>
-                </li>
-              ))}
+              {carriers.map((carrier, index) => {
+                const estimateText = !carrier.isConnected
+                  ? formatConnectionEstimates(carrier)
+                  : null;
+
+                return (
+                  <li
+                    key={carrier.providerKey}
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-slate-900">{carrier.displayName}</p>
+                          <Badge
+                            className={
+                              carrier.isConnected
+                                ? "bg-slate-200 text-slate-700"
+                                : "bg-slate-100 text-slate-600"
+                            }
+                          >
+                            {carrier.isConnected ? "Подключён" : "Не подключён"}
+                          </Badge>
+                        </div>
+                        {estimateText && (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            {estimateText}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </div>

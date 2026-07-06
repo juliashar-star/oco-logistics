@@ -21,6 +21,7 @@ export type CarrierRecommendSuccess = {
   carriers: ReturnType<typeof applyCarrierScore>["ranked"];
   profile: string | null;
   ambiguous: boolean;
+  reason?: string;
 };
 
 export type CarrierRecommendResult =
@@ -70,6 +71,7 @@ export async function recommendCarriers(
       carriers: scored.ranked,
       profile: formatProfile(scored.profile),
       ambiguous: scored.ambiguous,
+      reason: scored.reason,
     },
   };
 }
