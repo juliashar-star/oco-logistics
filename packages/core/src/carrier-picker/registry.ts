@@ -114,6 +114,10 @@ export type Carrier = {
   weightLimits?: SourcedFact<WeightLimits>;
   specialModes?: SourcedFact<SpecialMode[]>;
   hasPublicApi?: SourcedFact<boolean>;
+  /** Время заключения договора продавца с перевозчиком напрямую. */
+  carrierContractEstimate?: SourcedFact<string>;
+  /** Внутренняя оценка OCO — пока не заполняем. */
+  ocoConnectionEstimate?: string;
   connectableViaOco?: boolean;
 };
 
@@ -131,6 +135,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     notes:
       "самая развитая коммерческая сеть ПВЗ, 1100+ городов, курьер/ПВЗ/постамат, КГТ, международная; тарифы растут",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -140,6 +148,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "courier"],
     notes: "рекордное географическое покрытие — малые города, сёла, отдалённые регионы",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -149,7 +161,9 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "courier"],
     notes:
       "только малогабарит (макс. 15 кг, сумма сторон 250 см), ПВЗ 650 городов / курьер 375, e-comm фокус",
-    healthStatus: "active",
+    healthStatus: "discontinued",
+    healthNote:
+      "Прекратила самостоятельную работу с 01.10.2025 — логистическая инфраструктура и ПВЗ переходят в состав «Яндекс Доставки» после закрытия сделки о приобретении (объявлена 16.04.2025, закрыта юридически 24.04.2025). Источники: yandex.ru/company/news/01-16-04-2025; interfax.ru/business/1022482; dp.ru/a/2025/09/01/zakritie-boxberry-usilit-konsolidaciju (проверено 06.07.2026).",
     connectableViaOco: true,
   },
   {
@@ -159,6 +173,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "город и пригород, скорость, день-в-день",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "1-2 дня",
+      sourceUrl: "https://dostavka.yandex.ru/payment/",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -168,6 +187,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["pvz", "terminal"],
     notes: "100 г – 250 кг, РФ и СНГ за 1–3 дня, ПВЗ + терминалы",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -177,6 +200,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["postamat", "pvz"],
     notes: "постаматы и ПВЗ-сети, дешёвый самовывоз",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -186,6 +213,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "1 рабочий день",
+      sourceUrl: "https://dostavista.ru/for-legals",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -195,6 +227,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["courier"],
     notes: "день-в-день, локально, мелкое",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -204,6 +240,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "тяжёлое и КГТ, паллеты, от 15 кг, терминал/дверь, хранение/возврат",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "1-3 рабочих дня",
+      sourceUrl: "https://pecom.ru/stat_klientom/",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -213,6 +254,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
@@ -222,6 +267,10 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
+    carrierContractEstimate: {
+      value: "требует уточнения у перевозчика",
+      verifiedAt: "2026-07-06",
+    },
     connectableViaOco: true,
   },
   {
