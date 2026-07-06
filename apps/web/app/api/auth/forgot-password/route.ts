@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, message: SUCCESS_MESSAGE });
-  } catch {
-    console.error("forgot-password failed");
+  } catch (error) {
+    console.error("forgot-password failed", error);
     return NextResponse.json({ success: true, message: SUCCESS_MESSAGE });
   }
 }

@@ -126,17 +126,18 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     });
 
     if (!response.ok) {
-      console.error("Unisender Go HTTP error:", response.status);
+      const body = await response.text();
+      console.error("Unisender Go HTTP error:", response.status, body);
       throw new Error(`Unisender Go HTTP ${response.status}`);
     }
 
     const data = (await response.json()) as { status?: string; error?: string };
     if (data.status === "error") {
-      console.error("Unisender Go API error");
+      console.error("Unisender Go API error:", data.error);
       throw new Error("Unisender Go API error");
     }
   } catch (error) {
-    console.error("sendPasswordResetEmail failed");
+    console.error("sendPasswordResetEmail failed", error);
     throw error;
   }
 }

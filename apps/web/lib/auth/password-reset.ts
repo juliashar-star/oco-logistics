@@ -27,8 +27,8 @@ export async function issuePasswordResetToken(
   try {
     await sendPasswordResetEmail(email, token);
     return { emailSent: true };
-  } catch {
-    console.error("password reset email send failed");
+  } catch (error) {
+    console.error("password reset email send failed", error);
     return { emailSent: false };
   }
 }
