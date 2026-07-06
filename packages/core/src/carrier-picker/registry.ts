@@ -90,14 +90,31 @@ export type DeliveryMethod = "pvz" | "courier" | "postamat" | "terminal";
 
 export type CarrierHealthStatus = "active" | "issues" | "discontinued";
 
+export type SourcedFact<T> = {
+  value: T;
+  sourceUrl?: string;
+  verifiedAt?: string; // ISO date, e.g. "2026-07-06"
+};
+export type CoverageLevel = "federal" | "interregional" | "regional" | "local";
+export type WeightLimits = { maxWeightKg?: number; maxSideSumCm?: number };
+export type SpecialMode = "fragile" | "perishable" | "cod" | "insurance" | "fitting";
+
 export type Carrier = {
   providerKey: string;
   displayName: string;
   profiles: ProfileId[];
   methods: DeliveryMethod[];
+  // Свободный текст — только редакционный комментарий (см. docs/OCO_carrier_rating_spec_1.md §3.1(C)).
+  // НЕ источник фактов для публичного сравнения: субъективные формулировки
+  // ("самая развитая", "рекордное" и т.п.) не добавлять в новые записи.
   notes: string;
   healthStatus: CarrierHealthStatus;
   healthNote?: string;
+  coverage?: SourcedFact<CoverageLevel>;
+  weightLimits?: SourcedFact<WeightLimits>;
+  specialModes?: SourcedFact<SpecialMode[]>;
+  hasPublicApi?: SourcedFact<boolean>;
+  connectableViaOco?: boolean;
 };
 
 // TODO: verify current status — DPD ownership/brand change since 2022
