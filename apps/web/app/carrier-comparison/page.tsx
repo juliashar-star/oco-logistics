@@ -186,7 +186,7 @@ export default function CarrierComparisonPage() {
         </div>
 
         <p className="mt-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
-          {/* TODO: link once real support inbox + KN3-4 methodology page exist */}
+          {/* TODO: link once real support inbox exists */}
           Как читать это сравнение. Это независимый справочно-аналитический обзор
           служб доставки, а не рекомендация и не гарантия. Сравнение построено на
           публично доступных фактах (география, форматы выдачи, лимиты, наличие
@@ -196,8 +196,14 @@ export default function CarrierComparisonPage() {
           по реальным отправлениям и будет добавлена отдельным, явно помеченным
           блоком. Ни один перевозчик не оплачивает и не может оплатить место или
           видимость в этом обзоре. Нашли неточность? [форма появится позже] —
-          поправим и укажем дату правки. Полная методика и источники: [страница
-          методики появится позже].
+          поправим и укажем дату правки. Полная методика и источники:{" "}
+          <Link
+            href="/carrier-comparison/methodology"
+            className="text-slate-700 underline hover:text-slate-900"
+          >
+            Методика
+          </Link>
+          .
         </p>
       </div>
     </div>
