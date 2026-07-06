@@ -7,7 +7,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 const PROFILE_NULL_REASONS: Record<string, string> = {
   weight_required: "Укажите вес",
-  no_carrier_connected: "Нет подключённых перевозчиков",
   no_active_carrier: "Подходящих активных перевозчиков для этой категории пока нет.",
 };
 
@@ -43,7 +42,7 @@ function profileNullMessage(data: RecommendResponse, weightProvided: boolean): s
     return PROFILE_NULL_REASONS[data.reason];
   }
   if (!weightProvided) return PROFILE_NULL_REASONS.weight_required;
-  return PROFILE_NULL_REASONS.no_carrier_connected;
+  return PROFILE_NULL_REASONS.no_active_carrier;
 }
 
 export function CarrierPickerDashboardForm() {
