@@ -2,9 +2,16 @@ import {
   CATEGORY_TO_PROFILE,
   CARRIER_REGISTRY,
   type Carrier,
+  type CarrierHealthStatus,
   type ProfileId,
 } from "./registry";
 import type { CarrierScore } from "./score";
+
+function isDiscontinued(carrier: Carrier): boolean {
+  return carrier.healthStatus === "discontinued";
+}
+
+const SCORE_HEALTH_ISSUES_PENALTY = 10;
 
 export type Priority = "cheaper" | "faster" | "reliable" | "fewer_returns";
 export type MethodFilter = "pvz" | "courier" | "both";
@@ -25,6 +32,8 @@ export type RankedCarrier = {
   displayName: string;
   score: number;
   reasons: string[];
+  healthStatus: CarrierHealthStatus;
+  healthNote?: string;
   carrierScore?: CarrierScore;
 };
 
@@ -193,10 +202,14 @@ function rankFixedProfile(
     connectedKeys !== undefined ? new Set(connectedKeys) : null;
 
   const carriers: Carrier[] = [];
+  let connectionMatchedCount = 0;
   for (const providerKey of order) {
     if (connected && !connected.has(providerKey)) continue;
     const carrier = CARRIER_REGISTRY.find((c) => c.providerKey === providerKey);
-    if (carrier) carriers.push(carrier);
+    if (!carrier) continue;
+    connectionMatchedCount++;
+    if (isDiscontinued(carrier)) continue;
+    carriers.push(carrier);
   }
 
   if (carriers.length === 0) {
@@ -204,15 +217,25 @@ function rankFixedProfile(
       profile: null,
       ambiguous: false,
       ranked: [],
-      reason: "no_carrier_connected",
+      reason:
+        connectionMatchedCount > 0
+          ? "no_active_carrier_connected"
+          : "no_carrier_connected",
     };
   }
+
+  carriers.sort((a, b) => {
+    const healthRank = (c: Carrier) => (c.healthStatus === "issues" ? 1 : 0);
+    return healthRank(a) - healthRank(b);
+  });
 
   const ranked = carriers.slice(0, TOP_N).map((carrier, index) => ({
     providerKey: carrier.providerKey,
     displayName: carrier.displayName,
     score: carriers.length - index,
     reasons: [] as string[],
+    healthStatus: carrier.healthStatus,
+    healthNote: carrier.healthNote,
   }));
 
   return { profile, ambiguous: false, ranked };
@@ -226,18 +249,26 @@ function rankWithScoreCards(
   const profile: ProfileId | ProfileId[] =
     categoryProfiles.length === 1 ? categoryProfiles[0]! : categoryProfiles;
 
-  const eligible = CARRIER_REGISTRY.filter((carrier) =>
-    carrierMatchesProfiles(carrier.profiles, categoryProfiles),
+  const eligible = CARRIER_REGISTRY.filter(
+    (carrier) =>
+      carrierMatchesProfiles(carrier.profiles, categoryProfiles) &&
+      !isDiscontinued(carrier),
   );
 
   const ranked = eligible
     .map((carrier) => {
-      const { score, reasons } = scoreCarrier(carrier.providerKey, input);
+      const { score: baseScore, reasons } = scoreCarrier(carrier.providerKey, input);
+      const score =
+        carrier.healthStatus === "issues"
+          ? Math.max(0, baseScore - SCORE_HEALTH_ISSUES_PENALTY)
+          : baseScore;
       return {
         providerKey: carrier.providerKey,
         displayName: carrier.displayName,
         score,
         reasons,
+        healthStatus: carrier.healthStatus,
+        healthNote: carrier.healthNote,
       };
     })
     .sort((a, b) => {
