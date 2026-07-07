@@ -5,6 +5,7 @@ import { fetchConnectedCarriers } from "@/lib/carrier-picker/connected-carriers"
 
 const requestSchema = z.object({
   category: z.string().trim().min(1, "Укажите категорию"),
+  needsFragile: z.boolean().optional(),
   parcel: z.object({
     weight: z.coerce.number().positive("Вес должен быть больше 0"),
     value: z.coerce.number().min(0, "Стоимость не может быть отрицательной"),
@@ -50,7 +51,7 @@ export async function recommendCarriers(
     return { ok: false, error: message, status: 400 };
   }
 
-  const { category, parcel } = parsed.data;
+  const { category, parcel, needsFragile } = parsed.data;
   const { weight, maxSideCm } = parcel;
 
   const connectedCarriers = companyId ? await fetchConnectedCarriers(companyId) : undefined;
@@ -66,6 +67,7 @@ export async function recommendCarriers(
     weight,
     maxSideCm,
     connectedCarriers,
+    needsFragile,
   });
   const scored = applyCarrierScore(ranked);
 

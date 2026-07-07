@@ -8,6 +8,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 const PROFILE_NULL_REASONS: Record<string, string> = {
   weight_required: "Укажите вес",
   no_active_carrier: "Подходящих активных перевозчиков для этой категории пока нет.",
+  no_carrier_supports_fragile:
+    "Среди подходящих перевозчиков для этой категории только Почта России умеет автоматически отмечать «хрупкое» — но она не входит в список для этого веса/габарита. Уточните возможность аккуратной упаковки напрямую у перевозчика.",
 };
 
 const P5_P6_CATEGORIES = CATEGORY_TO_PROFILE.filter((item) =>
@@ -89,13 +91,14 @@ export function CarrierPickerDashboardForm() {
     const parcel: { value: number; weight?: number; maxSideCm?: number } = { value: 0 };
     if (weightNum !== undefined) parcel.weight = weightNum;
     if (maxSideNum !== undefined) parcel.maxSideCm = maxSideNum;
+    const needsFragile = form.needsFragile.checked;
 
     setLoading(true);
     try {
       const response = await fetch("/api/carrier-picker/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, parcel }),
+        body: JSON.stringify({ category, parcel, needsFragile }),
       });
 
       const data = (await response.json()) as RecommendResponse;
@@ -167,6 +170,18 @@ export function CarrierPickerDashboardForm() {
           />
         </div>
 
+        <div className="flex items-start gap-2">
+          <input
+            id="needsFragile"
+            name="needsFragile"
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <label htmlFor="needsFragile" className="text-sm text-slate-700">
+            Хрупкое (упаковка с отметкой при погрузке)
+          </label>
+        </div>
+
         {error && (
           <p
             id="carrier-picker-error"
@@ -189,7 +204,8 @@ export function CarrierPickerDashboardForm() {
 
       {result && (
         <div id="carrier-picker-result" className="mt-8 max-w-lg">
-          {result.profile === null ? (
+          {result.profile === null ||
+          (result.reason && PROFILE_NULL_REASONS[result.reason]) ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               {profileNullMessage(result, weightProvided)}
             </p>

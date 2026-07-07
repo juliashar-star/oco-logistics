@@ -119,6 +119,11 @@ export type Carrier = {
   /** Внутренняя оценка OCO — пока не заполняем. */
   ocoConnectionEstimate?: string;
   connectableViaOco?: boolean;
+  /** Подтверждено реальным вызовом APIShip GET /lists/services
+   * (07.07.2026) — только rupost имеет автоматизируемый через API
+   * флаг хрупкости (rupost.fragile). Остальные проверенные
+   * перевозчики (cdek, yataxi, dostavista, x5) — нет. */
+  supportsAutomatedFragileHandling?: boolean;
 };
 
 // TODO: verify current status — DPD ownership/brand change since 2022
@@ -153,6 +158,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    supportsAutomatedFragileHandling: true,
   },
   {
     providerKey: "boxberry",

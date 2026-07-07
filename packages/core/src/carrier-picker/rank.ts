@@ -26,6 +26,7 @@ export type RankInput = {
   weight?: number; // kg
   maxSideCm?: number; // longest side in cm
   connectedCarriers?: string[];
+  needsFragile?: boolean;
 };
 
 export type RankedCarrier = {
@@ -250,13 +251,29 @@ function rankFixedProfile(
     };
   }
 
-  carriers.sort((a, b) => {
+  let activeCarriers = carriers;
+  if (input.needsFragile) {
+    const fragileCarriers = activeCarriers.filter(
+      (carrier) => carrier.supportsAutomatedFragileHandling === true,
+    );
+    if (fragileCarriers.length === 0) {
+      return {
+        profile,
+        ambiguous: false,
+        ranked: [],
+        reason: "no_carrier_supports_fragile",
+      };
+    }
+    activeCarriers = fragileCarriers;
+  }
+
+  activeCarriers.sort((a, b) => {
     const healthRank = (c: Carrier) => (c.healthStatus === "issues" ? 1 : 0);
     return healthRank(a) - healthRank(b);
   });
 
-  const ranked = carriers.map((carrier, index) =>
-    toRankedCarrier(carrier, carriers.length - index, [], connected),
+  const ranked = activeCarriers.map((carrier, index) =>
+    toRankedCarrier(carrier, activeCarriers.length - index, [], connected),
   );
 
   return { profile, ambiguous: false, ranked };
@@ -271,11 +288,26 @@ function rankWithScoreCards(
     categoryProfiles.length === 1 ? categoryProfiles[0]! : categoryProfiles;
   const connected = connectedSetFromInput(input);
 
-  const eligible = CARRIER_REGISTRY.filter(
+  const profileMatched = CARRIER_REGISTRY.filter(
     (carrier) =>
       carrierMatchesProfiles(carrier.profiles, categoryProfiles) &&
       !isDiscontinued(carrier),
   );
+
+  let eligible = profileMatched;
+  if (input.needsFragile) {
+    eligible = profileMatched.filter(
+      (carrier) => carrier.supportsAutomatedFragileHandling === true,
+    );
+    if (eligible.length === 0 && profileMatched.length > 0) {
+      return {
+        profile,
+        ambiguous,
+        ranked: [],
+        reason: "no_carrier_supports_fragile",
+      };
+    }
+  }
 
   const ranked = eligible
     .map((carrier) => {
