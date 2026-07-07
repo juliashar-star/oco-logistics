@@ -13,6 +13,7 @@
     "packages/integrations/*"
   ],
   "scripts": {
+    "predev": "node scripts/free-port.js 3000",
     "dev": "npm run dev -w @oco/web",
     "build": "npm run build -w @oco/web",
     "lint": "npm run lint -w @oco/web",
