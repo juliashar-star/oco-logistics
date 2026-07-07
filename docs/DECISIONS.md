@@ -844,6 +844,7 @@ APIShip **игнорирует фильтр** — эндпоинт всегда 
 
 (`listServices()`), `scripts/check-carrier-extra-services.ts` (one-off
 
-диагностика), сырой JSON-вывод сохранён в
+диагностика), сырой текстовый лог (человекочитаемый, содержит JSON-блоки
+по каждому из 5 перевозчиков, разделённые заголовками) сохранён в
 
-`docs/research/apiship-extra-services-2026-07-07.json`.
+`docs/research/apiship-extra-services-2026-07-07.txt`.
