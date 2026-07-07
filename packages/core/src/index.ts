@@ -36,4 +36,8 @@ export {
   type WeightLimits,
 } from "./carrier-picker/registry";
 export { deriveFactBasedProfiles } from "./carrier-picker/profile-fit";
-export { sendPasswordResetEmail, sendVerificationEmail } from "../lib/email";
+export {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendCarrierConnectionRequestNotification,
+} from "../lib/email";

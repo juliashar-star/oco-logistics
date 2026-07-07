@@ -54,11 +54,12 @@ model Company {
   apishipLogin          String?
   apishipPasswordEnc    String?    // пароль APIShip, зашифрован на сервере
   apishipConnectedAt    DateTime?
-  users         User[]
-  shipments     Shipment[]
-  quotes        TariffQuote[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  users                     User[]
+  shipments                 Shipment[]
+  quotes                    TariffQuote[]
+  carrierConnectionRequests CarrierConnectionRequest[]
+  createdAt                 DateTime   @default(now())
+  updatedAt                 DateTime   @updatedAt
 }
 
 model User {
@@ -228,4 +229,15 @@ model RateLimitBucket {
 
   @@unique([bucket, key])
   @@index([resetAt])
+}
+
+model CarrierConnectionRequest {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  providerKey String
+  createdAt   DateTime @default(now())
+
+  @@unique([companyId, providerKey])
+  @@index([companyId])
 }

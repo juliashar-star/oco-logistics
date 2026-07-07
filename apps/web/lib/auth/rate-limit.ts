@@ -26,6 +26,10 @@ const BUCKET_SEND_VERIFICATION = "send-verification";
 const BUCKET_FORGOT_PASSWORD = "forgot-password";
 const BUCKET_RESET_PASSWORD = "reset-password";
 
+const CARRIER_CONNECTION_REQUEST_MAX_ATTEMPTS = 20;
+const CARRIER_CONNECTION_REQUEST_WINDOW_MS = 60 * 60 * 1000;
+const BUCKET_CARRIER_CONNECTION_REQUEST = "carrier-connection-request";
+
 async function isBlocked(bucket: string, key: string, maxAttempts: number): Promise<boolean> {
   const row = await prisma.rateLimitBucket.findUnique({
     where: { bucket_key: { bucket, key } },
@@ -113,4 +117,20 @@ export async function isResetPasswordBlocked(key: string): Promise<boolean> {
 
 export async function recordResetPasswordAttempt(key: string): Promise<void> {
   await recordAttempt(BUCKET_RESET_PASSWORD, key, RESET_PASSWORD_WINDOW_MS);
+}
+
+export async function isCarrierConnectionRequestBlocked(key: string): Promise<boolean> {
+  return isBlocked(
+    BUCKET_CARRIER_CONNECTION_REQUEST,
+    key,
+    CARRIER_CONNECTION_REQUEST_MAX_ATTEMPTS,
+  );
+}
+
+export async function recordCarrierConnectionRequestAttempt(key: string): Promise<void> {
+  await recordAttempt(
+    BUCKET_CARRIER_CONNECTION_REQUEST,
+    key,
+    CARRIER_CONNECTION_REQUEST_WINDOW_MS,
+  );
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { applyCarrierScore, rankCarriers } from "@oco/core";
-import { getApishipClientForCompany } from "@/lib/apiship-client-for-company";
+import { prisma } from "@/lib/db";
+import { fetchConnectedCarriers } from "@/lib/carrier-picker/connected-carriers";
 
 const requestSchema = z.object({
   category: z.string().trim().min(1, "Укажите категорию"),
@@ -17,8 +18,10 @@ function formatProfile(profile: string | string[] | null): string | null {
   return profile;
 }
 
+type ScoredCarrier = ReturnType<typeof applyCarrierScore>["ranked"][number];
+
 export type CarrierRecommendSuccess = {
-  carriers: ReturnType<typeof applyCarrierScore>["ranked"];
+  carriers: Array<ScoredCarrier & { hasPendingRequest: boolean }>;
   profile: string | null;
   ambiguous: boolean;
   reason?: string;
@@ -28,14 +31,12 @@ export type CarrierRecommendResult =
   | { ok: true; data: CarrierRecommendSuccess }
   | { ok: false; error: string; status: 400 | 500 };
 
-async function fetchConnectedCarriers(companyId: string): Promise<string[] | undefined> {
-  try {
-    const client = await getApishipClientForCompany(companyId);
-    const connections = await client.listConnections();
-    return connections.map((connection) => connection.providerKey);
-  } catch {
-    return undefined;
-  }
+async function fetchPendingConnectionRequests(companyId: string): Promise<Set<string>> {
+  const rows = await prisma.carrierConnectionRequest.findMany({
+    where: { companyId },
+    select: { providerKey: true },
+  });
+  return new Set(rows.map((row) => row.providerKey));
 }
 
 export async function recommendCarriers(
@@ -53,6 +54,9 @@ export async function recommendCarriers(
   const { weight, maxSideCm } = parcel;
 
   const connectedCarriers = companyId ? await fetchConnectedCarriers(companyId) : undefined;
+  const pendingRequests = companyId
+    ? await fetchPendingConnectionRequests(companyId)
+    : new Set<string>();
 
   const ranked = rankCarriers({
     category,
@@ -68,7 +72,10 @@ export async function recommendCarriers(
   return {
     ok: true,
     data: {
-      carriers: scored.ranked,
+      carriers: scored.ranked.map((carrier) => ({
+        ...carrier,
+        hasPendingRequest: pendingRequests.has(carrier.providerKey),
+      })),
       profile: formatProfile(scored.profile),
       ambiguous: scored.ambiguous,
       reason: scored.reason,
