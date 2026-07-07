@@ -415,6 +415,16 @@ export class ApishipClient {
       }));
   }
 
+  /** GET /lists/services — каталог дополнительных услуг (extraParams) по перевозчику. */
+  async listServices(providerKey: string): Promise<unknown> {
+    const query = new URLSearchParams({
+      limit: "5000",
+      offset: "0",
+      filter: `providerKey=${providerKey}`,
+    });
+    return this.request<unknown>(`/lists/services?${query.toString()}`);
+  }
+
   async createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
     const payload = buildCreateOrderPayload(input);
     const data = await this.request<{
