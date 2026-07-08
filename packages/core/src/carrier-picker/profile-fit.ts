@@ -10,11 +10,11 @@ export function deriveFactBasedProfiles(carrier: Carrier): ProfileId[] {
   const profiles: ProfileId[] = [];
   const weightLimits = carrier.weightLimits?.value;
 
-  if (weightLimits) {
-    const { maxWeightKg, maxSideSumCm } = weightLimits;
+  if (weightLimits && weightLimits.applicable !== false) {
+    const { maxWeightKg, maxLongestSideCm } = weightLimits;
     const exceedsP6 =
       (maxWeightKg !== undefined && maxWeightKg > 30) ||
-      (maxSideSumCm !== undefined && maxSideSumCm > 120);
+      (maxLongestSideCm !== undefined && maxLongestSideCm > 120);
 
     if (exceedsP6) {
       profiles.push("P6");

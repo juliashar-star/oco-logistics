@@ -47,12 +47,22 @@ function formatWeightLimits(carrier: Carrier): string {
 }
 
 function formatWeightLimitsValue(limits: WeightLimits): string {
+  if (limits.applicable === false) {
+    return limits.reason ? `не применимо — ${limits.reason}` : "не применимо";
+  }
+
   const parts: string[] = [];
   if (limits.maxWeightKg !== undefined) {
     parts.push(`макс. ${limits.maxWeightKg} кг`);
   }
-  if (limits.maxSideSumCm !== undefined) {
-    parts.push(`сумма сторон до ${limits.maxSideSumCm} см`);
+  if (limits.maxLongestSideCm !== undefined) {
+    parts.push(`макс. сторона до ${limits.maxLongestSideCm} см`);
+  }
+  if (limits.maxSumThreeSidesCm !== undefined) {
+    parts.push(`сумма сторон до ${limits.maxSumThreeSidesCm} см`);
+  }
+  if (limits.maxLengthPlusGirthCm !== undefined) {
+    parts.push(`длина + обхват до ${limits.maxLengthPlusGirthCm} см`);
   }
   return parts.length > 0 ? parts.join(", ") : PENDING;
 }

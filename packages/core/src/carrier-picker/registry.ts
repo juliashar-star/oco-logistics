@@ -96,7 +96,14 @@ export type SourcedFact<T> = {
   verifiedAt?: string; // ISO date, e.g. "2026-07-06"
 };
 export type CoverageLevel = "federal" | "interregional" | "regional" | "local";
-export type WeightLimits = { maxWeightKg?: number; maxSideSumCm?: number };
+export type WeightLimits = {
+  applicable: boolean;
+  reason?: string;
+  maxWeightKg?: number;
+  maxLongestSideCm?: number;
+  maxSumThreeSidesCm?: number;
+  maxLengthPlusGirthCm?: number;
+};
 export type SpecialMode = "fragile" | "perishable" | "cod" | "insurance" | "fitting";
 
 export type Carrier = {
@@ -130,6 +137,7 @@ export type Carrier = {
 // (unverified hypothesis per master plan §7, not yet confirmed)
 /** Только СД с providerKey в каталоге APIShip (без СберЛогистика, Grastin, КИТ, Желдорэкспедиция, Энергия). */
 export const CARRIER_REGISTRY: Carrier[] = [
+  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "cdek",
     displayName: "СДЭК",
@@ -157,6 +165,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
     },
     connectableViaOco: true,
     supportsAutomatedFragileHandling: true,
+    weightLimits: {
+      value: { applicable: true, maxWeightKg: 20 },
+      sourceUrl: "https://www.pochta.ru/support/post-rules/prohibited-for-delivery",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "boxberry",
@@ -170,6 +183,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       "Прекратила самостоятельную работу с 01.10.2025 — логистическая инфраструктура и ПВЗ переходят в состав «Яндекс Доставки» после закрытия сделки о приобретении (объявлена 16.04.2025, закрыта юридически 24.04.2025). Источники: yandex.ru/company/news/01-16-04-2025; interfax.ru/business/1022482; dp.ru/a/2025/09/01/zakritie-boxberry-usilit-konsolidaciju (проверено 06.07.2026).",
     connectableViaOco: true,
   },
+  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "yataxi",
     displayName: "Яндекс Доставка",
@@ -184,6 +198,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     },
     connectableViaOco: true,
   },
+  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "dpd",
     displayName: "DPD",
@@ -197,6 +212,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     },
     connectableViaOco: true,
   },
+  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "x5",
     displayName: "5POST",
@@ -223,7 +239,17 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: {
+        applicable: false,
+        reason:
+          "1500кг — порог класса транспорта (пеший/легковой/грузовой), не лимит одной посылки",
+      },
+      sourceUrl: "https://dostavista.ru/tariffs/ekspress-dostavka",
+      verifiedAt: "2026-07-08",
+    },
   },
+  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "logsis",
     displayName: "Logsis",
@@ -250,6 +276,14 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: {
+        applicable: false,
+        reason: "LTL/сборный груз — паллеты, лимит на грузоместо",
+      },
+      sourceUrl: "https://www.pecom.ru/",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "dellin",
@@ -263,6 +297,12 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    // maxSumThreeSidesCm: 0.54+0.39+0.39 m per official per-place limit on dellin.ru/ltl/parcels/
+    weightLimits: {
+      value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 54, maxSumThreeSidesCm: 132 },
+      sourceUrl: "https://www.dellin.ru/ltl/parcels/",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "baikalsr",
@@ -276,6 +316,14 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: {
+        applicable: false,
+        reason: "LTL/сборный груз — лимит на грузовое место, не на посылку",
+      },
+      sourceUrl: "https://www.baikalsr.ru/",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "vozovoz",
@@ -285,5 +333,14 @@ export const CARRIER_REGISTRY: Carrier[] = [
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
     connectableViaOco: true,
+    weightLimits: {
+      value: {
+        applicable: false,
+        reason:
+          "LTL/сборный груз — лимит на грузовое место (негабарит от 500 кг или 4 м)",
+      },
+      sourceUrl: "https://vozovoz.ru/cargo/",
+      verifiedAt: "2026-07-08",
+    },
   },
 ];
