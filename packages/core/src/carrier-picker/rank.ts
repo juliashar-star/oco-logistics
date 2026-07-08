@@ -62,13 +62,13 @@ const FIXED_PROFILE_ORDER: Record<"P5" | "P6" | "P7", string[]> = {
 const REGION_WIDE_COVERAGE_CARRIERS = new Set(["rupost", "cdek"]);
 const REGION_CITY_CARRIERS = new Set(["yataxi", "dostavista", "logsis"]);
 
-const METHOD_PVZ_CARRIERS = new Set(["boxberry", "cdek", "x5"]);
+const METHOD_PVZ_CARRIERS = new Set(["cdek", "x5"]);
 const METHOD_COURIER_CARRIERS = new Set(["yataxi", "cdek", "dpd"]);
 
-const PRIORITY_CHEAPER_CARRIERS = new Set(["boxberry", "rupost", "x5"]);
+const PRIORITY_CHEAPER_CARRIERS = new Set(["rupost", "x5"]);
 const PRIORITY_FASTER_CARRIERS = new Set(["yataxi", "cdek"]);
-const PRIORITY_RELIABLE_CARRIERS = new Set(["cdek", "boxberry"]);
-const PRIORITY_FEWER_RETURNS_CARRIERS = new Set(["boxberry", "cdek"]);
+const PRIORITY_RELIABLE_CARRIERS = new Set(["cdek"]);
+const PRIORITY_FEWER_RETURNS_CARRIERS = new Set(["cdek"]);
 
 const REGION_WIDE_REASONS: Record<string, string> = {
   rupost: "Рекордное географическое покрытие — малые города и сёла",
@@ -82,7 +82,6 @@ const REGION_CITY_REASONS: Record<string, string> = {
 };
 
 const METHOD_PVZ_REASONS: Record<string, string> = {
-  boxberry: "Развитая сеть ПВЗ для самовывоза",
   cdek: "ПВЗ и постаматы в большинстве городов",
   x5: "Дешёвый самовывоз через постаматы",
 };
@@ -94,7 +93,6 @@ const METHOD_COURIER_REASONS: Record<string, string> = {
 };
 
 const PRIORITY_CHEAPER_REASONS: Record<string, string> = {
-  boxberry: "Низкие тарифы для малогабарита",
   rupost: "Доступная доставка по всей России",
   x5: "Дешёвый самовывоз через постаматы",
 };
@@ -106,11 +104,9 @@ const PRIORITY_FASTER_REASONS: Record<string, string> = {
 
 const PRIORITY_RELIABLE_REASONS: Record<string, string> = {
   cdek: "Надёжная коммерческая сеть с контролем",
-  boxberry: "Стабильная e-commerce доставка",
 };
 
 const PRIORITY_FEWER_RETURNS_REASONS: Record<string, string> = {
-  boxberry: "Широкая сеть ПВЗ — простой возврат",
   cdek: "Удобный возврат через ПВЗ по всей стране",
 };
 

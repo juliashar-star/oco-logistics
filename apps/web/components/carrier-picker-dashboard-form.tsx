@@ -129,6 +129,8 @@ export function CarrierPickerDashboardForm() {
 
     const form = event.currentTarget;
     const category = form.category.value.trim();
+    const priority = (form.elements.namedItem("priority") as HTMLSelectElement).value.trim();
+    const method = (form.elements.namedItem("method") as HTMLSelectElement).value.trim();
     const weightRaw = form.weight.value.trim();
     const maxSideRaw = form.maxSideCm.value.trim();
 
@@ -167,7 +169,7 @@ export function CarrierPickerDashboardForm() {
       const response = await fetch("/api/carrier-picker/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, parcel, needsFragile }),
+        body: JSON.stringify({ category, priority, method, parcel, needsFragile }),
       });
 
       const data = (await response.json()) as RecommendResponse;
@@ -222,6 +224,39 @@ export function CarrierPickerDashboardForm() {
             placeholder="Необязательно"
             className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text placeholder:text-text-3 focus:border-primary focus:outline-none"
           />
+        </div>
+
+        <div>
+          <label htmlFor="priority" className="mb-1 block text-sm font-medium text-slate-700">
+            Приоритет
+          </label>
+          <select
+            id="priority"
+            name="priority"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus:border-primary focus:outline-none"
+            defaultValue="reliable"
+          >
+            <option value="cheaper">Дешевле</option>
+            <option value="faster">Быстрее</option>
+            <option value="reliable">Надёжнее</option>
+            <option value="fewer_returns">Меньше возвратов</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="method" className="mb-1 block text-sm font-medium text-slate-700">
+            Способ получения
+          </label>
+          <select
+            id="method"
+            name="method"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus:border-primary focus:outline-none"
+            defaultValue="both"
+          >
+            <option value="pvz">ПВЗ</option>
+            <option value="courier">Курьер</option>
+            <option value="both">Курьер и ПВЗ</option>
+          </select>
         </div>
 
         <div>

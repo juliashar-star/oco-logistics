@@ -5,6 +5,8 @@ import { fetchConnectedCarriers } from "@/lib/carrier-picker/connected-carriers"
 
 const requestSchema = z.object({
   category: z.string().trim().min(1, "Укажите категорию"),
+  priority: z.enum(["cheaper", "faster", "reliable", "fewer_returns"]).optional(),
+  method: z.enum(["pvz", "courier", "both"]).optional(),
   needsFragile: z.boolean().optional(),
   parcel: z.object({
     weight: z.coerce.number().positive("Вес должен быть больше 0"),
@@ -62,8 +64,8 @@ export async function recommendCarriers(
   const ranked = rankCarriers({
     category,
     region: "all_russia",
-    priority: "reliable",
-    method: "both",
+    priority: parsed.data.priority ?? "reliable",
+    method: parsed.data.method ?? "both",
     weight,
     maxSideCm,
     connectedCarriers,

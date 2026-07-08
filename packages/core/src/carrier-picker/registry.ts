@@ -128,8 +128,6 @@ export type Carrier = {
 
 // TODO: verify current status — DPD ownership/brand change since 2022
 // (unverified hypothesis per master plan §7, not yet confirmed)
-// TODO: verify current status — Boxberry cited as a cautionary example in
-// master plan risk section (context unclear, verify before changing healthStatus)
 /** Только СД с providerKey в каталоге APIShip (без СберЛогистика, Grastin, КИТ, Желдорэкспедиция, Энергия). */
 export const CARRIER_REGISTRY: Carrier[] = [
   {
