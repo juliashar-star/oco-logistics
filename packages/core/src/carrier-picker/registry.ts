@@ -104,6 +104,13 @@ export type WeightLimits = {
   maxSumThreeSidesCm?: number;
   maxLengthPlusGirthCm?: number;
 };
+export type CarrierVariant = {
+  variantKey: string;
+  displayName: string;
+  deliveryMode: "door" | "point";
+  weightLimits: SourcedFact<WeightLimits>;
+  notes?: string;
+};
 export type SpecialMode = "fragile" | "perishable" | "cod" | "insurance" | "fitting";
 
 export type Carrier = {
@@ -119,6 +126,7 @@ export type Carrier = {
   healthNote?: string;
   coverage?: SourcedFact<CoverageLevel>;
   weightLimits?: SourcedFact<WeightLimits>;
+  variants?: CarrierVariant[];
   specialModes?: SourcedFact<SpecialMode[]>;
   hasPublicApi?: SourcedFact<boolean>;
   /** Время заключения договора продавца с перевозчиком напрямую. */
@@ -201,6 +209,112 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    variants: [
+      {
+        variantKey: "express_fast",
+        displayName: "Яндекс Доставка — Экспресс",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 50, maxLongestSideCm: 100 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: любой; габарит 100×60×50 см",
+      },
+      {
+        variantKey: "express_plus30",
+        displayName: "Яндекс Доставка — Экспресс +30 мин",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 50 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: любой; габарит 50×50×50 см",
+      },
+      {
+        variantKey: "express_plus60",
+        displayName: "Яндекс Доставка — Экспресс +60 мин",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 50 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: любой; габарит 50×50×50 см",
+      },
+      {
+        variantKey: "express_2h",
+        displayName: "Яндекс Доставка — За 2 часа",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 100 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: до 45 мин в пути; габарит 100×60×50 см",
+      },
+      {
+        variantKey: "express_4h",
+        displayName: "Яндекс Доставка — За 4 часа",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 100 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: до 105 мин в пути; габарит 100×60×50 см",
+      },
+      {
+        variantKey: "express_day",
+        displayName: "Яндекс Доставка — В течение дня",
+        deliveryMode: "door",
+        weightLimits: {
+          value: { applicable: true, maxWeightKg: 20, maxLongestSideCm: 100 },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (express_d2d), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+        notes: "маршрут: любой; габарит 100×60×50 см",
+      },
+      {
+        variantKey: "cargo",
+        displayName: "Яндекс Доставка — Грузовой",
+        deliveryMode: "door",
+        weightLimits: {
+          value: {
+            applicable: false,
+            reason: "тарификация по объёму кузова (S/M/L/XL/XXL), не по фиксированному весу",
+          },
+          sourceUrl:
+            "внутренняя тарифная выгрузка Яндекса (cargo), предоставлена продавцом 2026-07-08 — не публичная страница",
+          verifiedAt: "2026-07-08",
+        },
+      },
+      {
+        variantKey: "pvz",
+        displayName: "Яндекс Доставка — в ПВЗ",
+        deliveryMode: "point",
+        weightLimits: {
+          value: {
+            applicable: true,
+            maxWeightKg: 30,
+            maxLongestSideCm: 150,
+            maxSumThreeSidesCm: 300,
+          },
+          sourceUrl:
+            "https://yandex.ru/support/delivery-profile/ru/other-day/weight-limits",
+          verifiedAt: "2026-07-08",
+        },
+        notes:
+          "лимит на посылку/коробку внутри заказа для ПВЗ Яндекс Маркета и партнёров (не 5Post — там отдельные меньшие лимиты, не относится к этому варианту); лимит на весь заказ шире: 200кг/300см сторона/500см сумма",
+      },
+    ],
   },
   // TODO: DPD also offers "Онлайн-экспресс" tariff (80кг, 120×80×80см) — second variant pending the same providerKey+variants[] restructuring planned for yataxi. Default here is "DPD Коробка".
   {
