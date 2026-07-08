@@ -137,7 +137,6 @@ export type Carrier = {
 // (unverified hypothesis per master plan §7, not yet confirmed)
 /** Только СД с providerKey в каталоге APIShip (без СберЛогистика, Grastin, КИТ, Желдорэкспедиция, Энергия). */
 export const CARRIER_REGISTRY: Carrier[] = [
-  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
     providerKey: "cdek",
     displayName: "СДЭК",
@@ -151,6 +150,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: { applicable: true, maxWeightKg: 50 },
+      sourceUrl: "https://www.cdek.ru/ru/online-stores/tariffs/",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "rupost",
@@ -198,7 +202,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     },
     connectableViaOco: true,
   },
-  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
+  // TODO: DPD also offers "Онлайн-экспресс" tariff (80кг, 120×80×80см) — second variant pending the same providerKey+variants[] restructuring planned for yataxi. Default here is "DPD Коробка".
   {
     providerKey: "dpd",
     displayName: "DPD",
@@ -211,8 +215,13 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: { applicable: true, maxWeightKg: 30, maxSumThreeSidesCm: 180 },
+      sourceUrl: "https://dpd.ru/vse-tarify",
+      verifiedAt: "2026-07-08",
+    },
   },
-  // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
+  // Conservative: kassa limit (10kg), not postamat (15kg) — registry doesn't yet distinguish pickup-point type
   {
     providerKey: "x5",
     displayName: "5POST",
@@ -225,6 +234,11 @@ export const CARRIER_REGISTRY: Carrier[] = [
       verifiedAt: "2026-07-06",
     },
     connectableViaOco: true,
+    weightLimits: {
+      value: { applicable: true, maxWeightKg: 10 },
+      sourceUrl: "https://www.x5.ru/",
+      verifiedAt: "2026-07-08",
+    },
   },
   {
     providerKey: "dostavista",
