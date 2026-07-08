@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { CATEGORY_TO_PROFILE, type RankedCarrier } from "@oco/core";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,23 +16,38 @@ const P5_P6_CATEGORIES = CATEGORY_TO_PROFILE.filter((item) =>
   item.profiles.some((profile) => profile === "P5" || profile === "P6"),
 ).map((item) => item.category);
 
+type CarrierWithPending = RankedCarrier & { pendingRequestAt: string | null };
+
 type RecommendResponse = {
   profile: string | null;
-  carriers?: RankedCarrier[];
+  carriers?: CarrierWithPending[];
   reason?: string;
   error?: string;
 };
 
-function formatConnectionEstimates(carrier: RankedCarrier): string | null {
-  const parts: string[] = [];
-  if (carrier.ocoConnectionEstimate) {
-    parts.push(`подключение к OCO — ${carrier.ocoConnectionEstimate}`);
+type ConnectionRequestStatus = "idle" | "loading" | "sent" | string;
+
+function formatRequestDate(iso: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
+const CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER = "требует уточнения у перевозчика";
+
+function formatContractInstruction(carrier: RankedCarrier): string {
+  const base = `Вам требуется заключить прямой договор с перевозчиком. Обратитесь в ${carrier.displayName} для заключения договора.`;
+  const estimate = carrier.carrierContractEstimate?.value;
+  if (estimate && estimate !== CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER) {
+    return `${base} Ориентировочный срок заключения договора — ${estimate}.`;
   }
-  if (carrier.carrierContractEstimate?.value) {
-    parts.push(`договор с перевозчиком — ${carrier.carrierContractEstimate.value}`);
-  }
-  if (parts.length === 0) return null;
-  return `Ориентировочно: ${parts.join(" · ")}`;
+  return base;
+}
+
+function formatOcoConnectionNote(carrier: RankedCarrier): string | null {
+  return carrier.ocoConnectionEstimate ? `Подключение к OCO — ${carrier.ocoConnectionEstimate}.` : null;
 }
 
 function categoryNeedsWeight(category: string): boolean {
@@ -52,11 +67,65 @@ export function CarrierPickerDashboardForm() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RecommendResponse | null>(null);
   const [weightProvided, setWeightProvided] = useState(false);
+  const [requestStatuses, setRequestStatuses] = useState<Record<string, ConnectionRequestStatus>>(
+    {},
+  );
+  const [pendingRequestAtOverrides, setPendingRequestAtOverrides] = useState<
+    Record<string, string>
+  >({});
+
+  useEffect(() => {
+    if (!result?.carriers) return;
+    setPendingRequestAtOverrides((prev) => {
+      const next = { ...prev };
+      for (const carrier of result.carriers ?? []) {
+        if (carrier.pendingRequestAt && next[carrier.providerKey] === undefined) {
+          next[carrier.providerKey] = carrier.pendingRequestAt;
+        }
+      }
+      return next;
+    });
+  }, [result]);
+
+  function getPendingRequestAt(carrier: CarrierWithPending): string | null {
+    return pendingRequestAtOverrides[carrier.providerKey] ?? carrier.pendingRequestAt ?? null;
+  }
+
+  async function handleConnectionRequest(providerKey: string) {
+    setRequestStatuses((prev) => ({ ...prev, [providerKey]: "loading" }));
+    try {
+      const response = await fetch("/api/carrier-picker/connection-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerKey }),
+      });
+      const data = (await response.json()) as { ok?: boolean; createdAt?: string; error?: string };
+
+      if (!response.ok) {
+        setRequestStatuses((prev) => ({
+          ...prev,
+          [providerKey]: data.error || "Не удалось отправить заявку",
+        }));
+        return;
+      }
+
+      if (data.createdAt) {
+        setPendingRequestAtOverrides((prev) => ({ ...prev, [providerKey]: data.createdAt! }));
+      }
+      setRequestStatuses((prev) => ({ ...prev, [providerKey]: "sent" }));
+    } catch {
+      setRequestStatuses((prev) => ({
+        ...prev,
+        [providerKey]: "Не удалось отправить заявку",
+      }));
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setResult(null);
+    setRequestStatuses({});
 
     const form = event.currentTarget;
     const category = form.category.value.trim();
@@ -216,11 +285,32 @@ export function CarrierPickerDashboardForm() {
               description="Попробуйте другую категорию или уточните вес — покажем доступные варианты."
             />
           ) : (
-            <ol className="space-y-3">
+            <>
+              {carriers.some((carrier) => !carrier.isConnected) && (
+                <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500">
+                  Договоры и аккаунты со службами доставки вы оформляете напрямую с перевозчиком.
+                  Кнопка «Запросить техническую интеграцию» — это сигнал команде OCO, что вам нужна
+                  возможность подключить эту службу через OCO. Сама заявка не создаёт договор и не
+                  подключает вас к перевозчику.
+                </p>
+              )}
+              <ol className="space-y-3">
               {carriers.map((carrier, index) => {
-                const estimateText = !carrier.isConnected
-                  ? formatConnectionEstimates(carrier)
+                const contractInstruction = !carrier.isConnected
+                  ? formatContractInstruction(carrier)
                   : null;
+                const ocoNote = !carrier.isConnected ? formatOcoConnectionNote(carrier) : null;
+                const pendingRequestAt = !carrier.isConnected
+                  ? getPendingRequestAt(carrier)
+                  : null;
+                const requestStatus = requestStatuses[carrier.providerKey] ?? "idle";
+                const requestError =
+                  typeof requestStatus === "string" &&
+                  requestStatus !== "idle" &&
+                  requestStatus !== "loading" &&
+                  requestStatus !== "sent"
+                    ? requestStatus
+                    : null;
 
                 return (
                   <li
@@ -243,10 +333,35 @@ export function CarrierPickerDashboardForm() {
                           >
                             {carrier.isConnected ? "Подключён" : "Не подключён"}
                           </Badge>
+                          {!carrier.isConnected && pendingRequestAt && (
+                            <Badge className="bg-info-soft text-info">
+                              Заявка на интеграцию отправлена {formatRequestDate(pendingRequestAt)}
+                            </Badge>
+                          )}
                         </div>
-                        {estimateText && (
+                        {contractInstruction && (
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                            {estimateText}
+                            {contractInstruction}
+                          </p>
+                        )}
+                        {ocoNote && (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">{ocoNote}</p>
+                        )}
+                        {!carrier.isConnected && !pendingRequestAt && (
+                          <button
+                            type="button"
+                            disabled={requestStatus === "loading"}
+                            onClick={() => handleConnectionRequest(carrier.providerKey)}
+                            className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {requestStatus === "loading"
+                              ? "Отправляем…"
+                              : "Запросить техническую интеграцию"}
+                          </button>
+                        )}
+                        {requestError && (
+                          <p className="mt-2 text-xs text-red-600" role="alert">
+                            {requestError}
                           </p>
                         )}
                       </div>
@@ -254,7 +369,8 @@ export function CarrierPickerDashboardForm() {
                   </li>
                 );
               })}
-            </ol>
+              </ol>
+            </>
           )}
         </div>
       )}

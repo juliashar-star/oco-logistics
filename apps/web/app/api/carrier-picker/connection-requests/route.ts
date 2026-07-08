@@ -45,10 +45,14 @@ export const POST = withAuth(async (request, user) => {
       where: { companyId_providerKey: { companyId: user.companyId, providerKey } },
     });
     if (existing) {
-      return NextResponse.json({ ok: true, alreadyRequested: true });
+      return NextResponse.json({
+        ok: true,
+        alreadyRequested: true,
+        createdAt: existing.createdAt.toISOString(),
+      });
     }
 
-    await prisma.carrierConnectionRequest.create({
+    const created = await prisma.carrierConnectionRequest.create({
       data: { companyId: user.companyId, providerKey },
     });
 
@@ -63,7 +67,11 @@ export const POST = withAuth(async (request, user) => {
       console.error("connection request notification failed", error);
     }
 
-    return NextResponse.json({ ok: true, alreadyRequested: false });
+    return NextResponse.json({
+      ok: true,
+      alreadyRequested: false,
+      createdAt: created.createdAt.toISOString(),
+    });
   } catch (error) {
     console.error("carrier connection request failed", error);
     return NextResponse.json(

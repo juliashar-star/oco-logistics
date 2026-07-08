@@ -22,7 +22,7 @@ function formatProfile(profile: string | string[] | null): string | null {
 type ScoredCarrier = ReturnType<typeof applyCarrierScore>["ranked"][number];
 
 export type CarrierRecommendSuccess = {
-  carriers: Array<ScoredCarrier & { hasPendingRequest: boolean }>;
+  carriers: Array<ScoredCarrier & { pendingRequestAt: string | null }>;
   profile: string | null;
   ambiguous: boolean;
   reason?: string;
@@ -32,12 +32,12 @@ export type CarrierRecommendResult =
   | { ok: true; data: CarrierRecommendSuccess }
   | { ok: false; error: string; status: 400 | 500 };
 
-async function fetchPendingConnectionRequests(companyId: string): Promise<Set<string>> {
+async function fetchPendingConnectionRequests(companyId: string): Promise<Map<string, string>> {
   const rows = await prisma.carrierConnectionRequest.findMany({
     where: { companyId },
-    select: { providerKey: true },
+    select: { providerKey: true, createdAt: true },
   });
-  return new Set(rows.map((row) => row.providerKey));
+  return new Map(rows.map((row) => [row.providerKey, row.createdAt.toISOString()]));
 }
 
 export async function recommendCarriers(
@@ -57,7 +57,7 @@ export async function recommendCarriers(
   const connectedCarriers = companyId ? await fetchConnectedCarriers(companyId) : undefined;
   const pendingRequests = companyId
     ? await fetchPendingConnectionRequests(companyId)
-    : new Set<string>();
+    : new Map<string, string>();
 
   const ranked = rankCarriers({
     category,
@@ -76,7 +76,7 @@ export async function recommendCarriers(
     data: {
       carriers: scored.ranked.map((carrier) => ({
         ...carrier,
-        hasPendingRequest: pendingRequests.has(carrier.providerKey),
+        pendingRequestAt: pendingRequests.get(carrier.providerKey) ?? null,
       })),
       profile: formatProfile(scored.profile),
       ambiguous: scored.ambiguous,
