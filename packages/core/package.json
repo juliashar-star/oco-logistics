@@ -10,7 +10,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./crypto/field-encryption": "./src/crypto/field-encryption.ts",
-    "./carrier-adapter/types": "./src/carrier-adapter/types.ts"
+    "./carrier-adapter/types": "./src/carrier-adapter/types.ts",
+    "./carrier-adapter/yandex/parse-price": "./src/carrier-adapter/yandex/parse-price.ts",
+    "./carrier-adapter/yandex/client": "./src/carrier-adapter/yandex/client.ts"
   },
   "dependencies": {
     "@oco/apiship": "*"
