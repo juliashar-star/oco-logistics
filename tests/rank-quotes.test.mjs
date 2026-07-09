@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Локальная копия логики для тестов без transpile workspace packages.
+// NOTE: This test uses an inline copy of ranking logic, not a real
+// import, because rank-quotes.ts has extension-less relative imports
+// (e.g. "./decision-weights") that don't resolve under direct Node
+// ESM/tsx loading without a bundler. This is a known gap, not a
+// stylistic choice — see DECISIONS.md canonical modules table.
+// Do not copy this inline-copy pattern for NEW tests; it's a
+// workaround for this specific file, not the recommended approach.
 const DEFAULT_DECISION_WEIGHTS = { cost: 0.4, speed: 0.3, quality: 0.3 };
 
 function normalizeDecisionWeights(weights) {

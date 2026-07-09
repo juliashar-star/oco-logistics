@@ -1,36 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Локальная копия deriveFactBasedProfiles из packages/core/src/carrier-picker/profile-fit.ts
-// (тот же runner, что rank-carriers-health.test.mjs — без transpile workspace packages).
-function deriveFactBasedProfiles(carrier) {
-  const profiles = [];
-  const weightLimits = carrier.weightLimits?.value;
-
-  if (weightLimits) {
-    const { maxWeightKg, maxSideSumCm } = weightLimits;
-    const exceedsP6 =
-      (maxWeightKg !== undefined && maxWeightKg > 30) ||
-      (maxSideSumCm !== undefined && maxSideSumCm > 120);
-
-    if (exceedsP6) {
-      profiles.push("P6");
-    } else if (
-      maxWeightKg !== undefined &&
-      maxWeightKg >= 15 &&
-      maxWeightKg <= 30
-    ) {
-      profiles.push("P5");
-    }
-  }
-
-  const specialModes = carrier.specialModes?.value ?? [];
-  if (specialModes.includes("perishable")) {
-    profiles.push("P7");
-  }
-
-  return profiles;
-}
+import { deriveFactBasedProfiles } from "../packages/core/src/carrier-picker/profile-fit.ts";
 
 function carrierFixture(overrides = {}) {
   return {
@@ -46,21 +17,27 @@ function carrierFixture(overrides = {}) {
 
 test("maxWeightKg 35 derives P6", () => {
   const result = deriveFactBasedProfiles(
-    carrierFixture({ weightLimits: { value: { maxWeightKg: 35 } } }),
+    carrierFixture({
+      weightLimits: { value: { applicable: true, maxWeightKg: 35 } },
+    }),
   );
   assert.ok(result.includes("P6"));
 });
 
-test("maxSideSumCm 150 without maxWeightKg derives P6", () => {
+test("maxLongestSideCm 150 without maxWeightKg derives P6", () => {
   const result = deriveFactBasedProfiles(
-    carrierFixture({ weightLimits: { value: { maxSideSumCm: 150 } } }),
+    carrierFixture({
+      weightLimits: { value: { applicable: true, maxLongestSideCm: 150 } },
+    }),
   );
   assert.ok(result.includes("P6"));
 });
 
 test("maxWeightKg 20 derives P5 but not P6", () => {
   const result = deriveFactBasedProfiles(
-    carrierFixture({ weightLimits: { value: { maxWeightKg: 20 } } }),
+    carrierFixture({
+      weightLimits: { value: { applicable: true, maxWeightKg: 20 } },
+    }),
   );
   assert.ok(result.includes("P5"));
   assert.equal(result.includes("P6"), false);
@@ -81,7 +58,7 @@ test("no weightLimits and no specialModes returns empty array", () => {
 test("maxWeightKg 40 and perishable derives both P6 and P7", () => {
   const result = deriveFactBasedProfiles(
     carrierFixture({
-      weightLimits: { value: { maxWeightKg: 40 } },
+      weightLimits: { value: { applicable: true, maxWeightKg: 40 } },
       specialModes: { value: ["perishable"] },
     }),
   );
