@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./crypto/field-encryption": "./src/crypto/field-encryption.ts"
+    "./crypto/field-encryption": "./src/crypto/field-encryption.ts",
+    "./carrier-adapter/types": "./src/carrier-adapter/types.ts"
   },
   "dependencies": {
     "@oco/apiship": "*"

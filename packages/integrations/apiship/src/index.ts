@@ -20,6 +20,7 @@ export type {
   ApishipStatusEvent,
   CalculateInput,
   CalculateResult,
+  CreateOrderAddress,
   CreateOrderInput,
   CreateOrderResult,
   DeliveryInterval,
