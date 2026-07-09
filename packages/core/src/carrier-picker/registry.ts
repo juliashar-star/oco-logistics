@@ -151,7 +151,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     profiles: ["P1", "P2", "P3", "P4", "P5", "P6"],
     methods: ["pvz", "courier", "postamat"],
     notes:
-      "самая развитая коммерческая сеть ПВЗ, 1100+ городов, курьер/ПВЗ/постамат, КГТ, международная; тарифы растут",
+      "коммерческая сеть ПВЗ, 1100+ городов; курьер/ПВЗ/постамат; поддержка КГТ; международная доставка",
     healthStatus: "active",
     carrierContractEstimate: {
       value: "требует уточнения у перевозчика",
@@ -169,7 +169,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     displayName: "Почта России",
     profiles: ["P1", "P2", "P3", "P4", "P5"],
     methods: ["pvz", "courier"],
-    notes: "рекордное географическое покрытие — малые города, сёла, отдалённые регионы",
+    notes: "географическое покрытие: малые города, сёла, отдалённые регионы",
     healthStatus: "active",
     carrierContractEstimate: {
       value: "требует уточнения у перевозчика",
@@ -341,7 +341,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     displayName: "5POST",
     profiles: ["P1", "P4"],
     methods: ["postamat", "pvz"],
-    notes: "постаматы и ПВЗ-сети, дешёвый самовывоз",
+    notes: "постаматы и ПВЗ-сети; самовывоз",
     healthStatus: "active",
     carrierContractEstimate: {
       value: "требует уточнения у перевозчика",
