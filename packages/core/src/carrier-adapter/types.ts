@@ -49,6 +49,12 @@ export type CarrierPickupPoint = {
   name: string;
   address: string;
   city: string;
+  /** Geographic position — every carrier's pickup points have one. */
+  latitude: number;
+  longitude: number;
+  /** Full raw provider response for this point (data asset; schedule,
+   *  services, instructions etc. we don't model yet). */
+  rawPoint?: unknown;
 };
 
 export type CarrierDeliveryQuote = {
