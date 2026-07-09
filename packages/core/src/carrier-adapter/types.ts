@@ -7,7 +7,6 @@
 import type {
   ApishipAddress,
   CreateOrderAddress,
-  CreateOrderResult,
   DeliveryInterval,
   ShipmentStatus,
 } from "@oco/apiship";
@@ -111,6 +110,19 @@ export type CarrierCreateOrderInput = {
   deliveryTimeEnd?: string;
 };
 
+export type CarrierCreateOrderResult = {
+  /** Provider-side order identifier. */
+  orderId: string;
+  /**
+   * false when the provider recognized an idempotency key and
+   * returned an already-existing order rather than creating a new
+   * one (Yandex: HTTP 208). true on a fresh creation.
+   */
+  isNewOrder: boolean;
+  /** Full raw provider response (data asset). */
+  rawResponse: unknown;
+};
+
 export type CarrierCancelResult = {
   canceled: boolean;
   reason?: string;
@@ -129,7 +141,7 @@ export interface CarrierAdapter {
   createOrder(
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
-  ): Promise<CreateOrderResult>;
+  ): Promise<CarrierCreateOrderResult>;
   getOrderStatus(
     providerOrderId: string,
     credentials: CarrierCredentials,
@@ -142,7 +154,6 @@ export interface CarrierAdapter {
 
 export type {
   CreateOrderAddress,
-  CreateOrderResult,
   DeliveryInterval,
   ShipmentStatus,
 };

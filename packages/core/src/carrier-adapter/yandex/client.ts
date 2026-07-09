@@ -1,7 +1,9 @@
 import type {
   CarrierCalculateInput,
+  CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierDeliveryQuote,
+  CarrierCreateOrderResult,
   CarrierListPointsInput,
   CarrierPickupPoint,
 } from "@oco/core/carrier-adapter/types";
@@ -190,4 +192,126 @@ export async function listPickupPoints(
   const offset = input.offset ?? 0;
   const end = input.limit !== undefined ? offset + input.limit : undefined;
   return mapped.slice(offset, end);
+}
+
+type YandexCreateOrderResponse = {
+  request_id: string;
+};
+
+/** Lossy heuristic: Yandex requires separate first/last name; we only have one contactName string. */
+function splitRecipientName(contactName: string): { firstName: string; lastName: string } {
+  const trimmed = contactName.trim();
+  const spaceIndex = trimmed.indexOf(" ");
+  if (spaceIndex === -1) {
+    return { firstName: trimmed, lastName: "-" };
+  }
+  return {
+    firstName: trimmed.slice(0, spaceIndex),
+    lastName: trimmed.slice(spaceIndex + 1).trim() || "-",
+  };
+}
+
+export async function createOrder(
+  input: CarrierCreateOrderInput,
+  credentials: CarrierCredentials,
+): Promise<CarrierCreateOrderResult> {
+  if (input.cod?.enabled) {
+    throw new Error(
+      "YANDEX_COD_NOT_SUPPORTED: cash on delivery requires partial-refusal flags not yet implemented",
+    );
+  }
+  if (input.items.some((item) => item.markingCode)) {
+    throw new Error(
+      "YANDEX_MARKING_NOT_SUPPORTED: marking code format is not yet known for Yandex Delivery",
+    );
+  }
+  if (input.items.length === 0) {
+    throw new Error("YANDEX_NO_ITEMS: at least one item is required");
+  }
+
+  const addressString = input.recipient.addressString?.trim();
+  if (!addressString) {
+    throw new Error("YANDEX_NO_ADDRESS: recipient addressString is required");
+  }
+
+  const creds = assertYandexCredentials(credentials);
+
+  const placeBarcode = `${input.clientNumber}-1`;
+  const totalWeightG = input.items.reduce(
+    (sum, item) => sum + item.weightG * item.quantity,
+    0,
+  );
+  const boxDx = Math.max(...input.items.map((item) => item.lengthCm ?? 1));
+  const boxDy = Math.max(...input.items.map((item) => item.widthCm ?? 1));
+  const boxDz = Math.max(...input.items.map((item) => item.heightCm ?? 1));
+
+  const { firstName, lastName } = splitRecipientName(input.recipient.contactName);
+
+  const body = {
+    info: { operator_request_id: input.clientNumber },
+    source: { platform_station: { platform_id: creds.platformStationId } },
+    destination: {
+      type: "custom_location",
+      custom_location: {
+        details: {
+          // Known open issue: Yandex FAQ expects comma-separated parts without postal
+          // code or apartment number — we pass recipient input as-is without stripping.
+          full_address: `${input.recipient.city}, ${addressString}`,
+        },
+      },
+    },
+    billing_info: { payment_method: "already_paid" },
+    recipient_info: {
+      first_name: firstName,
+      last_name: lastName,
+      phone: input.recipient.phone,
+    },
+    last_mile_policy: "time_interval",
+    items: input.items.map((item) => ({
+      count: item.quantity,
+      name: item.name,
+      article: item.name,
+      billing_details: {
+        unit_price: Math.round(item.unitPriceRub * 100),
+        assessed_unit_price: Math.round(item.unitPriceRub * 100),
+      },
+      physical_dims: {
+        dx: item.lengthCm ?? 1,
+        dy: item.widthCm ?? 1,
+        dz: item.heightCm ?? 1,
+      },
+      place_barcode: placeBarcode,
+    })),
+    places: [
+      {
+        barcode: placeBarcode,
+        physical_dims: {
+          weight_gross: totalWeightG,
+          dx: boxDx,
+          dy: boxDy,
+          dz: boxDz,
+        },
+      },
+    ],
+  };
+
+  const response = await yandexPost(creds, "/api/b2b/platform/request/create", body);
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  if (response.status === 200) {
+    const data = raw as YandexCreateOrderResponse;
+    return { orderId: data.request_id, isNewOrder: true, rawResponse: raw };
+  }
+  if (response.status === 208) {
+    const data = raw as YandexCreateOrderResponse;
+    return { orderId: data.request_id, isNewOrder: false, rawResponse: raw };
+  }
+
+  throw new Error(`Yandex Delivery create order failed: HTTP ${response.status} ${rawText}`);
 }
