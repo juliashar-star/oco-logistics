@@ -211,6 +211,26 @@ function splitRecipientName(contactName: string): { firstName: string; lastName:
   };
 }
 
+/**
+ * ⚠️ DO NOT WIRE THIS INTO ANY ROUTE YET — INCOMPLETE.
+ *
+ * This uses POST /request/create, which returns a request_id but
+ * produces an order that CANNOT be confirmed: no confirm endpoint
+ * accepts a request_id (verified 2026-07-09 against the test API —
+ * request/confirm → 404, offers/confirm → offer_was_not_found).
+ * Such orders never receive a state.status, a courier_order_id, or a
+ * sharing_url. They will not ship.
+ *
+ * The real flow is two-phase:
+ *   POST /offers/create  → offers[] (each with offer_id, expires_at,
+ *                          delivery_interval, pricing)
+ *   POST /offers/confirm → { request_id }   ← only now is it an order
+ *
+ * Rewriting this method onto the offers flow is the next slice.
+ * The 11 tests below assert the CURRENT (wrong) request shape and will
+ * need rewriting too — they pass because they test the code as written,
+ * not the behavior we need.
+ */
 export async function createOrder(
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
