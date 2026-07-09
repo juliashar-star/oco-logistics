@@ -58,6 +58,7 @@ model Company {
   shipments                 Shipment[]
   quotes                    TariffQuote[]
   carrierConnectionRequests CarrierConnectionRequest[]
+  carrierCredentials        CarrierCredential[]
   createdAt                 DateTime   @default(now())
   updatedAt                 DateTime   @updatedAt
 }
@@ -237,6 +238,19 @@ model CarrierConnectionRequest {
   company     Company  @relation(fields: [companyId], references: [id])
   providerKey String
   createdAt   DateTime @default(now())
+
+  @@unique([companyId, providerKey])
+  @@index([companyId])
+}
+
+model CarrierCredential {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  providerKey    String
+  credentialsEnc String   // JSON.stringify(CarrierCredentials), encrypted via field-encryption.ts
+  connectedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([companyId, providerKey])
   @@index([companyId])
