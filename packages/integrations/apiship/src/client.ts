@@ -474,25 +474,40 @@ export class ApishipClient {
 
   async getOrderStatusByClientNumber(clientNumber: string): Promise<OrderInfoResult | null> {
     const query = new URLSearchParams({ clientNumber });
-    const data = await this.request<{
-      rows?: Array<{
-        orderId?: number | string;
-        providerNumber?: string;
-        additionalProviderNumber?: string;
-      }>;
-    }>(`/orders/status?${query.toString()}`);
+    const data = await this.request<unknown>(`/orders/status?${query.toString()}`);
 
-    const row = data.rows?.[0];
-    if (!row) {
-      return null;
+    if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+      const body = data as Record<string, unknown>;
+      const orderInfo = body.orderInfo;
+
+      if (
+        orderInfo !== null &&
+        orderInfo !== undefined &&
+        typeof orderInfo === "object" &&
+        !Array.isArray(orderInfo)
+      ) {
+        const info = orderInfo as {
+          orderId?: number | string;
+          providerNumber?: string | null;
+          additionalProviderNumber?: string | null;
+        };
+        return {
+          orderId: String(info.orderId ?? clientNumber),
+          providerNumber: info.providerNumber?.trim() || null,
+          additionalProviderNumber: info.additionalProviderNumber?.trim() || null,
+          rawResponse: data,
+        };
+      }
+
+      // API explicitly returned orderInfo: null — no such order.
+      if ("orderInfo" in body) {
+        return null;
+      }
     }
 
-    return {
-      orderId: row.orderId != null ? String(row.orderId) : clientNumber,
-      providerNumber: row.providerNumber?.trim() || null,
-      additionalProviderNumber: row.additionalProviderNumber?.trim() || null,
-      rawResponse: data,
-    };
+    throw new ApishipError(
+      `APIShip /orders/status: нераспознанная форма ответа: ${JSON.stringify(data)}`,
+    );
   }
 
   /** POST /orders/statuses — текущий статус по списку orderId (макс. 100 за запрос). */
