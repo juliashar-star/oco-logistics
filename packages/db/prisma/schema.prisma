@@ -34,6 +34,7 @@ enum SelectionMode {
 
 enum ShipmentStatus {
   DRAFT
+  SUBMITTING
   CREATED
   IN_TRANSIT
   AT_PVZ
@@ -143,6 +144,13 @@ model Shipment {
   trackNumber          String?
   labelUrl             String?    // URL этикетки PDF от APIShip
 
+  idempotencyKey         String?
+  providerKey            String?
+  providerOrderId        String?
+  selectedOfferId        String?
+  selectedOfferExpiresAt DateTime?
+  submittingAt           DateTime?
+
   status          ShipmentStatus  @default(DRAFT)
   legalBasisConfirmed Boolean     @default(false)
   isAnonymized    Boolean         @default(false)
@@ -152,6 +160,7 @@ model Shipment {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  @@unique([companyId, idempotencyKey])
   @@index([companyId, status])
   @@index([companyId, createdAt])
   @@index([trackNumber])

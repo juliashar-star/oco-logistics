@@ -2,6 +2,7 @@ import type { PickupType, ShipmentStatus } from "@prisma/client";
 
 export const STATUS_LABELS: Record<ShipmentStatus, string> = {
   DRAFT: "Черновик",
+  SUBMITTING: "Оформляется…",
   CREATED: "Создано",
   IN_TRANSIT: "В пути",
   AT_PVZ: "На ПВЗ",

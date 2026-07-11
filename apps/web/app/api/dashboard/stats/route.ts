@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import type { ShipmentStatus } from "@prisma/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 
 function kopecksToRubles(kopecks: number): number {
   return kopecks / 100;
 }
+
+const NON_REAL_STATUSES: ShipmentStatus[] = ["DRAFT", "SUBMITTING"];
 
 export const GET = withAuth(async (_request, user) => {
   const now = new Date();
@@ -15,7 +18,7 @@ export const GET = withAuth(async (_request, user) => {
 
   const baseWhere = {
     companyId: user.companyId,
-    status: { not: "DRAFT" as const },
+    status: { notIn: NON_REAL_STATUSES },
   };
 
   try {

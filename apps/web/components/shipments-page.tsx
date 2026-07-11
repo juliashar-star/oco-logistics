@@ -51,6 +51,7 @@ const STATUS_OPTIONS: { value: ShipmentStatus | ""; label: string }[] = [
 
 const STATUS_BADGE_CLASS: Record<ShipmentStatus, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
+  SUBMITTING: "bg-indigo-100 text-indigo-800",
   CREATED: "bg-blue-100 text-blue-800",
   IN_TRANSIT: "bg-amber-100 text-amber-800",
   AT_PVZ: "bg-amber-50 text-amber-700",
