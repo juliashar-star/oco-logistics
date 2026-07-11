@@ -124,7 +124,13 @@ export type CarrierCreateOrderResult = {
 };
 
 export type CarrierCancelResult = {
-  canceled: boolean;
+  /** Provider accepted the cancellation *request*. For Yandex this is HTTP 200 on
+   *  request/cancel; it does NOT mean the order is cancelled — cancellation is
+   *  asynchronous and the terminal state is not observable via this call. */
+  accepted: boolean;
+  /** Provider-reported status string at the time of the cancel request
+   *  (e.g. Yandex "CREATED"). Empty string if the provider returned none. */
+  providerStatus: string;
   reason?: string;
 };
 
