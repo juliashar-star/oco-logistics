@@ -50,9 +50,8 @@ test("getTestPrisma can insert, read, and truncate a Shipment on the test DB", a
 
     const after = await prisma.shipment.findUnique({ where: { id: created.id } });
     assert.equal(after, null);
-
-    // Company is not in TRUNCATE_TABLES yet — clean up so smoke stays idempotent.
-    await prisma.company.delete({ where: { id: company.id } });
+    assert.equal(await prisma.shipment.count(), 0);
+    assert.equal(await prisma.company.count(), 0);
   } finally {
     await prisma.$disconnect();
   }

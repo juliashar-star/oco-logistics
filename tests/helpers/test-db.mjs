@@ -16,8 +16,9 @@ import { PrismaClient } from "@prisma/client";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ENV_PATH = path.join(REPO_ROOT, ".env");
 
-/** Tables cleared between tests. Extend as more models are exercised. */
-const TRUNCATE_TABLES = ["Shipment"];
+/** Tables cleared between tests. Extend as more models are exercised.
+ * Shipment FK→Company: one TRUNCATE … CASCADE covers both. */
+const TRUNCATE_TABLES = ["Shipment", "Company"];
 
 const TEST_DATABASE_NAME = "oco_logistics_test";
 
