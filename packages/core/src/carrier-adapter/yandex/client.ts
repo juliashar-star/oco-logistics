@@ -18,6 +18,14 @@ export class YandexAuthError extends Error {
   }
 }
 
+/** Expired or otherwise invalid offer_id on offers/confirm (provider code offer_was_not_found). */
+export class YandexOfferExpiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "YandexOfferExpiredError";
+  }
+}
+
 type YandexCredentials = { platformStationId: string; token: string };
 
 function assertYandexCredentials(creds: CarrierCredentials): YandexCredentials {
@@ -405,9 +413,8 @@ export async function getOffers(
  * (do not return a partial result).
  *
  * Expired/invalid offer detection lives here: Yandex returns an error
- * status with {code,message} (e.g. offer_was_not_found). That is surfaced
- * as a thrown Error whose message includes the provider body so the
- * orchestrator (next slice) can distinguish it.
+ * status with {code,message} (e.g. offer_was_not_found). That is thrown as
+ * YandexOfferExpiredError so the orchestrator can branch on instanceof.
  *
  * Safe to retry on network timeout: Yandex dedupes on offer_id —
  * re-confirming the same offer returns the same request_id
@@ -431,9 +438,24 @@ export async function confirmOffer(
   }
 
   if (response.status !== 200) {
-    throw new Error(
-      `Yandex Delivery confirm offer failed: HTTP ${response.status} ${rawText}`,
-    );
+    // Classify expired/invalid offer HERE (adapter), not in apps/web.
+    // Strictly on parsed JSON code — never substring-match the raw body.
+    // A malformed body that merely CONTAINS "offer_was_not_found" must NOT be
+    // treated as expired: misclassifying → rollback to DRAFT → a real order
+    // could be duplicated. Unknown/ambiguous stays generic Error (→ PROBLEM).
+    const providerCode =
+      raw !== null &&
+      typeof raw === "object" &&
+      "code" in raw &&
+      typeof (raw as { code: unknown }).code === "string"
+        ? (raw as { code: string }).code
+        : undefined;
+    const isOfferExpired = providerCode === "offer_was_not_found";
+    const detail = `Yandex Delivery confirm offer failed: HTTP ${response.status} ${rawText}`;
+    if (isOfferExpired) {
+      throw new YandexOfferExpiredError(detail);
+    }
+    throw new Error(detail);
   }
 
   const data = raw as YandexConfirmOfferResponse;

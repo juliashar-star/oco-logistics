@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   YandexAuthError,
+  YandexOfferExpiredError,
   confirmOffer,
 } from "../packages/core/src/carrier-adapter/yandex/client.ts";
 
@@ -142,7 +143,7 @@ test("confirmOffer missing request_id throws with response detail", async () => 
   });
 });
 
-test("confirmOffer error status (expired/invalid offer) throws with {code,message}", async () => {
+test("confirmOffer error status (expired/invalid offer) throws YandexOfferExpiredError", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const raw = {
       code: "offer_was_not_found",
@@ -154,6 +155,7 @@ test("confirmOffer error status (expired/invalid offer) throws with {code,messag
       await assert.rejects(
         () => confirmOffer(OFFER_ID, VALID_CREDS),
         (error) => {
+          assert.ok(error instanceof YandexOfferExpiredError);
           assert.match(error.message, /400/);
           assert.match(error.message, /offer_was_not_found/);
           assert.match(error.message, /Offer was not found or has expired/);
@@ -162,6 +164,92 @@ test("confirmOffer error status (expired/invalid offer) throws with {code,messag
       );
     } finally {
       mock.restore();
+    }
+  });
+});
+
+test("confirmOffer other non-200 throws generic Error, not YandexOfferExpiredError", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const raw = { code: "some_other_error", message: "Something else failed" };
+    const mock = installFetchMock(() => jsonResponse(400, raw));
+
+    try {
+      await assert.rejects(
+        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        (error) => {
+          assert.equal(error instanceof YandexOfferExpiredError, false);
+          assert.equal(error instanceof YandexAuthError, false);
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /400/);
+          assert.match(error.message, /some_other_error/);
+          assert.match(error.message, /Something else failed/);
+          return true;
+        },
+      );
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("confirmOffer malformed non-JSON 400 body throws generic Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      status: 400,
+      ok: false,
+      async json() {
+        throw new Error("should not call json");
+      },
+      async text() {
+        return "not-json-body";
+      },
+    });
+
+    try {
+      await assert.rejects(
+        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        (error) => {
+          assert.equal(error instanceof YandexOfferExpiredError, false);
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /400/);
+          assert.match(error.message, /not-json-body/);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("confirmOffer non-JSON body containing offer_was_not_found is NOT expired", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      status: 400,
+      ok: false,
+      async json() {
+        throw new Error("should not call json");
+      },
+      async text() {
+        return "garble offer_was_not_found garble";
+      },
+    });
+
+    try {
+      await assert.rejects(
+        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        (error) => {
+          assert.equal(error instanceof YandexOfferExpiredError, false);
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /400/);
+          assert.match(error.message, /garble offer_was_not_found garble/);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });
