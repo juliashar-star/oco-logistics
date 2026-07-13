@@ -139,6 +139,13 @@ export type CarrierOffer = {
   rawOffer?: unknown;
 };
 
+/** Result of confirming a previously fetched offer (Yandex: offers/confirm). */
+export type CarrierConfirmResult = {
+  requestId: string;
+  /** Full raw provider response (data asset). */
+  rawResponse: unknown;
+};
+
 export type CarrierCancelResult = {
   /** Provider accepted the cancellation *request*. For Yandex this is HTTP 200 on
    *  request/cancel; it does NOT mean the order is cancelled — cancellation is
@@ -168,6 +175,10 @@ export interface CarrierAdapter {
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierOffer[]>;
+  confirmOffer(
+    offerId: string,
+    credentials: CarrierCredentials,
+  ): Promise<CarrierConfirmResult>;
   createOrder(
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,

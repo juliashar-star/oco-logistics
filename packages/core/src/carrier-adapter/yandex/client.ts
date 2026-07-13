@@ -1,5 +1,6 @@
 import type {
   CarrierCalculateInput,
+  CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierDeliveryQuote,
@@ -199,6 +200,10 @@ type YandexCreateOrderResponse = {
   request_id: string;
 };
 
+type YandexConfirmOfferResponse = {
+  request_id?: string;
+};
+
 type YandexInterval = {
   min?: string | number;
   max?: string | number;
@@ -394,6 +399,56 @@ export async function getOffers(
 }
 
 /**
+ * POST /offers/confirm — second half of the real two-phase order flow.
+ *
+ * Success criterion: non-empty request_id. Missing request_id → throw
+ * (do not return a partial result).
+ *
+ * Expired/invalid offer detection lives here: Yandex returns an error
+ * status with {code,message} (e.g. offer_was_not_found). That is surfaced
+ * as a thrown Error whose message includes the provider body so the
+ * orchestrator (next slice) can distinguish it.
+ *
+ * Safe to retry on network timeout: Yandex dedupes on offer_id —
+ * re-confirming the same offer returns the same request_id
+ * (verified by probe 2026-07-13).
+ */
+export async function confirmOffer(
+  offerId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierConfirmResult> {
+  const creds = assertYandexCredentials(credentials);
+
+  const response = await yandexPost(creds, "/api/b2b/platform/offers/confirm", {
+    offer_id: offerId,
+  });
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  if (response.status !== 200) {
+    throw new Error(
+      `Yandex Delivery confirm offer failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  const data = raw as YandexConfirmOfferResponse;
+  const requestId =
+    typeof data?.request_id === "string" ? data.request_id.trim() : "";
+  if (!requestId) {
+    throw new Error(
+      `Yandex Delivery confirm offer failed: missing request_id HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  return { requestId, rawResponse: raw };
+}
+
+/**
  * ⚠️ DO NOT WIRE THIS INTO ANY ROUTE YET — INCOMPLETE.
  *
  * This uses POST /request/create, which returns a request_id but
@@ -408,9 +463,9 @@ export async function getOffers(
  *                          delivery_interval, pricing)
  *   POST /offers/confirm → { request_id }   ← only now is it an order
  *
- * getOffers() implements the first half. Rewriting this method onto
- * offers/confirm is a later slice. The 11 createOrder tests still assert
- * the CURRENT (wrong) request/create shape.
+ * getOffers() + confirmOffer() implement both halves. Rewriting this
+ * method onto offers/confirm is a later slice. The 11 createOrder tests
+ * still assert the CURRENT (wrong) request/create shape.
  */
 export async function createOrder(
   input: CarrierCreateOrderInput,
