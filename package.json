@@ -22,6 +22,7 @@
     "db:push": "prisma db push --schema packages/db/prisma/schema.prisma",
     "db:backup": "bash infra/backups/backup.sh",
     "db:restore": "bash infra/backups/restore.sh",
+    "db:test:setup": "node scripts/db-test-setup.mjs",
     "docker:up": "docker compose -f infra/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker-compose.yml down",
     "test": "node --import tsx --test tests/*.test.mjs",
