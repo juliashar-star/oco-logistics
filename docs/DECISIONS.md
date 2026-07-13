@@ -20,6 +20,17 @@
 
 ---
 
+- **2026-07 · Confirm-захват DRAFT→SUBMITTING — один `updateMany` с guard `status: DRAFT` (CAS), не транзакция вокруг сети.**
+Почему: `UPDATE … WHERE status='DRAFT'` атомен на уровне строки в Postgres; два конкурентных
+вызова не могут оба получить `count=1`. Сеть (confirm у перевозчика) вне этого шага — иначе
+долгая транзакция и ложные блокировки. Disambiguation при `count=0` — отдельный `findUnique`
+(`not_found` vs `not_draft`). Клиент Prisma передаётся аргументом (тесты → test DB).
+Отвергли: `findFirst`+`update` (TOCTOU), advisory lock, транзакцию с сетевым confirm внутри.
+- **2026-07 · Postgres-тесты отдельно: `test:unit` (параллельно) + `test:db` (`--test-concurrency=1`).**
+Почему: файлы с `truncateAll` делят одну `oco_logistics_test`; параллельный запуск файлов
+сносит чужие строки. Юнит-тесты Postgres не трогают — их не сериализуем. DB-файлы живут в
+`tests/db/*.db.test.mjs`; внутри файла — `describe({ concurrency: false })`.
+Отвергли: глобальный `--test-concurrency=1` на весь `npm test`; отдельная схема/БД на воркер.
 - **2026-06 · Авторизация APIShip — POST /users/login (логин/пароль), не статичный API-ключ.**
 Почему: официальная документация APIShip; токен без срока действия, кэшируем на сервере.
 Отвергли: `APISHIP_API_KEY` в заголовке.

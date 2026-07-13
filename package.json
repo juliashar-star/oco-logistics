@@ -25,7 +25,9 @@
     "db:test:setup": "node scripts/db-test-setup.mjs",
     "docker:up": "docker compose -f infra/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker-compose.yml down",
-    "test": "node --import tsx --test tests/*.test.mjs",
+    "test:unit": "node --import tsx --test tests/*.test.mjs",
+    "test:db": "node --import tsx --test --test-concurrency=1 tests/db/*.db.test.mjs",
+    "test": "npm run test:unit && npm run test:db",
     "typecheck": "tsc --noEmit -p tsconfig.scripts.json && npm run typecheck -w @oco/core && npm run typecheck -w @oco/web",
     "carrier:drift": "node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/check-carrier-drift.ts"
   },

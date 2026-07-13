@@ -7,6 +7,9 @@
  *
  * Do NOT import `@oco/db`'s singleton here: it binds to process.env.DATABASE_URL
  * (dev). Tests always get a separate PrismaClient pointed at the test URL.
+ *
+ * Shared DB + TRUNCATE: DB-touching suites live in `tests/db/*.db.test.mjs` and
+ * run via `npm run test:db` (`--test-concurrency=1`). Unit tests stay parallel.
  */
 import fs from "node:fs";
 import path from "node:path";
