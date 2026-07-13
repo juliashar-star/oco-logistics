@@ -5,6 +5,7 @@ import type {
   CarrierDeliveryQuote,
   CarrierCreateOrderResult,
   CarrierListPointsInput,
+  CarrierOffer,
   CarrierPickupPoint,
 } from "@oco/core/carrier-adapter/types";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
@@ -198,6 +199,29 @@ type YandexCreateOrderResponse = {
   request_id: string;
 };
 
+type YandexInterval = {
+  min?: string | number;
+  max?: string | number;
+  policy?: string;
+};
+
+type YandexOfferDetails = {
+  delivery_interval?: YandexInterval;
+  pickup_interval?: YandexInterval;
+  pricing?: string;
+  pricing_total?: string;
+};
+
+type YandexOffer = {
+  offer_id?: string;
+  expires_at?: string;
+  offer_details?: YandexOfferDetails;
+};
+
+type YandexOffersCreateResponse = {
+  offers?: YandexOffer[];
+};
+
 /** Lossy heuristic: Yandex requires separate first/last name; we only have one contactName string. */
 function splitRecipientName(contactName: string): { firstName: string; lastName: string } {
   const trimmed = contactName.trim();
@@ -211,30 +235,7 @@ function splitRecipientName(contactName: string): { firstName: string; lastName:
   };
 }
 
-/**
- * ⚠️ DO NOT WIRE THIS INTO ANY ROUTE YET — INCOMPLETE.
- *
- * This uses POST /request/create, which returns a request_id but
- * produces an order that CANNOT be confirmed: no confirm endpoint
- * accepts a request_id (verified 2026-07-09 against the test API —
- * request/confirm → 404, offers/confirm → offer_was_not_found).
- * Such orders never receive a state.status, a courier_order_id, or a
- * sharing_url. They will not ship.
- *
- * The real flow is two-phase:
- *   POST /offers/create  → offers[] (each with offer_id, expires_at,
- *                          delivery_interval, pricing)
- *   POST /offers/confirm → { request_id }   ← only now is it an order
- *
- * Rewriting this method onto the offers flow is the next slice.
- * The 11 tests below assert the CURRENT (wrong) request shape and will
- * need rewriting too — they pass because they test the code as written,
- * not the behavior we need.
- */
-export async function createOrder(
-  input: CarrierCreateOrderInput,
-  credentials: CarrierCredentials,
-): Promise<CarrierCreateOrderResult> {
+function assertCreateOrderPreconditions(input: CarrierCreateOrderInput): string {
   if (input.cod?.enabled) {
     throw new Error(
       "YANDEX_COD_NOT_SUPPORTED: cash on delivery requires partial-refusal flags not yet implemented",
@@ -253,9 +254,19 @@ export async function createOrder(
   if (!addressString) {
     throw new Error("YANDEX_NO_ADDRESS: recipient addressString is required");
   }
+  return addressString;
+}
 
-  const creds = assertYandexCredentials(credentials);
-
+/**
+ * Body shared by offers/create and the doomed request/create stub.
+ * Units: dims cm, place weight_gross grams, billing_details kopecks (Math.round).
+ * Phone passed as-is — caller must already supply 79xxxxxxxxx; no reformatting here.
+ */
+function buildPlatformOrderBody(
+  input: CarrierCreateOrderInput,
+  creds: YandexCredentials,
+  addressString: string,
+): Record<string, unknown> {
   const placeBarcode = `${input.clientNumber}-1`;
   const totalWeightG = input.items.reduce(
     (sum, item) => sum + item.weightG * item.quantity,
@@ -267,7 +278,7 @@ export async function createOrder(
 
   const { firstName, lastName } = splitRecipientName(input.recipient.contactName);
 
-  const body = {
+  return {
     info: { operator_request_id: input.clientNumber },
     source: { platform_station: { platform_id: creds.platformStationId } },
     destination: {
@@ -284,6 +295,7 @@ export async function createOrder(
     recipient_info: {
       first_name: firstName,
       last_name: lastName,
+      // Assume already 79xxxxxxxxx — do not reformat in this slice.
       phone: input.recipient.phone,
     },
     last_mile_policy: "time_interval",
@@ -314,6 +326,99 @@ export async function createOrder(
       },
     ],
   };
+}
+
+function intervalBound(value: string | number | undefined): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return String(value);
+}
+
+function mapYandexOffer(raw: YandexOffer): CarrierOffer | null {
+  const offerId = raw.offer_id?.trim() ?? "";
+  if (!offerId) {
+    return null;
+  }
+  const details = raw.offer_details ?? {};
+  const delivery = details.delivery_interval ?? {};
+  const pickup = details.pickup_interval ?? {};
+  const pricingTotal = details.pricing_total;
+  if (!pricingTotal) {
+    throw new Error("Yandex Delivery offer missing offer_details.pricing_total");
+  }
+
+  return {
+    offerId,
+    expiresAt: raw.expires_at ?? "",
+    deliveryIntervalFrom: intervalBound(delivery.min),
+    deliveryIntervalTo: intervalBound(delivery.max),
+    pickupIntervalFrom: intervalBound(pickup.min),
+    pickupIntervalTo: intervalBound(pickup.max),
+    priceRub: parseRublePrice(pricingTotal),
+    rawOffer: raw,
+  };
+}
+
+/**
+ * POST /offers/create — first half of the real two-phase order flow.
+ * Returns [] when the provider responds 200 with an empty offers list.
+ * Error statuses (e.g. no_delivery_options) throw with the raw {code,message} body.
+ */
+export async function getOffers(
+  input: CarrierCreateOrderInput,
+  credentials: CarrierCredentials,
+): Promise<CarrierOffer[]> {
+  const addressString = assertCreateOrderPreconditions(input);
+  const creds = assertYandexCredentials(credentials);
+  const body = buildPlatformOrderBody(input, creds, addressString);
+
+  const response = await yandexPost(creds, "/api/b2b/platform/offers/create", body);
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  if (response.status !== 200) {
+    throw new Error(`Yandex Delivery get offers failed: HTTP ${response.status} ${rawText}`);
+  }
+
+  const data = raw as YandexOffersCreateResponse;
+  const offers = data.offers ?? [];
+  return offers
+    .map(mapYandexOffer)
+    .filter((offer): offer is CarrierOffer => offer !== null);
+}
+
+/**
+ * ⚠️ DO NOT WIRE THIS INTO ANY ROUTE YET — INCOMPLETE.
+ *
+ * This uses POST /request/create, which returns a request_id but
+ * produces an order that CANNOT be confirmed: no confirm endpoint
+ * accepts a request_id (verified 2026-07-09 against the test API —
+ * request/confirm → 404, offers/confirm → offer_was_not_found).
+ * Such orders never receive a state.status, a courier_order_id, or a
+ * sharing_url. They will not ship.
+ *
+ * The real flow is two-phase:
+ *   POST /offers/create  → offers[] (each with offer_id, expires_at,
+ *                          delivery_interval, pricing)
+ *   POST /offers/confirm → { request_id }   ← only now is it an order
+ *
+ * getOffers() implements the first half. Rewriting this method onto
+ * offers/confirm is a later slice. The 11 createOrder tests still assert
+ * the CURRENT (wrong) request/create shape.
+ */
+export async function createOrder(
+  input: CarrierCreateOrderInput,
+  credentials: CarrierCredentials,
+): Promise<CarrierCreateOrderResult> {
+  const addressString = assertCreateOrderPreconditions(input);
+  const creds = assertYandexCredentials(credentials);
+  const body = buildPlatformOrderBody(input, creds, addressString);
 
   const response = await yandexPost(creds, "/api/b2b/platform/request/create", body);
   const rawText = await response.text();

@@ -123,6 +123,22 @@ export type CarrierCreateOrderResult = {
   rawResponse: unknown;
 };
 
+/**
+ * One priced delivery slot from a carrier's offers step (Yandex: offers/create).
+ * Intervals are ISO timestamps as returned by the provider (UTC strings).
+ */
+export type CarrierOffer = {
+  offerId: string;
+  expiresAt: string;
+  deliveryIntervalFrom: string;
+  deliveryIntervalTo: string;
+  pickupIntervalFrom: string;
+  pickupIntervalTo: string;
+  priceRub: number;
+  /** Full raw provider offer object (data asset). */
+  rawOffer?: unknown;
+};
+
 export type CarrierCancelResult = {
   /** Provider accepted the cancellation *request*. For Yandex this is HTTP 200 on
    *  request/cancel; it does NOT mean the order is cancelled — cancellation is
@@ -144,6 +160,14 @@ export interface CarrierAdapter {
     input: CarrierListPointsInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierPickupPoint[]>;
+  /**
+   * Two-phase create: fetch priced offers before confirming one.
+   * Same input shape as createOrder — offers just precede confirm.
+   */
+  getOffers(
+    input: CarrierCreateOrderInput,
+    credentials: CarrierCredentials,
+  ): Promise<CarrierOffer[]>;
   createOrder(
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
