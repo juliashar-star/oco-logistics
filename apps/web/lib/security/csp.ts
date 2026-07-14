@@ -34,40 +34,96 @@ function isDevelopmentCsp(): boolean {
   return isLocalAppOrigin();
 }
 
-/** Per-request CSP for HTML document responses. API routes must not call this. */
-export function buildContentSecurityPolicy(nonce: string): string {
+type CspDirectiveParts = {
+  defaultSrc: string[];
+  scriptSrc: string[];
+  styleSrc: string[];
+  imgSrc: string[];
+  fontSrc: string[];
+  connectSrc: string[];
+  objectSrc: string[];
+  baseUri: string[];
+  formAction: string[];
+  frameAncestors: string[];
+};
+
+/** Shared strict base — both global and /new-order policies start from this. */
+function buildBaseDirectiveParts(nonce: string): CspDirectiveParts {
   const isDev = isDevelopmentCsp();
 
   const scriptSrc = [
-    "script-src 'self'",
+    "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
     // Dev only: React/Next Fast Refresh uses eval for stack traces and HMR.
     ...(isDev ? ["'unsafe-eval'"] : []),
-  ].join(" ");
+  ];
 
   // Dev only: Fast Refresh and dev overlays inject <style> tags without a nonce.
   const styleSrc = isDev
-    ? "style-src 'self' 'unsafe-inline'"
-    : `style-src 'self' 'nonce-${nonce}'`;
+    ? ["'self'", "'unsafe-inline'"]
+    : ["'self'", `'nonce-${nonce}'`];
 
-  return [
-    "default-src 'self'",
+  return {
+    defaultSrc: ["'self'"],
     scriptSrc,
     styleSrc,
-    "img-src 'self' data: blob:",
-    "font-src 'self'",
-    "connect-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
+    imgSrc: ["'self'", "data:", "blob:"],
+    fontSrc: ["'self'"],
+    connectSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+  };
+}
+
+function serializeContentSecurityPolicy(parts: CspDirectiveParts): string {
+  return [
+    `default-src ${parts.defaultSrc.join(" ")}`,
+    `script-src ${parts.scriptSrc.join(" ")}`,
+    `style-src ${parts.styleSrc.join(" ")}`,
+    `img-src ${parts.imgSrc.join(" ")}`,
+    `font-src ${parts.fontSrc.join(" ")}`,
+    `connect-src ${parts.connectSrc.join(" ")}`,
+    `object-src ${parts.objectSrc.join(" ")}`,
+    `base-uri ${parts.baseUri.join(" ")}`,
+    `form-action ${parts.formAction.join(" ")}`,
+    `frame-ancestors ${parts.frameAncestors.join(" ")}`,
   ].join("; ");
 }
 
-export function nextPageWithCsp(request: NextRequest): NextResponse {
+/** Per-request CSP for HTML document responses. API routes must not call this. */
+export function buildContentSecurityPolicy(nonce: string): string {
+  return serializeContentSecurityPolicy(buildBaseDirectiveParts(nonce));
+}
+
+/**
+ * /new-order only — strict base + Yandex PVZ widget hosts.
+ * Trackers (mc.yandex.ru, log.api-maps.yandex.ru) deliberately excluded.
+ */
+export function buildOrderPageContentSecurityPolicy(nonce: string): string {
+  const parts = buildBaseDirectiveParts(nonce);
+  parts.connectSrc.push(
+    "https://widget-pvz.dostavka.yandex.net",
+    "https://api-maps.yandex.ru",
+  );
+  parts.imgSrc.push(
+    "https://core-renderer-tiles.maps.yandex.net",
+    "https://api-maps.yandex.ru",
+    "https://yastatic.net",
+  );
+  parts.styleSrc.push("https://yastatic.net");
+  parts.fontSrc.push("https://yastatic.net");
+  return serializeContentSecurityPolicy(parts);
+}
+
+function nextPageWithPolicy(
+  request: NextRequest,
+  buildPolicy: (nonce: string) => string,
+): NextResponse {
   const nonce = generateNonce();
-  const csp = buildContentSecurityPolicy(nonce);
+  const csp = buildPolicy(nonce);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -78,4 +134,12 @@ export function nextPageWithCsp(request: NextRequest): NextResponse {
   });
   response.headers.set("Content-Security-Policy", csp);
   return response;
+}
+
+export function nextPageWithCsp(request: NextRequest): NextResponse {
+  return nextPageWithPolicy(request, buildContentSecurityPolicy);
+}
+
+export function nextOrderPageWithCsp(request: NextRequest): NextResponse {
+  return nextPageWithPolicy(request, buildOrderPageContentSecurityPolicy);
 }
