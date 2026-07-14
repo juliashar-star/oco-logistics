@@ -1,7 +1,7 @@
 import {
   decryptRecipientPii,
   encryptRecipientPii,
-} from "@/lib/recipient-pii-credentials";
+} from "./recipient-pii-credentials";
 
 type ShipmentRecipientPiiRow = {
   recipientName: string;

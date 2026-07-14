@@ -84,6 +84,8 @@ export function NewOrderForm() {
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipientPhoneError, setRecipientPhoneError] = useState("");
   const [legalBasisConfirmed, setLegalBasisConfirmed] = useState(false);
+  /** Stable per mount — for create-draft idempotency (wired in a later slice). */
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [points, setPoints] = useState<PickupPoint[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
