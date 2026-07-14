@@ -20,8 +20,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const ENV_PATH = path.join(REPO_ROOT, ".env");
 
 /** Tables cleared between tests. Extend as more models are exercised.
- * Shipment FK→Company: one TRUNCATE … CASCADE covers both. */
-const TRUNCATE_TABLES = ["Shipment", "Company"];
+ * Shipment / CarrierCredential FK→Company: TRUNCATE … CASCADE covers children;
+ * CarrierCredential listed explicitly now that credential-loader tests seed it. */
+const TRUNCATE_TABLES = ["Shipment", "CarrierCredential", "Company"];
 
 const TEST_DATABASE_NAME = "oco_logistics_test";
 
