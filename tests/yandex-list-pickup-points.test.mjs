@@ -111,6 +111,7 @@ test("happy path maps two pickup_point entries correctly", async () => {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
 
       assert.equal(result.ok, true);
+      assert.deepEqual(result.resolvedLocation, { id: "213", address: CITY });
       assert.equal(result.points.length, 2);
       assert.equal(result.points[0].id, "1");
       assert.equal(result.points[0].name, "Point 1");
@@ -160,6 +161,7 @@ test("terminal entries are filtered out defensively", async () => {
     try {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
       assert.equal(result.ok, true);
+      assert.deepEqual(result.resolvedLocation, { id: "213", address: CITY });
       assert.equal(result.points.length, 1);
       assert.equal(result.points[0].id, "1");
     } finally {
@@ -197,7 +199,11 @@ test("resolved city with zero pickup points returns ok true and empty points", a
 
     try {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
-      assert.deepEqual(result, { ok: true, points: [] });
+      assert.deepEqual(result, {
+        ok: true,
+        resolvedLocation: { id: "213", address: CITY },
+        points: [],
+      });
       assert.equal(mock.calls.length, 2);
     } finally {
       mock.restore();
@@ -223,6 +229,7 @@ test("full list is returned with no local slicing", async () => {
     try {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
       assert.equal(result.ok, true);
+      assert.deepEqual(result.resolvedLocation, { id: "213", address: CITY });
       assert.equal(result.points.length, 5);
       assert.deepEqual(
         result.points.map((p) => p.id),
@@ -322,6 +329,54 @@ test("detect variants[0] without geo_id throws malformed response Error", async 
           error instanceof Error &&
           !(error instanceof YandexAuthError) &&
           /malformed response \(variants\[0\] missing usable geo_id\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants[0] without address throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: [{ geo_id: 213 }] });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants\[0\] missing usable address\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants[0] with empty address throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: [{ geo_id: 213, address: "" }] });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants\[0\] missing usable address\)/.test(error.message),
       );
       assert.equal(mock.calls.length, 1);
     } finally {
@@ -438,6 +493,7 @@ test("rawPoint contains the full raw point object", async () => {
     try {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
       assert.equal(result.ok, true);
+      assert.deepEqual(result.resolvedLocation, { id: "213", address: CITY });
       assert.deepEqual(result.points[0].rawPoint, raw);
     } finally {
       mock.restore();

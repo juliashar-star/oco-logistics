@@ -60,12 +60,18 @@ export type CarrierPickupPoint = {
 /**
  * Result of listing pickup points for a city.
  * - ok:true — city resolved; points may be empty (served but no PVZ match).
+ *   resolvedLocation is what the carrier understood the input city string to
+ *   be (provider place id + human-readable address) — may differ from input.
  * - ok:false reason:"city_not_resolved" — normal case: provider could not
  *   resolve the city (empty variants). Faults (auth/transport/malformed)
  *   throw instead.
  */
 export type CarrierListPointsResult =
-  | { ok: true; points: CarrierPickupPoint[] }
+  | {
+      ok: true;
+      resolvedLocation: { id: string; address: string };
+      points: CarrierPickupPoint[];
+    }
   | { ok: false; reason: "city_not_resolved" };
 
 export type CarrierDeliveryQuote = {

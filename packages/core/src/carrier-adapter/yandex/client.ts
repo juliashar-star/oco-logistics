@@ -209,6 +209,20 @@ export async function listPickupPoints(
   }
   const resolvedGeoId: LocationDetectResponse["variants"][number]["geo_id"] = geoId;
 
+  const resolvedAddress =
+    firstVariant !== null &&
+    typeof firstVariant === "object" &&
+    "address" in firstVariant
+      ? (firstVariant as { address: unknown }).address
+      : undefined;
+  if (typeof resolvedAddress !== "string" || resolvedAddress.length === 0) {
+    throw new Error(
+      "Yandex Delivery location detect failed: malformed response (variants[0] missing usable address)",
+    );
+  }
+  const resolvedLocationAddress: LocationDetectResponse["variants"][number]["address"] =
+    resolvedAddress;
+
   const listResponse = await yandexPost(creds, "/api/b2b/platform/pickup-points/list", {
     geo_id: resolvedGeoId,
     type: "pickup_point",
@@ -232,7 +246,11 @@ export async function listPickupPoints(
     .filter((point) => point.type === "pickup_point")
     .map(mapPickupPoint);
 
-  return { ok: true, points };
+  return {
+    ok: true,
+    resolvedLocation: { id: String(resolvedGeoId), address: resolvedLocationAddress },
+    points,
+  };
 }
 
 type YandexCreateOrderResponse = {
