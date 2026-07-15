@@ -20,6 +20,13 @@
 
 ---
 
+- **2026-07 · Pickup-point lookup — `pickup-point-adapters.ts` (capability-only), не полный CarrierAdapter registry.**
+Почему: сегодня никто не реализует `CarrierAdapter` целиком (у Yandex нет
+`getOrderStatus`/`cancelOrder`); общий registry с заглушками снова объявит
+отсутствующие capability. Lookup держит только `listPickupPoints`, тип метода —
+`CarrierAdapter["listPickupPoints"]`, чтобы не дрейфовать от интерфейса. Имя
+не «registry» — рядом уже есть `carrier-picker/registry` с другим смыслом.
+Отвергли: полный adapter registry; throwing stubs для недостающих методов.
 - **2026-07 · Confirm-захват DRAFT→SUBMITTING — один `updateMany` с guard `status: DRAFT` (CAS), не транзакция вокруг сети.**
 Почему: `UPDATE … WHERE status='DRAFT'` атомен на уровне строки в Postgres; два конкурентных
 вызова не могут оба получить `count=1`. Сеть (confirm у перевозчика) вне этого шага — иначе
