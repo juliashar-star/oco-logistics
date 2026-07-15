@@ -20,6 +20,10 @@
 
 ---
 
+- **2026-07 · listConnectedCarriers — один findMany + decrypt; decrypt fault throws, не swallow per-row.**
+Почему: N+1 через getCarrierCredentials лишний; без orderBy merge следующего среза
+недетерминирован; тихий drop битой строки врёт «не подключено» про то, что подключено.
+Отвергли: цикл getCarrierCredentials; пропускать битые строки; decrypt fault → []/partial.
 - **2026-07 · Pickup-point lookup — `pickup-point-adapters.ts` (capability-only), не полный CarrierAdapter registry.**
 Почему: сегодня никто не реализует `CarrierAdapter` целиком (у Yandex нет
 `getOrderStatus`/`cancelOrder`); общий registry с заглушками снова объявит
