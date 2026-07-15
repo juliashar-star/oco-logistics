@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · Pickup-points API — `/api/shipments/pickup-points` + явный DTO-mapper; не трогать `/points`.**
+Почему: live APIShip route остаётся; новый path для прямых адаптеров. Ответ строит
+`toPickupPointsResponse` с явными полями (без spread) — `rawPoint`/`code` не утекают;
+гарантия — unit-тест mapper'а (route-тестов в репо нет).
+Отвергли: reuse `/points`; `{ ...point }` / omit-helper; limit/offset в query.
 - **2026-07 · listPickupPointsForCompany — injected deps; per-carrier fault → status, не fail всего вызова.**
 Почему: слой без prisma/адаптеров (как submitOrder+confirm) — тесты без БД и сети.
 Один throw не должен прятать точки других; `no_adapter` остаётся в `carriers`
