@@ -33,11 +33,12 @@ export type CarrierCalculateInput = {
 
 export type CarrierListPointsInput = {
   city: string;
-  limit?: number;
-  offset?: number;
   // deliberately omit `providerKey?` — redundant when the adapter is
   // already scoped to one provider; only APIShip's cross-carrier
   // aggregation needed it as a filter
+  // deliberately omit limit/offset — adapters return the full mapped
+  // list; callers page locally if needed (provider pagination is not
+  // wired yet; pretending limit/offset paginate silently truncates)
 };
 
 export type CarrierPickupPoint = {
@@ -55,6 +56,17 @@ export type CarrierPickupPoint = {
    *  services, instructions etc. we don't model yet). */
   rawPoint?: unknown;
 };
+
+/**
+ * Result of listing pickup points for a city.
+ * - ok:true — city resolved; points may be empty (served but no PVZ match).
+ * - ok:false reason:"city_not_resolved" — normal case: provider could not
+ *   resolve the city (empty variants). Faults (auth/transport/malformed)
+ *   throw instead.
+ */
+export type CarrierListPointsResult =
+  | { ok: true; points: CarrierPickupPoint[] }
+  | { ok: false; reason: "city_not_resolved" };
 
 export type CarrierDeliveryQuote = {
   providerKey: string; // kept: same aggregation reason as above
@@ -166,7 +178,7 @@ export interface CarrierAdapter {
   listPickupPoints(
     input: CarrierListPointsInput,
     credentials: CarrierCredentials,
-  ): Promise<CarrierPickupPoint[]>;
+  ): Promise<CarrierListPointsResult>;
   /**
    * Two-phase create: fetch priced offers before confirming one.
    * Same input shape as createOrder — offers just precede confirm.

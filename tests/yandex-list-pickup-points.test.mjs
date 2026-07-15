@@ -108,17 +108,18 @@ test("happy path maps two pickup_point entries correctly", async () => {
     );
 
     try {
-      const points = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
 
-      assert.equal(points.length, 2);
-      assert.equal(points[0].id, "1");
-      assert.equal(points[0].name, "Point 1");
-      assert.equal(points[0].address, "г.Москва Example St. 1");
-      assert.equal(points[0].city, "г.Москва");
-      assert.equal(points[0].latitude, 56.75);
-      assert.equal(points[0].longitude, 37.61);
-      assert.equal(points[0].providerKey, "yataxi");
-      assert.equal(points[1].id, "2");
+      assert.equal(result.ok, true);
+      assert.equal(result.points.length, 2);
+      assert.equal(result.points[0].id, "1");
+      assert.equal(result.points[0].name, "Point 1");
+      assert.equal(result.points[0].address, "г.Москва Example St. 1");
+      assert.equal(result.points[0].city, "г.Москва");
+      assert.equal(result.points[0].latitude, 56.75);
+      assert.equal(result.points[0].longitude, 37.61);
+      assert.equal(result.points[0].providerKey, "yataxi");
+      assert.equal(result.points[1].id, "2");
     } finally {
       mock.restore();
     }
@@ -157,16 +158,17 @@ test("terminal entries are filtered out defensively", async () => {
     );
 
     try {
-      const points = await listPickupPoints({ city: CITY }, VALID_CREDS);
-      assert.equal(points.length, 1);
-      assert.equal(points[0].id, "1");
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      assert.equal(result.ok, true);
+      assert.equal(result.points.length, 1);
+      assert.equal(result.points[0].id, "1");
     } finally {
       mock.restore();
     }
   });
 });
 
-test("empty detect variants returns empty array and skips list call", async () => {
+test("empty detect variants returns city_not_resolved and skips list call", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(({ url }) => {
       if (url.endsWith("/location/detect")) {
@@ -176,8 +178,202 @@ test("empty detect variants returns empty array and skips list call", async () =
     });
 
     try {
-      const points = await listPickupPoints({ city: "UnknownCity" }, VALID_CREDS);
-      assert.deepEqual(points, []);
+      const result = await listPickupPoints({ city: "UnknownCity" }, VALID_CREDS);
+      assert.deepEqual(result, { ok: false, reason: "city_not_resolved" });
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("resolved city with zero pickup points returns ok true and empty points", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(
+      detectThenListMock({
+        listPoints: [],
+      }),
+    );
+
+    try {
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      assert.deepEqual(result, { ok: true, points: [] });
+      assert.equal(mock.calls.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("full list is returned with no local slicing", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const listPoints = [
+      samplePoint("0"),
+      samplePoint("1"),
+      samplePoint("2"),
+      samplePoint("3"),
+      samplePoint("4"),
+    ];
+    const mock = installFetchMock(
+      detectThenListMock({
+        listPoints,
+      }),
+    );
+
+    try {
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      assert.equal(result.ok, true);
+      assert.equal(result.points.length, 5);
+      assert.deepEqual(
+        result.points.map((p) => p.id),
+        ["0", "1", "2", "3", "4"],
+      );
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants missing throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, {});
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants missing or not an array\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants not an array throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: "not-an-array" });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants missing or not an array\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants[0] not an object throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: ["not-an-object"] });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants\[0\] missing usable geo_id\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("detect variants[0] without geo_id throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: [{ address: CITY }] });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(variants\[0\] missing usable geo_id\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("list response with no points key throws malformed response Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(200, { variants: [{ geo_id: 213, address: CITY }] });
+      }
+      if (url.endsWith("/pickup-points/list")) {
+        return jsonResponse(200, {});
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /malformed response \(points missing or not an array\)/.test(error.message),
+      );
+      assert.equal(mock.calls.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("non-2xx detect throws generic Error", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ url }) => {
+      if (url.endsWith("/location/detect")) {
+        return jsonResponse(500, { code: "500", message: "Internal" });
+      }
+      throw new Error("pickup-points/list should not be called");
+    });
+
+    try {
+      await assert.rejects(
+        () => listPickupPoints({ city: CITY }, VALID_CREDS),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof YandexAuthError) &&
+          /location detect failed: HTTP 500/.test(error.message),
+      );
       assert.equal(mock.calls.length, 1);
     } finally {
       mock.restore();
@@ -240,26 +436,9 @@ test("rawPoint contains the full raw point object", async () => {
     );
 
     try {
-      const points = await listPickupPoints({ city: CITY }, VALID_CREDS);
-      assert.deepEqual(points[0].rawPoint, raw);
-    } finally {
-      mock.restore();
-    }
-  });
-});
-
-test("limit and offset slice correctly", async () => {
-  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
-    const mock = installFetchMock(
-      detectThenListMock({
-        listPoints: [samplePoint("0"), samplePoint("1"), samplePoint("2")],
-      }),
-    );
-
-    try {
-      const points = await listPickupPoints({ city: CITY, offset: 1, limit: 1 }, VALID_CREDS);
-      assert.equal(points.length, 1);
-      assert.equal(points[0].id, "1");
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.points[0].rawPoint, raw);
     } finally {
       mock.restore();
     }

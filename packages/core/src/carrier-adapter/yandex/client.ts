@@ -6,6 +6,7 @@ import type {
   CarrierDeliveryQuote,
   CarrierCreateOrderResult,
   CarrierListPointsInput,
+  CarrierListPointsResult,
   CarrierOffer,
   CarrierPickupPoint,
 } from "@oco/core/carrier-adapter/types";
@@ -167,7 +168,7 @@ export async function calculateQuotes(
 export async function listPickupPoints(
   input: CarrierListPointsInput,
   credentials: CarrierCredentials,
-): Promise<CarrierPickupPoint[]> {
+): Promise<CarrierListPointsResult> {
   const creds = assertYandexCredentials(credentials);
 
   const detectResponse = await yandexPost(creds, "/api/b2b/platform/location/detect", {
@@ -178,15 +179,38 @@ export async function listPickupPoints(
     throw new Error(`Yandex Delivery location detect failed: HTTP ${detectResponse.status}`);
   }
 
-  const detect = (await detectResponse.json()) as LocationDetectResponse;
-  if (detect.variants.length === 0) {
-    return [];
+  const detectRaw: unknown = await detectResponse.json();
+  const variants =
+    detectRaw !== null &&
+    typeof detectRaw === "object" &&
+    "variants" in detectRaw
+      ? (detectRaw as { variants: unknown }).variants
+      : undefined;
+  if (!Array.isArray(variants)) {
+    throw new Error(
+      "Yandex Delivery location detect failed: malformed response (variants missing or not an array)",
+    );
+  }
+  if (variants.length === 0) {
+    return { ok: false, reason: "city_not_resolved" };
   }
 
-  const geoId = detect.variants[0].geo_id;
+  const firstVariant = variants[0];
+  const geoId =
+    firstVariant !== null &&
+    typeof firstVariant === "object" &&
+    "geo_id" in firstVariant
+      ? (firstVariant as { geo_id: unknown }).geo_id
+      : undefined;
+  if (typeof geoId !== "number") {
+    throw new Error(
+      "Yandex Delivery location detect failed: malformed response (variants[0] missing usable geo_id)",
+    );
+  }
+  const resolvedGeoId: LocationDetectResponse["variants"][number]["geo_id"] = geoId;
 
   const listResponse = await yandexPost(creds, "/api/b2b/platform/pickup-points/list", {
-    geo_id: geoId,
+    geo_id: resolvedGeoId,
     type: "pickup_point",
   });
 
@@ -194,14 +218,21 @@ export async function listPickupPoints(
     throw new Error(`Yandex Delivery pickup points list failed: HTTP ${listResponse.status}`);
   }
 
-  const list = (await listResponse.json()) as { points: YandexPickupPoint[] };
-  const mapped = (list.points ?? [])
+  const listRaw: unknown = await listResponse.json();
+  const rawPoints =
+    listRaw !== null && typeof listRaw === "object" && "points" in listRaw
+      ? (listRaw as { points: unknown }).points
+      : undefined;
+  if (!Array.isArray(rawPoints)) {
+    throw new Error(
+      "Yandex Delivery pickup points list failed: malformed response (points missing or not an array)",
+    );
+  }
+  const points = (rawPoints as YandexPickupPoint[])
     .filter((point) => point.type === "pickup_point")
     .map(mapPickupPoint);
 
-  const offset = input.offset ?? 0;
-  const end = input.limit !== undefined ? offset + input.limit : undefined;
-  return mapped.slice(offset, end);
+  return { ok: true, points };
 }
 
 type YandexCreateOrderResponse = {
