@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · listPickupPointsForCompany — injected deps; per-carrier fault → status, не fail всего вызова.**
+Почему: слой без prisma/адаптеров (как submitOrder+confirm) — тесты без БД и сети.
+Один throw не должен прятать точки других; `no_adapter` остаётся в `carriers`
+(компания подключила). Сообщение провайдера наружу не едет — только status.
+Отвергли: дефолты на реальные listConnected/getAdapter; fail-fast на throw; дроп no_adapter.
 - **2026-07 · listConnectedCarriers — один findMany + decrypt; decrypt fault throws, не swallow per-row.**
 Почему: N+1 через getCarrierCredentials лишний; без orderBy merge следующего среза
 недетерминирован; тихий drop битой строки врёт «не подключено» про то, что подключено.
