@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { readSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 import { isAllowedRequestOrigin, isMutatingMethod } from "@/lib/security/csrf";
-import { nextOrderPageWithCsp, nextPageWithCsp } from "@/lib/security/csp";
+import { nextPageWithCsp } from "@/lib/security/csp";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/new-order", "/shipments"];
 
@@ -51,11 +51,6 @@ export async function middleware(request: NextRequest) {
 
   if (isAuthPage && session) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
-  // /new-order: strict base + confirmed Yandex PVZ widget hosts (after auth gate above).
-  if (pathname === "/new-order") {
-    return nextOrderPageWithCsp(request);
   }
 
   return nextPageWithCsp(request);
