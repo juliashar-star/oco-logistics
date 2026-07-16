@@ -20,6 +20,14 @@
 
 ---
 
+- **2026-07 · buildYandexOfferInput — объявленная ценность обязательна; один синтетический item «Посылка»; destination fail до адаптера.**
+Почему: `Shipment.declaredValue` (копейки) → `unitPriceRub`/`assessedCostRub` (рубли);
+дефолт 100 ₽ из `@oco/apiship` — дефект того пути, не прецедент (ценность — заявление
+продавца о своих товарах). Parcel без line-items = тот же паттерн, что
+`buildCreateOrderPayload`. Пустой pvzCode/destAddress → `no_destination` здесь, не
+YANDEX_NO_DESTINATION в адаптере. Sender — Company + `resolveSenderLocation`, не
+`User.warehouseAddress`.
+Отвергли: default declaredValue; читать warehouseAddress; копировать DEFAULT_ASSESSED_COST_RUB.
 - **2026-07 · getOffers destination — pointOutId → platform_station+self_pickup; иначе custom_location+time_interval.**
 Почему: PVZ shape подтверждён живым tst (2026-07-16); calculateQuotes сравнивает оба
 тарифа (flat pricing-calculator), а offers/create — один destination, pointOutId побеждает.
