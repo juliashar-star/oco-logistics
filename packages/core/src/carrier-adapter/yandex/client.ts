@@ -297,7 +297,24 @@ function splitRecipientName(contactName: string): { firstName: string; lastName:
   };
 }
 
-function assertCreateOrderPreconditions(input: CarrierCreateOrderInput): string {
+type YandexDestinationChoice =
+  | { kind: "pickup_point"; pointOutId: string }
+  | { kind: "address"; addressString: string };
+
+/**
+ * Destination preconditions for offers/create (and the doomed request/create stub).
+ * Old YANDEX_NO_ADDRESS lied to PVZ orders — a PVZ draft legitimately has no
+ * address, and CarrierCreateOrderInput carries no pickupType so the adapter
+ * cannot infer intent. ONLY place the destination choice is made.
+ *
+ * pointOutId wins when both set — more specific; create-draft sets destAddress
+ * only for COURIER and pvzCode for PVZ. calculateQuotes returns BOTH quotes when
+ * both inputs are set (comparison). getOffers cannot: offers/create is ONE
+ * request with ONE destination, so it must choose.
+ */
+function assertCreateOrderPreconditions(
+  input: CarrierCreateOrderInput,
+): YandexDestinationChoice {
   if (input.cod?.enabled) {
     throw new Error(
       "YANDEX_COD_NOT_SUPPORTED: cash on delivery requires partial-refusal flags not yet implemented",
@@ -312,22 +329,30 @@ function assertCreateOrderPreconditions(input: CarrierCreateOrderInput): string 
     throw new Error("YANDEX_NO_ITEMS: at least one item is required");
   }
 
+  const pointOutId = input.pointOutId?.trim();
   const addressString = input.recipient.addressString?.trim();
-  if (!addressString) {
-    throw new Error("YANDEX_NO_ADDRESS: recipient addressString is required");
+
+  if (pointOutId) {
+    return { kind: "pickup_point", pointOutId };
   }
-  return addressString;
+  if (addressString) {
+    return { kind: "address", addressString };
+  }
+  throw new Error(
+    "YANDEX_NO_DESTINATION: either a pickup point (pointOutId) or a recipient address (addressString) is required",
+  );
 }
 
 /**
  * Body shared by offers/create and the doomed request/create stub.
  * Units: dims cm, place weight_gross grams, billing_details kopecks (Math.round).
  * Phone passed as-is — caller must already supply 79xxxxxxxxx; no reformatting here.
+ * Destination comes from choice — does not re-read input.pointOutId.
  */
 function buildPlatformOrderBody(
   input: CarrierCreateOrderInput,
   creds: YandexCredentials,
-  addressString: string,
+  choice: YandexDestinationChoice,
 ): Record<string, unknown> {
   const placeBarcode = `${input.clientNumber}-1`;
   const totalWeightG = input.items.reduce(
@@ -340,19 +365,29 @@ function buildPlatformOrderBody(
 
   const { firstName, lastName } = splitRecipientName(input.recipient.contactName);
 
+  const destination =
+    choice.kind === "pickup_point"
+      ? {
+          type: "platform_station",
+          platform_station: { platform_id: choice.pointOutId },
+        }
+      : {
+          type: "custom_location",
+          custom_location: {
+            details: {
+              // Known open issue: Yandex FAQ expects comma-separated parts without postal
+              // code or apartment number — we pass recipient input as-is without stripping.
+              full_address: `${input.recipient.city}, ${choice.addressString}`,
+            },
+          },
+        };
+  const lastMilePolicy =
+    choice.kind === "pickup_point" ? "self_pickup" : "time_interval";
+
   return {
     info: { operator_request_id: input.clientNumber },
     source: { platform_station: { platform_id: creds.platformStationId } },
-    destination: {
-      type: "custom_location",
-      custom_location: {
-        details: {
-          // Known open issue: Yandex FAQ expects comma-separated parts without postal
-          // code or apartment number — we pass recipient input as-is without stripping.
-          full_address: `${input.recipient.city}, ${addressString}`,
-        },
-      },
-    },
+    destination,
     billing_info: { payment_method: "already_paid" },
     recipient_info: {
       first_name: firstName,
@@ -360,7 +395,7 @@ function buildPlatformOrderBody(
       // Assume already 79xxxxxxxxx — do not reformat in this slice.
       phone: input.recipient.phone,
     },
-    last_mile_policy: "time_interval",
+    last_mile_policy: lastMilePolicy,
     items: input.items.map((item) => ({
       count: item.quantity,
       name: item.name,
@@ -431,9 +466,9 @@ export async function getOffers(
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ): Promise<CarrierOffer[]> {
-  const addressString = assertCreateOrderPreconditions(input);
+  const choice = assertCreateOrderPreconditions(input);
   const creds = assertYandexCredentials(credentials);
-  const body = buildPlatformOrderBody(input, creds, addressString);
+  const body = buildPlatformOrderBody(input, creds, choice);
 
   const response = await yandexPost(creds, "/api/b2b/platform/offers/create", body);
   const rawText = await response.text();
@@ -542,9 +577,9 @@ export async function createOrder(
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ): Promise<CarrierCreateOrderResult> {
-  const addressString = assertCreateOrderPreconditions(input);
+  const choice = assertCreateOrderPreconditions(input);
   const creds = assertYandexCredentials(credentials);
-  const body = buildPlatformOrderBody(input, creds, addressString);
+  const body = buildPlatformOrderBody(input, creds, choice);
 
   const response = await yandexPost(creds, "/api/b2b/platform/request/create", body);
   const rawText = await response.text();

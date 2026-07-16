@@ -335,3 +335,85 @@ test("getOffers HTTP 401 throws YandexAuthError", async () => {
     }
   });
 });
+
+test("getOffers with pointOutId and no address uses platform_station + self_pickup", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawOffer(0)] }),
+    );
+
+    try {
+      const input = baseInput({
+        pointOutId: "019c6bee642d770a937e0d33b27f6467",
+        recipient: {
+          ...RECIPIENT,
+          addressString: undefined,
+        },
+      });
+      await getOffers(input, VALID_CREDS);
+
+      const body = mock.calls[0].body;
+      assert.deepEqual(body.destination, {
+        type: "platform_station",
+        platform_station: { platform_id: "019c6bee642d770a937e0d33b27f6467" },
+      });
+      assert.equal(body.last_mile_policy, "self_pickup");
+      assert.equal("custom_location" in body.destination, false);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers with both pointOutId and address: pointOutId wins, no custom_location", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawOffer(0)] }),
+    );
+
+    try {
+      await getOffers(
+        baseInput({ pointOutId: "019c6bee642d770a937e0d33b27f6467" }),
+        VALID_CREDS,
+      );
+
+      const body = mock.calls[0].body;
+      assert.deepEqual(body.destination, {
+        type: "platform_station",
+        platform_station: { platform_id: "019c6bee642d770a937e0d33b27f6467" },
+      });
+      assert.equal(body.last_mile_policy, "self_pickup");
+      assert.equal(body.destination.type, "platform_station");
+      assert.equal("custom_location" in body.destination, false);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers with neither pointOutId nor address throws YANDEX_NO_DESTINATION", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    let fetchCalled = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called");
+    };
+
+    try {
+      await assert.rejects(
+        () =>
+          getOffers(
+            baseInput({
+              recipient: { ...RECIPIENT, addressString: undefined },
+            }),
+            VALID_CREDS,
+          ),
+        /YANDEX_NO_DESTINATION/,
+      );
+      assert.equal(fetchCalled, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

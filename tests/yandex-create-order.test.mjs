@@ -270,7 +270,7 @@ test("empty items throws YANDEX_NO_ITEMS and fetch is not called", async () => {
   });
 });
 
-test("recipient without addressString throws YANDEX_NO_ADDRESS", async () => {
+test("neither pointOutId nor addressString throws YANDEX_NO_DESTINATION", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     let fetchCalled = false;
     const originalFetch = globalThis.fetch;
@@ -289,7 +289,7 @@ test("recipient without addressString throws YANDEX_NO_ADDRESS", async () => {
 
       await assert.rejects(
         () => createOrder(input, VALID_CREDS),
-        /YANDEX_NO_ADDRESS/,
+        /YANDEX_NO_DESTINATION/,
       );
       assert.equal(fetchCalled, false);
     } finally {

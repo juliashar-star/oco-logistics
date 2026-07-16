@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · getOffers destination — pointOutId → platform_station+self_pickup; иначе custom_location+time_interval.**
+Почему: PVZ shape подтверждён живым tst (2026-07-16); calculateQuotes сравнивает оба
+тарифа (flat pricing-calculator), а offers/create — один destination, pointOutId побеждает.
+YANDEX_NO_ADDRESS врал PVZ-черновику без адреса → YANDEX_NO_DESTINATION.
+Отвергли: reuse flat `{platform_station_id}` из calculateQuotes; требовать address при PVZ.
 - **2026-07 · Pickup-points API — `/api/shipments/pickup-points` + явный DTO-mapper; не трогать `/points`.**
 Почему: live APIShip route остаётся; новый path для прямых адаптеров. Ответ строит
 `toPickupPointsResponse` с явными полями (без spread) — `rawPoint`/`code` не утекают;
