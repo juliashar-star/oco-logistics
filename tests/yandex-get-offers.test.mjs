@@ -182,17 +182,19 @@ test("getOffers happy path: 11 offers map to CarrierOffer with pricing_total", a
     try {
       const result = await getOffers(baseInput(), VALID_CREDS);
 
-      assert.equal(result.length, 11);
-      assert.ok(result.every((o) => o.offerId.length > 0));
-      assert.equal(result[0].offerId, "offer-1");
-      assert.equal(result[0].expiresAt, "2026-07-13T12:15:00.000000Z");
-      assert.equal(result[0].deliveryIntervalFrom, "2026-07-14T06:00:00.000000Z");
-      assert.equal(result[0].deliveryIntervalTo, "2026-07-14T15:00:00.000000Z");
-      assert.equal(result[0].pickupIntervalFrom, "2026-07-13T06:00:00.000000Z");
-      assert.equal(result[0].pickupIntervalTo, "2026-07-13T15:00:00.000000Z");
-      assert.equal(result[0].priceRub, 374.54);
-      assert.deepEqual(result[0].rawOffer, rawOffers[0]);
-      assert.equal(result[10].offerId, "offer-11");
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.offers.length, 11);
+      assert.ok(result.offers.every((o) => o.offerId.length > 0));
+      assert.equal(result.offers[0].offerId, "offer-1");
+      assert.equal(result.offers[0].expiresAt, "2026-07-13T12:15:00.000000Z");
+      assert.equal(result.offers[0].deliveryIntervalFrom, "2026-07-14T06:00:00.000000Z");
+      assert.equal(result.offers[0].deliveryIntervalTo, "2026-07-14T15:00:00.000000Z");
+      assert.equal(result.offers[0].pickupIntervalFrom, "2026-07-13T06:00:00.000000Z");
+      assert.equal(result.offers[0].pickupIntervalTo, "2026-07-13T15:00:00.000000Z");
+      assert.equal(result.offers[0].priceRub, 374.54);
+      assert.deepEqual(result.offers[0].rawOffer, rawOffers[0]);
+      assert.equal(result.offers[10].offerId, "offer-11");
       assert.equal(
         mock.calls[0].url,
         `${TEST_BASE_URL}/api/b2b/platform/offers/create`,
@@ -219,13 +221,28 @@ test("getOffers request body matches offers/create expected shape", async () => 
   });
 });
 
-test("getOffers empty offers array returns [] without throw", async () => {
+test("getOffers empty offers array returns { ok:true, offers:[] } without throw", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(() => jsonResponse(200, { offers: [] }));
 
     try {
       const result = await getOffers(baseInput(), VALID_CREDS);
-      assert.deepEqual(result, []);
+      assert.deepEqual(result, { ok: true, offers: [] });
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers 200 without offers key throws malformed", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() => jsonResponse(200, { request_id: "x" }));
+
+    try {
+      await assert.rejects(
+        () => getOffers(baseInput(), VALID_CREDS),
+        /malformed response \(offers missing or not an array\)/,
+      );
     } finally {
       mock.restore();
     }
@@ -298,18 +315,31 @@ test("getOffers empty items throws YANDEX_NO_ITEMS and fetch is not called", asy
   });
 });
 
-test("getOffers HTTP 400 no_delivery_options throws with code and message", async () => {
+test("getOffers no_delivery_options returns { ok:false, reason:\"no_delivery_options\" }", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const raw = { code: "no_delivery_options", message: "No delivery options available" };
+    const mock = installFetchMock(() => jsonResponse(400, raw));
+
+    try {
+      const result = await getOffers(baseInput(), VALID_CREDS);
+      assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers HTTP 400 without no_delivery_options code still throws", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const raw = { code: "some_other_error", message: "boom" };
     const mock = installFetchMock(() => jsonResponse(400, raw));
 
     try {
       await assert.rejects(
         () => getOffers(baseInput(), VALID_CREDS),
         (error) => {
-          assert.match(error.message, /400/);
-          assert.match(error.message, /no_delivery_options/);
-          assert.match(error.message, /No delivery options available/);
+          assert.match(error.message, /Yandex Delivery get offers failed: HTTP 400/);
+          assert.match(error.message, /some_other_error/);
           return true;
         },
       );

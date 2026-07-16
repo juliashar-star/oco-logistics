@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · getOffers → CarrierOffersResult; no_delivery_options is ok:false, not throw.**
+Почему: живой tst (2026-07-16) — валидная точка/адрес без сервиса Яндекса; UI должен
+сказать «доставка сюда недоступна», не «сломалось». Тот же дискриминант, что S0
+`listPickupPoints` / `city_not_resolved`. Ключ — provider `code`, не HTTP status.
+`offers: []` остаётся ok:true; отсутствие `offers` — malformed throw.
+Отвергли: throw на no_delivery_options; `offers ?? []` на malformed 200.
 - **2026-07 · buildYandexOfferInput — объявленная ценность обязательна; один синтетический item «Посылка»; destination fail до адаптера.**
 Почему: `Shipment.declaredValue` (копейки) → `unitPriceRub`/`assessedCostRub` (рубли);
 дефолт 100 ₽ из `@oco/apiship` — дефект того пути, не прецедент (ценность — заявление

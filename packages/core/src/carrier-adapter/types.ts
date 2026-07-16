@@ -74,6 +74,17 @@ export type CarrierListPointsResult =
     }
   | { ok: false; reason: "city_not_resolved" };
 
+/**
+ * Result of fetching priced offers (offers/create).
+ * - ok:true — offers may be empty (served destination, zero slots).
+ * - ok:false reason:"no_delivery_options" — normal case: provider has no
+ *   delivery for this destination/interval. Faults (auth/transport/malformed)
+ *   throw instead.
+ */
+export type CarrierOffersResult =
+  | { ok: true; offers: CarrierOffer[] }
+  | { ok: false; reason: "no_delivery_options" };
+
 export type CarrierDeliveryQuote = {
   providerKey: string; // kept: same aggregation reason as above
   tariffId: string; // was number in APIShip's DeliveryQuote
@@ -192,7 +203,7 @@ export interface CarrierAdapter {
   getOffers(
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
-  ): Promise<CarrierOffer[]>;
+  ): Promise<CarrierOffersResult>;
   confirmOffer(
     offerId: string,
     credentials: CarrierCredentials,

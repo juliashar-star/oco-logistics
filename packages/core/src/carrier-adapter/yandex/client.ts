@@ -8,6 +8,7 @@ import type {
   CarrierListPointsInput,
   CarrierListPointsResult,
   CarrierOffer,
+  CarrierOffersResult,
   CarrierPickupPoint,
 } from "@oco/core/carrier-adapter/types";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
@@ -280,10 +281,6 @@ type YandexOffer = {
   offer_details?: YandexOfferDetails;
 };
 
-type YandexOffersCreateResponse = {
-  offers?: YandexOffer[];
-};
-
 /** Lossy heuristic: Yandex requires separate first/last name; we only have one contactName string. */
 function splitRecipientName(contactName: string): { firstName: string; lastName: string } {
   const trimmed = contactName.trim();
@@ -459,13 +456,16 @@ function mapYandexOffer(raw: YandexOffer): CarrierOffer | null {
 
 /**
  * POST /offers/create — first half of the real two-phase order flow.
- * Returns [] when the provider responds 200 with an empty offers list.
- * Error statuses (e.g. no_delivery_options) throw with the raw {code,message} body.
+ * no_delivery_options is a returned result (a real answer: destination has no
+ * Yandex service), not a throw — same shape as listPickupPoints' city_not_resolved.
+ * Other error statuses throw with the raw body text. A malformed 200 body
+ * (offers missing or not an array) throws; a legitimate offers: [] is
+ * { ok: true, offers: [] }.
  */
 export async function getOffers(
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
-): Promise<CarrierOffer[]> {
+): Promise<CarrierOffersResult> {
   const choice = assertCreateOrderPreconditions(input);
   const creds = assertYandexCredentials(credentials);
   const body = buildPlatformOrderBody(input, creds, choice);
@@ -479,15 +479,35 @@ export async function getOffers(
     raw = rawText;
   }
 
+  // Key on the provider CODE, not the HTTP status — that is the fact Yandex
+  // is stating; the status is incidental.
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "code" in raw &&
+    (raw as { code: unknown }).code === "no_delivery_options"
+  ) {
+    return { ok: false, reason: "no_delivery_options" };
+  }
+
   if (response.status !== 200) {
     throw new Error(`Yandex Delivery get offers failed: HTTP ${response.status} ${rawText}`);
   }
 
-  const data = raw as YandexOffersCreateResponse;
-  const offers = data.offers ?? [];
-  return offers
+  const offersRaw =
+    raw !== null && typeof raw === "object" && "offers" in raw
+      ? (raw as { offers: unknown }).offers
+      : undefined;
+  if (!Array.isArray(offersRaw)) {
+    throw new Error(
+      "Yandex Delivery get offers failed: malformed response (offers missing or not an array)",
+    );
+  }
+
+  const offers = (offersRaw as YandexOffer[])
     .map(mapYandexOffer)
     .filter((offer): offer is CarrierOffer => offer !== null);
+  return { ok: true, offers };
 }
 
 /**
