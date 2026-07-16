@@ -150,6 +150,14 @@ model Shipment {
   selectedOfferId        String?
   selectedOfferExpiresAt DateTime?
   submittingAt           DateTime?
+  // Holds the CarrierOffer[] from the last getOffers call. Yandex returns the
+  // delivery price ONLY in the offer — after offers/confirm it is unrecoverable
+  // from any endpoint (request/info carries the interval but
+  // billing_info.delivery_cost is the collect-from-recipient amount, zero for
+  // already_paid). Kept after submit on purpose: "what was quoted" is Carrier
+  // Score's input. PD-free — a Yandex offer carries only
+  // offer_id/expires_at/intervals/pricing/station_id.
+  quotedOffers           Json?
 
   status          ShipmentStatus  @default(DRAFT)
   legalBasisConfirmed Boolean     @default(false)
