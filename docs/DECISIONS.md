@@ -20,6 +20,13 @@
 
 ---
 
+- **2026-07 · POST /api/shipments/[id]/offers — wiring + toOffersResponse; rawOffer не в браузер.**
+Почему: маршрут только склеивает decrypt → buildYandexOfferInput → getOffers →
+`quotedOffers`; гарантия «не утечёт rawOffer» — в чистом `toOffersResponse`
+(явные поля, как `toPickupPointsResponse`). `no_delivery_options` → HTTP 200
+`status:"no_delivery_options"`. Сообщение throw'а getOffers (сырое тело
+провайдера) наружу не едет. Только DRAFT; isAnonymized → 409 до decrypt-как-PII.
+Отвергли: route-тесты; `{...offer}`; пробрасывать error.message в JSON.
 - **2026-07 · getOffers → CarrierOffersResult; no_delivery_options is ok:false, not throw.**
 Почему: живой tst (2026-07-16) — валидная точка/адрес без сервиса Яндекса; UI должен
 сказать «доставка сюда недоступна», не «сломалось». Тот же дискриминант, что S0
