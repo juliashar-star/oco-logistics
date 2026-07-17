@@ -201,6 +201,10 @@ export type CarrierCancelResult = {
   reason?: string;
 };
 
+export type CarrierCancelOrderResult =
+  | { ok: true; result: CarrierCancelResult }
+  | { ok: false; reason: "order_not_found" };
+
 export interface CarrierAdapter {
   providerKey: string;
   calculateQuotes(

@@ -1,5 +1,6 @@
 import type {
   CarrierCalculateInput,
+  CarrierCancelOrderResult,
   CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
@@ -687,6 +688,92 @@ export async function getOrderHistory(
     .filter((event): event is CarrierTrackingEvent => event !== null);
 
   return { ok: true, events };
+}
+
+/**
+ * POST /request/cancel {"request_id"} — ask Yandex to start cancelling an order.
+ *
+ * Cancellation does NOT cancel. It STARTS cancellation. After a successful 200,
+ * state.status / providerStatus typically stays "CREATED" (verified live
+ * 2026-07-16/17; research doc). Nothing in this API tells us whether the order
+ * was actually cancelled or will still be delivered.
+ *
+ * `accepted: true` on HTTP 200 means ONLY that Yandex took the cancel request —
+ * it is NOT cancelled. Do not read accepted as a terminal outcome.
+ *
+ * customer_order_not_found (keyed on CODE, not HTTP status) →
+ * { ok: false, reason: "order_not_found" }. Other non-200 → throw.
+ * 200 without a string `status` → throw malformed.
+ */
+export async function cancelOrder(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierCancelOrderResult> {
+  const creds = assertYandexCredentials(credentials);
+
+  const response = await yandexPost(creds, "/api/b2b/platform/request/cancel", {
+    request_id: providerOrderId,
+  });
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  // Key on the provider CODE, not the HTTP status — same as getOrderHistory /
+  // getOffers no_delivery_options.
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "code" in raw &&
+    (raw as { code: unknown }).code === "customer_order_not_found"
+  ) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  if (response.status !== 200) {
+    throw new Error(
+      `Yandex Delivery cancel order failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  const providerStatus =
+    raw !== null &&
+    typeof raw === "object" &&
+    "status" in raw &&
+    typeof (raw as { status: unknown }).status === "string"
+      ? (raw as { status: string }).status
+      : undefined;
+  if (providerStatus === undefined) {
+    throw new Error(
+      "Yandex Delivery cancel order failed: malformed response (status missing or not a string)",
+    );
+  }
+
+  // accepted is true because HTTP 200 means Yandex accepted the cancel
+  // *request* — not that the order is cancelled. The order may still be
+  // delivered; nothing in this API will ever tell us which happened.
+  const result: {
+    accepted: true;
+    providerStatus: string;
+    reason?: string;
+  } = {
+    accepted: true,
+    providerStatus,
+  };
+
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "reason" in raw &&
+    typeof (raw as { reason: unknown }).reason === "string"
+  ) {
+    result.reason = (raw as { reason: string }).reason;
+  }
+
+  return { ok: true, result };
 }
 
 /**

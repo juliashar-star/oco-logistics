@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · cancelOrder — accepted≠cancelled; customer_order_not_found ok:false; status required.**
+Почему: request/cancel только СТАРТУЕТ отмену; state.status остаётся CREATED
+(пробы 2026-07-16/17). CarrierCancelResult.accepted честен; обёртка
+CarrierCancelOrderResult как getOrderHistory. Без status — malformed, не
+молчаливый accepted. CODE-keyed not_found.
+Отвергли: {canceled:boolean}; HTTP-status key; accepted без providerStatus.
 - **2026-07 · listPickupPoints — no type filter; terminals (постаматы) returned with PVZ.**
 Почему: prod Москва 2026-07-17 — filter type=pickup_point спрятал 544/3550
 (15%), все type=terminal «Постамат Яндекс Маркет». Постамат — пункт выдачи,
