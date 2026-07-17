@@ -112,6 +112,10 @@ export async function submitOrder(
           providerKey: PROVIDER_KEY_YANDEX,
           selectedOfferId: offer.offerId,
           selectedOfferExpiresAt: new Date(offer.expiresAt),
+          // plannedCost is kopecks (docs/DATABASE.md; every reader divides by 100);
+          // CarrierOffer.priceRub is rubles — raw would show 273.28 ₽ as 2,73 ₽.
+          // plannedDeliveryDays left null: Yandex gives a date, not a day count.
+          plannedCost: Math.round(offer.priceRub * 100),
         },
       });
       return { ok: true, requestId };

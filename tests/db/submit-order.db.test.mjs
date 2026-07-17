@@ -28,7 +28,7 @@ const OFFER = {
   deliveryIntervalTo: "2026-07-14T14:00:00+03:00",
   pickupIntervalFrom: "2026-07-13T16:00:00+03:00",
   pickupIntervalTo: "2026-07-13T18:00:00+03:00",
-  priceRub: 350,
+  priceRub: 273.28,
 };
 
 const CREDS = { platformStationId: "station-1", token: "test-token" };
@@ -172,6 +172,8 @@ describe("submitOrder", { concurrency: false }, () => {
       row.selectedOfferExpiresAt.toISOString(),
       new Date(OFFER.expiresAt).toISOString(),
     );
+    assert.equal(row.plannedCost, 27328);
+    assert.notEqual(row.plannedCost, 273);
   });
 
   test("(iii) YandexOfferExpiredError → DRAFT, submittingAt cleared", async () => {
