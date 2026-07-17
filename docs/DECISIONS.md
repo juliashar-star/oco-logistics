@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · POST /api/shipments/[id]/submit — offerId validated against quotedOffers only.**
+Почему: браузер шлёт только id; tampered price/date из тела не попадут в
+plannedCost/plannedDeliveryDate. captureForSubmit — единственный DRAFT-gate
+(без pre-check status). write-after-confirm отвечает «создан у перевозчика,
+не сохранился у нас» + requestId. Provider raw text наружу не едет.
+Отвергли: offer object в body; status pre-check; DTO-mapper (нечего strip'ать).
 - **2026-07 · POST /api/shipments/[id]/offers — wiring + toOffersResponse; rawOffer не в браузер.**
 Почему: маршрут только склеивает decrypt → buildYandexOfferInput → getOffers →
 `quotedOffers`; гарантия «не утечёт rawOffer» — в чистом `toOffersResponse`
