@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · listPickupPoints — no type filter; terminals (постаматы) returned with PVZ.**
+Почему: prod Москва 2026-07-17 — filter type=pickup_point спрятал 544/3550
+(15%), все type=terminal «Постамат Яндекс Маркет». Постамат — пункт выдачи,
+не sorting centre; имя провайдера уже отличает. Без type в теле list.
+Отвергли: allow-list pickup_point+terminal; поле kind на CarrierPickupPoint.
 - **2026-07 · POST /api/shipments/sync-yandex-statuses — separate from APIShip sync-statuses; YandexAuthError→400.**
 Почему: один маршрут с двумя провайдерами дал бы 500 на Yandex-fault после
 успешного APIShip. Сливаются, когда форма уйдёт на offers-flow. Auth — 400

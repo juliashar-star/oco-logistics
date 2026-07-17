@@ -79,7 +79,7 @@ function samplePoint(id, overrides = {}) {
 
 function detectThenListMock({
   detectResponse = { variants: [{ geo_id: 213, address: CITY }] },
-  listBody = { geo_id: 213, type: "pickup_point" },
+  listBody = { geo_id: 213 },
   detectStatus = 200,
   listStatus = 200,
   listPoints,
@@ -140,20 +140,24 @@ test("detect and list request bodies are exact", async () => {
 
       assert.equal(mock.calls.length, 2);
       assert.deepEqual(mock.calls[0].body, { location: CITY });
-      assert.deepEqual(mock.calls[1].body, { geo_id: 213, type: "pickup_point" });
+      assert.deepEqual(mock.calls[1].body, { geo_id: 213 });
+      assert.equal(Object.prototype.hasOwnProperty.call(mock.calls[1].body, "type"), false);
     } finally {
       mock.restore();
     }
   });
 });
 
-test("terminal entries are filtered out defensively", async () => {
+test("terminal entries are kept with pickup_point entries in provider order", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(
       detectThenListMock({
         listPoints: [
           samplePoint("1"),
-          samplePoint("terminal-1", { type: "terminal", name: "Terminal" }),
+          samplePoint("terminal-1", {
+            type: "terminal",
+            name: "Постамат Яндекс Маркет",
+          }),
         ],
       }),
     );
@@ -162,8 +166,41 @@ test("terminal entries are filtered out defensively", async () => {
       const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
       assert.equal(result.ok, true);
       assert.deepEqual(result.resolvedLocation, { id: "213", address: CITY });
-      assert.equal(result.points.length, 1);
+      assert.equal(result.points.length, 2);
       assert.equal(result.points[0].id, "1");
+      assert.equal(result.points[1].id, "terminal-1");
+      assert.equal(result.points[1].name, "Постамат Яндекс Маркет");
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("mixed pickup_point and terminal returns both; list body has geo_id and no type", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const pickup = samplePoint("pvz-1", {
+      name: "Пункт выдачи заказов Яндекс Маркета",
+    });
+    const terminal = samplePoint("term-1", {
+      type: "terminal",
+      name: "Постамат Яндекс Маркет",
+    });
+    const mock = installFetchMock(
+      detectThenListMock({
+        listPoints: [pickup, terminal],
+      }),
+    );
+
+    try {
+      const result = await listPickupPoints({ city: CITY }, VALID_CREDS);
+      assert.equal(result.ok, true);
+      assert.equal(result.points.length, 2);
+      assert.equal(result.points[0].id, "pvz-1");
+      assert.equal(result.points[0].name, "Пункт выдачи заказов Яндекс Маркета");
+      assert.equal(result.points[1].id, "term-1");
+      assert.equal(result.points[1].name, "Постамат Яндекс Маркет");
+      assert.deepEqual(mock.calls[1].body, { geo_id: 213 });
+      assert.equal("type" in mock.calls[1].body, false);
     } finally {
       mock.restore();
     }

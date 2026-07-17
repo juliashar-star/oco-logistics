@@ -245,9 +245,13 @@ export async function listPickupPoints(
   const resolvedLocationAddress: LocationDetectResponse["variants"][number]["address"] =
     resolvedAddress;
 
+  // No type filter: production Moscow returned 544 of 3550 points (15%) as
+  // type "terminal" — all «Постамат Яндекс Маркет». Parcel lockers are a real
+  // collection destination the seller should be able to choose; not every item
+  // needs trying on and not every buyer wants to. The provider's name already
+  // distinguishes them, so nothing labels them here.
   const listResponse = await yandexPost(creds, "/api/b2b/platform/pickup-points/list", {
     geo_id: resolvedGeoId,
-    type: "pickup_point",
   });
 
   if (!listResponse.ok) {
@@ -264,9 +268,7 @@ export async function listPickupPoints(
       "Yandex Delivery pickup points list failed: malformed response (points missing or not an array)",
     );
   }
-  const points = (rawPoints as YandexPickupPoint[])
-    .filter((point) => point.type === "pickup_point")
-    .map(mapPickupPoint);
+  const points = (rawPoints as YandexPickupPoint[]).map(mapPickupPoint);
 
   return {
     ok: true,
