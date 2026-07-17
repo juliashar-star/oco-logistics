@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · getOrderHistory — ok/result for empty+not_found; GET helper; no CarrierAdapter.getOrderStatus rewrite.**
+Почему: probe 2026-07-17 — state_history пуст ~10с после confirm (норма);
+customer_order_not_found по CODE (как no_delivery_options). History нужен
+целиком (TrackingEvent), а интерфейсный getOrderStatus отдаёт один статус —
+debt не раздуваем. yandexGet рядом с yandexPost, не переделка POST.
+Отвергли: empty→throw; ключ на HTTP status; вешать на CarrierAdapter сейчас.
 - **2026-07 · mapYandexStatusToShipmentStatus — Yandex DRAFT→null; CANCELLED (2L)→CANCELED; DETAIL statuses stay null.**
 Почему: Yandex DRAFT = pre-confirm «заказ создан»; маппинг в наш DRAFT откатил бы
 уже подтверждённый заказ и открыл duplicate через three-tier guard. Их CANCELLED

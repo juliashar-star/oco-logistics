@@ -175,6 +175,21 @@ export type CarrierConfirmResult = {
   rawResponse: unknown;
 };
 
+export type CarrierTrackingEvent = {
+  /** Provider's own status code, unmapped. */
+  statusCode: string;
+  /** Provider's human-readable description — Yandex supplies it ready-made. */
+  statusText: string;
+  /** ISO timestamp. */
+  eventAt: string;
+  /** Full raw provider entry (data asset). */
+  raw?: unknown;
+};
+
+export type CarrierOrderHistoryResult =
+  | { ok: true; events: CarrierTrackingEvent[] }
+  | { ok: false; reason: "order_not_found" };
+
 export type CarrierCancelResult = {
   /** Provider accepted the cancellation *request*. For Yandex this is HTTP 200 on
    *  request/cancel; it does NOT mean the order is cancelled — cancellation is

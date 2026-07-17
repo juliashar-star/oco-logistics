@@ -9,7 +9,9 @@ import type {
   CarrierListPointsResult,
   CarrierOffer,
   CarrierOffersResult,
+  CarrierOrderHistoryResult,
   CarrierPickupPoint,
+  CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
 
@@ -59,6 +61,25 @@ async function yandexPost(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new YandexAuthError(`Yandex Delivery auth failed: HTTP ${response.status}`);
+  }
+
+  return response;
+}
+
+/** GET counterpart to yandexPost — same auth throw on 401/403. Not reshaped from POST. */
+async function yandexGet(
+  creds: YandexCredentials,
+  pathWithQuery: string,
+): Promise<Response> {
+  const response = await fetch(`${getBaseUrl()}${pathWithQuery}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${creds.token}`,
+    },
   });
 
   if (response.status === 401 || response.status === 403) {
@@ -572,6 +593,98 @@ export async function confirmOffer(
   }
 
   return { requestId, rawResponse: raw };
+}
+
+type YandexHistoryEntry = {
+  status?: unknown;
+  description?: unknown;
+  timestamp?: unknown;
+  timestamp_utc?: unknown;
+};
+
+/**
+ * Map one state_history entry. Missing status or timestamp_utc → null (skip),
+ * same as mapYandexOffer skipping an offer without offer_id.
+ */
+function mapYandexHistoryEntry(raw: YandexHistoryEntry): CarrierTrackingEvent | null {
+  const statusCode =
+    typeof raw.status === "string" ? raw.status.trim() : "";
+  const eventAt =
+    typeof raw.timestamp_utc === "string" ? raw.timestamp_utc.trim() : "";
+  if (!statusCode || !eventAt) {
+    return null;
+  }
+  const statusText =
+    typeof raw.description === "string" ? raw.description : "";
+  return {
+    statusCode,
+    statusText,
+    eventAt,
+    raw,
+  };
+}
+
+/**
+ * GET /request/history?request_id= — full status timeline for one order.
+ *
+ * state_history is empty until Yandex fills the first status asynchronously
+ * (~10s after offers/confirm). An empty list is normal, not an error —
+ * returns { ok: true, events: [] }.
+ *
+ * customer_order_not_found (keyed on CODE, not HTTP status) →
+ * { ok: false, reason: "order_not_found" }. Other non-200 → throw.
+ * state_history missing or not an array → throw malformed.
+ * Does not map to ShipmentStatus — caller maps via mapYandexStatusToShipmentStatus.
+ */
+export async function getOrderHistory(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierOrderHistoryResult> {
+  const creds = assertYandexCredentials(credentials);
+  const path =
+    `/api/b2b/platform/request/history?request_id=${encodeURIComponent(providerOrderId)}`;
+
+  const response = await yandexGet(creds, path);
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  // Key on the provider CODE, not the HTTP status — same as getOffers /
+  // no_delivery_options.
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "code" in raw &&
+    (raw as { code: unknown }).code === "customer_order_not_found"
+  ) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  if (response.status !== 200) {
+    throw new Error(
+      `Yandex Delivery get order history failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  const historyRaw =
+    raw !== null && typeof raw === "object" && "state_history" in raw
+      ? (raw as { state_history: unknown }).state_history
+      : undefined;
+  if (!Array.isArray(historyRaw)) {
+    throw new Error(
+      "Yandex Delivery get order history failed: malformed response (state_history missing or not an array)",
+    );
+  }
+
+  const events = (historyRaw as YandexHistoryEntry[])
+    .map(mapYandexHistoryEntry)
+    .filter((event): event is CarrierTrackingEvent => event !== null);
+
+  return { ok: true, events };
 }
 
 /**
