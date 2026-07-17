@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · POST /api/shipments/[id]/cancel — accepted≠CANCELED; TrackingEvent only; not_found leaves row.**
+Почему: cancel стартует отмену, не завершает; писать CANCELED — та же ложь,
+от которой ушли с CarrierCancelResult. Event в словах Яндекса
+(cancellation_started); sync мапит его в null. order_not_found — наша
+inconsistency. requireEmailVerified как у submit.
+Отвергли: status→CANCELED; менять адаптер ради description; route-тесты.
 - **2026-07 · cancelOrder — accepted≠cancelled; customer_order_not_found ok:false; status required.**
 Почему: request/cancel только СТАРТУЕТ отмену; state.status остаётся CREATED
 (пробы 2026-07-16/17). CarrierCancelResult.accepted честен; обёртка

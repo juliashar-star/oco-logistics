@@ -199,6 +199,7 @@ export type CarrierCancelResult = {
    *  (e.g. Yandex "CREATED"). Empty string if the provider returned none. */
   providerStatus: string;
   reason?: string;
+  description?: string;
 };
 
 export type CarrierCancelOrderResult =

@@ -63,7 +63,7 @@ function installFetchMock(handler) {
 
 // NEW FILE — all tests below are ADD.
 
-test("cancelOrder 200 with real body maps accepted + CREATED + reason", async () => {
+test("cancelOrder 200 with real body maps accepted + CREATED + reason + description", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(() =>
       jsonResponse(200, {
@@ -81,6 +81,7 @@ test("cancelOrder 200 with real body maps accepted + CREATED + reason", async ()
           accepted: true,
           providerStatus: "CREATED",
           reason: "cancellation_started",
+          description: "Заявка создана; заказ отменяется",
         },
       });
       assert.equal(mock.calls.length, 1);
@@ -90,6 +91,32 @@ test("cancelOrder 200 with real body maps accepted + CREATED + reason", async ()
         `${TEST_BASE_URL}/api/b2b/platform/request/cancel`,
       );
       assert.deepEqual(mock.calls[0].body, { request_id: REQUEST_ID });
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("cancelOrder 200 without description omits it and still accepts", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, {
+        status: "CREATED",
+        reason: "cancellation_started",
+      }),
+    );
+
+    try {
+      const result = await cancelOrder(REQUEST_ID, VALID_CREDS);
+      assert.deepEqual(result, {
+        ok: true,
+        result: {
+          accepted: true,
+          providerStatus: "CREATED",
+          reason: "cancellation_started",
+        },
+      });
+      assert.equal("description" in result.result, false);
     } finally {
       mock.restore();
     }

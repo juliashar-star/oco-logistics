@@ -759,6 +759,7 @@ export async function cancelOrder(
     accepted: true;
     providerStatus: string;
     reason?: string;
+    description?: string;
   } = {
     accepted: true,
     providerStatus,
@@ -771,6 +772,16 @@ export async function cancelOrder(
     typeof (raw as { reason: unknown }).reason === "string"
   ) {
     result.reason = (raw as { reason: string }).reason;
+  }
+
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "description" in raw &&
+    typeof (raw as { description: unknown }).description === "string" &&
+    (raw as { description: string }).description.length > 0
+  ) {
+    result.description = (raw as { description: string }).description;
   }
 
   return { ok: true, result };
