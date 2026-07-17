@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · syncYandexShipmentStatuses — last NON-NULL mapped event is current; inject getHistory; not_found leaves row.**
+Почему: history может кончаться DETAIL (intervals updated → null); брать
+последний entry откатил бы IN_TRANSIT в CREATED. getHistory инжектится
+(как confirm у submitOrder) — db-тесты без сети. order_not_found — наша
+inconsistency, не сигнал о заказе. Faults (auth/malformed) пробрасываются.
+Отвергли: last-entry-wins; глобальный prisma singleton; silent skip на throw.
 - **2026-07 · getOrderHistory — ok/result for empty+not_found; GET helper; no CarrierAdapter.getOrderStatus rewrite.**
 Почему: probe 2026-07-17 — state_history пуст ~10с после confirm (норма);
 customer_order_not_found по CODE (как no_delivery_options). History нужен
