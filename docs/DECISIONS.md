@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · mapYandexStatusToShipmentStatus — Yandex DRAFT→null; CANCELLED (2L)→CANCELED; DETAIL statuses stay null.**
+Почему: Yandex DRAFT = pre-confirm «заказ создан»; маппинг в наш DRAFT откатил бы
+уже подтверждённый заказ и открыл duplicate через three-tier guard. Их CANCELLED
+с двумя L — иначе silent no-op. DETAIL (storage expired, code received, intervals
+updated) не двигают coarse status — как unknown у map-apiship-status.
+Отвергли: DRAFT→DRAFT; CANCELED (наш spelling) как ключ; DETAIL→PROBLEM/AT_PVZ.
 - **2026-07 · POST /api/shipments/[id]/submit — offerId validated against quotedOffers only.**
 Почему: браузер шлёт только id; tampered price/date из тела не попадут в
 plannedCost/plannedDeliveryDate. captureForSubmit — единственный DRAFT-gate
