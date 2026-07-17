@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · POST /api/shipments/sync-yandex-statuses — separate from APIShip sync-statuses; YandexAuthError→400.**
+Почему: один маршрут с двумя провайдерами дал бы 500 на Yandex-fault после
+успешного APIShip. Сливаются, когда форма уйдёт на offers-flow. Auth — 400
+(токен продавца), прочее — 500 без error.message (сырое тело провайдера).
+Отвергли: расширение live sync-statuses; DTO-mapper (три числа); route-тесты.
 - **2026-07 · syncYandexShipmentStatuses — last NON-NULL mapped event is current; inject getHistory; not_found leaves row.**
 Почему: history может кончаться DETAIL (intervals updated → null); брать
 последний entry откатил бы IN_TRANSIT в CREATED. getHistory инжектится

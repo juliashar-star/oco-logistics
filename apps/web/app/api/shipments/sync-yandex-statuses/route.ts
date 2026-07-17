@@ -1,0 +1,39 @@
+import { NextResponse } from "next/server";
+import {
+  YandexAuthError,
+  getOrderHistory,
+} from "@oco/core/carrier-adapter/yandex/client";
+import { withAuth } from "@/lib/auth/with-auth";
+import { prisma } from "@/lib/db";
+import { syncYandexShipmentStatuses } from "@/lib/shipments/sync-yandex-statuses";
+
+// Separate from POST /api/shipments/sync-statuses (APIShip): appending a Yandex
+// call there would let a Yandex fault 500 the whole request including APIShip
+// work that already succeeded — a regression on the live path. They merge when
+// the form switches to the offers flow.
+
+export const POST = withAuth(async (request, user) => {
+  try {
+    const result = await syncYandexShipmentStatuses(prisma, user.companyId, {
+      getHistory: getOrderHistory,
+    });
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof YandexAuthError) {
+      return NextResponse.json(
+        {
+          error:
+            "Не удалось авторизоваться в Яндекс Доставке. Проверьте подключение.",
+        },
+        { status: 400 },
+      );
+    }
+    // Never forward error.message — getOrderHistory interpolates the provider
+    // raw body into its throw.
+    console.error("[shipments/sync-yandex-statuses] sync failed", error);
+    return NextResponse.json(
+      { error: "Не удалось обновить статусы. Попробуйте позже." },
+      { status: 500 },
+    );
+  }
+});
