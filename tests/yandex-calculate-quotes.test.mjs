@@ -79,15 +79,16 @@ test("both address and pointOutId present returns 2 quotes with correct mapping"
     });
 
     try {
-      const quotes = await calculateQuotes(
+      const result = await calculateQuotes(
         { ...BASE_INPUT, pointOutId: PVZ_ID },
         VALID_CREDS,
       );
 
-      assert.equal(quotes.length, 2);
+      assert.equal(result.ok, true);
+      assert.equal(result.quotes.length, 2);
 
-      const door = quotes.find((q) => q.deliveryMode === "door");
-      const point = quotes.find((q) => q.deliveryMode === "point");
+      const door = result.quotes.find((q) => q.deliveryMode === "door");
+      const point = result.quotes.find((q) => q.deliveryMode === "point");
 
       assert.ok(door);
       assert.equal(door.tariffId, "time_interval");
@@ -120,11 +121,12 @@ test("only address present returns exactly 1 door quote and one fetch call", asy
     });
 
     try {
-      const quotes = await calculateQuotes(BASE_INPUT, VALID_CREDS);
+      const result = await calculateQuotes(BASE_INPUT, VALID_CREDS);
 
-      assert.equal(quotes.length, 1);
-      assert.equal(quotes[0].deliveryMode, "door");
-      assert.equal(quotes[0].tariffId, "time_interval");
+      assert.equal(result.ok, true);
+      assert.equal(result.quotes.length, 1);
+      assert.equal(result.quotes[0].deliveryMode, "door");
+      assert.equal(result.quotes[0].tariffId, "time_interval");
       assert.equal(mock.calls.length, 1);
       assert.equal(mock.calls[0].body.tariff, "time_interval");
     } finally {
@@ -142,7 +144,7 @@ test("only pointOutId present returns exactly 1 point quote", async () => {
     });
 
     try {
-      const quotes = await calculateQuotes(
+      const result = await calculateQuotes(
         {
           ...BASE_INPUT,
           to: { countryCode: "RU", city: "Москва" },
@@ -151,9 +153,10 @@ test("only pointOutId present returns exactly 1 point quote", async () => {
         VALID_CREDS,
       );
 
-      assert.equal(quotes.length, 1);
-      assert.equal(quotes[0].deliveryMode, "point");
-      assert.equal(quotes[0].tariffId, "self_pickup");
+      assert.equal(result.ok, true);
+      assert.equal(result.quotes.length, 1);
+      assert.equal(result.quotes[0].deliveryMode, "point");
+      assert.equal(result.quotes[0].tariffId, "self_pickup");
       assert.equal(mock.calls.length, 1);
     } finally {
       mock.restore();
@@ -176,25 +179,91 @@ test("HTTP 401 throws YandexAuthError and is not swallowed", async () => {
   });
 });
 
-test("HTTP 400 on door call while point call succeeds returns 1 quote", async () => {
+test("HTTP 500 on door call THROWS even while point call succeeds — carrier does not silently vanish", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(({ body }) => {
       if (body.tariff === "time_interval") {
-        return jsonResponse(400, { code: "400", message: "bad tariff" });
+        return jsonResponse(500, { code: "internal", message: "boom" });
       }
       return jsonResponse(200, { pricing_total: "203.74 RUB", delivery_days: 2 });
     });
 
     try {
-      const quotes = await calculateQuotes(
+      await assert.rejects(
+        () => calculateQuotes({ ...BASE_INPUT, pointOutId: PVZ_ID }, VALID_CREDS),
+        /Yandex Delivery calculate quote failed: HTTP 500/,
+      );
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("one tariff 200, the other no_delivery_options → ok:true with the served quote only", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(({ body }) => {
+      if (body.tariff === "time_interval") {
+        return jsonResponse(400, {
+          code: "no_delivery_options",
+          message: "no courier service here",
+        });
+      }
+      return jsonResponse(200, { pricing_total: "203.74 RUB", delivery_days: 2 });
+    });
+
+    try {
+      const result = await calculateQuotes(
         { ...BASE_INPUT, pointOutId: PVZ_ID },
         VALID_CREDS,
       );
 
-      assert.equal(quotes.length, 1);
-      assert.equal(quotes[0].deliveryMode, "point");
-      assert.equal(quotes[0].deliveryCostRub, 203.74);
+      assert.equal(result.ok, true);
+      assert.equal(result.quotes.length, 1);
+      assert.equal(result.quotes[0].deliveryMode, "point");
+      assert.equal(result.quotes[0].tariffId, "self_pickup");
+      assert.equal(result.quotes[0].deliveryCostRub, 203.74);
       assert.equal(mock.calls.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("both tariffs no_delivery_options → ok:false reason no_delivery_options", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(400, {
+        code: "no_delivery_options",
+        message: "nothing serves this destination",
+      }),
+    );
+
+    try {
+      const result = await calculateQuotes(
+        { ...BASE_INPUT, pointOutId: PVZ_ID },
+        VALID_CREDS,
+      );
+
+      assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
+      assert.equal(mock.calls.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("single-tariff call whose one tariff 500s → throws (not an empty result)", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(500, { code: "internal", message: "boom" }),
+    );
+
+    try {
+      await assert.rejects(
+        () => calculateQuotes(BASE_INPUT, VALID_CREDS),
+        /Yandex Delivery calculate quote failed: HTTP 500/,
+      );
+      assert.equal(mock.calls.length, 1);
     } finally {
       mock.restore();
     }
@@ -231,9 +300,10 @@ test("rawVariant contains the full raw pricing-calculator response", async () =>
     const mock = installFetchMock(() => jsonResponse(200, raw));
 
     try {
-      const quotes = await calculateQuotes(BASE_INPUT, VALID_CREDS);
+      const result = await calculateQuotes(BASE_INPUT, VALID_CREDS);
 
-      assert.deepEqual(quotes[0].rawVariant, raw);
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.quotes[0].rawVariant, raw);
     } finally {
       mock.restore();
     }

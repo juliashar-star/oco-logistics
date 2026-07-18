@@ -85,6 +85,17 @@ export type CarrierOffersResult =
   | { ok: true; offers: CarrierOffer[] }
   | { ok: false; reason: "no_delivery_options" };
 
+/**
+ * Result of comparing tariffs (Yandex: pricing-calculator per tariff).
+ * ok:false/no_delivery_options is a real answer — nothing is served here —
+ * distinct from a fault, which throws. A tariff that individually reported
+ * no_delivery_options is simply absent from `quotes`; ok:false means EVERY
+ * requested tariff reported it. Same honest shape as CarrierOffersResult.
+ */
+export type CarrierQuotesResult =
+  | { ok: true; quotes: CarrierDeliveryQuote[] }
+  | { ok: false; reason: "no_delivery_options" };
+
 export type CarrierDeliveryQuote = {
   providerKey: string; // kept: same aggregation reason as above
   tariffId: string; // was number in APIShip's DeliveryQuote
@@ -211,7 +222,7 @@ export interface CarrierAdapter {
   calculateQuotes(
     input: CarrierCalculateInput,
     credentials: CarrierCredentials,
-  ): Promise<CarrierDeliveryQuote[]>;
+  ): Promise<CarrierQuotesResult>;
   listPickupPoints(
     input: CarrierListPointsInput,
     credentials: CarrierCredentials,

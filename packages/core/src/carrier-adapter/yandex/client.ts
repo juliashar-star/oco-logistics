@@ -10,6 +10,7 @@ import type {
   CarrierListPointsResult,
   CarrierOffer,
   CarrierOffersResult,
+  CarrierQuotesResult,
   CarrierOrderHistoryResult,
   CarrierPickupPoint,
   CarrierTrackingEvent,
@@ -126,12 +127,23 @@ function mapPickupPoint(point: YandexPickupPoint): CarrierPickupPoint {
   };
 }
 
+/**
+ * One tariff's outcome, kept distinct so calculateQuotes can tell three things
+ * apart that the old `| null` collapsed into one: a real quote, a legitimate
+ * "no service for THIS tariff" (no_delivery_options), and a fault (which throws
+ * and is never represented here). A no_service tariff is simply absent from the
+ * comparison; a fault must not be — that was the S0/O2.5-class defect.
+ */
+type FetchQuoteOutcome =
+  | { kind: "quote"; quote: CarrierDeliveryQuote }
+  | { kind: "no_service" };
+
 async function fetchQuote(
   tariff: "time_interval" | "self_pickup",
   input: CarrierCalculateInput,
   creds: YandexCredentials,
   destination: YandexDestination,
-): Promise<CarrierDeliveryQuote | null> {
+): Promise<FetchQuoteOutcome> {
   const response = await yandexPost(creds, "/api/b2b/platform/pricing-calculator", {
     source: { platform_station_id: creds.platformStationId },
     destination,
@@ -146,30 +158,57 @@ async function fetchQuote(
     ],
   });
 
-  if (!response.ok) {
-    return null;
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
   }
 
-  const raw = (await response.json()) as PricingCalculatorResponse;
+  // Key on the provider CODE, not the HTTP status — "no service for THIS tariff"
+  // is a real answer (self_pickup may serve a city a courier tariff does not),
+  // told apart from a fault so the caller never mistakes a 500 for "no service".
+  // Same shape as getOffers / listPickupPoints.
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "code" in raw &&
+    (raw as { code: unknown }).code === "no_delivery_options"
+  ) {
+    return { kind: "no_service" };
+  }
 
+  // Any OTHER non-200 is a fault — THROW, never a silent missing quote. This is
+  // the fix: a 500/timeout on one tariff must not vanish from the comparison.
+  if (response.status !== 200) {
+    throw new Error(
+      `Yandex Delivery calculate quote failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  const priced = raw as PricingCalculatorResponse;
   return {
-    providerKey: "yataxi",
-    tariffId: tariff,
-    tariffName: tariff === "time_interval" ? "Курьером до двери" : "Самовывоз из ПВЗ",
-    deliveryCostRub: parseRublePrice(raw.pricing_total),
-    deliveryDaysMin: raw.delivery_days,
-    deliveryDaysMax: raw.delivery_days,
-    deliveryMode: tariff === "time_interval" ? "door" : "point",
-    rawVariant: raw,
+    kind: "quote",
+    quote: {
+      providerKey: "yataxi",
+      tariffId: tariff,
+      tariffName: tariff === "time_interval" ? "Курьером до двери" : "Самовывоз из ПВЗ",
+      deliveryCostRub: parseRublePrice(priced.pricing_total),
+      deliveryDaysMin: priced.delivery_days,
+      deliveryDaysMax: priced.delivery_days,
+      deliveryMode: tariff === "time_interval" ? "door" : "point",
+      rawVariant: priced,
+    },
   };
 }
 
 export async function calculateQuotes(
   input: CarrierCalculateInput,
   credentials: CarrierCredentials,
-): Promise<CarrierDeliveryQuote[]> {
+): Promise<CarrierQuotesResult> {
   const creds = assertYandexCredentials(credentials);
-  const tasks: Promise<CarrierDeliveryQuote | null>[] = [];
+  const tasks: Promise<FetchQuoteOutcome>[] = [];
 
   if (input.to.addressString?.trim()) {
     const address = `${input.to.city}, ${input.to.addressString.trim()}`;
@@ -184,8 +223,35 @@ export async function calculateQuotes(
     );
   }
 
-  const results = await Promise.all(tasks);
-  return results.filter((quote): quote is CarrierDeliveryQuote => quote !== null);
+  // allSettled, not all: we must run both tariffs to completion, then let a
+  // fault WIN over the other tariff's success (Promise.all would reject with
+  // the first fault but discard the sibling; here we settle both and re-throw
+  // the fault deterministically). A no_delivery_options sentinel is NOT a
+  // rejection, so it is told apart from a thrown fault.
+  const settled = await Promise.allSettled(tasks);
+
+  for (const outcome of settled) {
+    if (outcome.status === "rejected") {
+      // A fault on one tariff is never hidden behind the other's success.
+      throw outcome.reason;
+    }
+  }
+
+  const quotes: CarrierDeliveryQuote[] = [];
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value.kind === "quote") {
+      quotes.push(outcome.value.quote);
+    }
+  }
+
+  // Every requested tariff answered no_delivery_options → nothing is served
+  // here. A real answer, distinct from a fault (which would have thrown above)
+  // and from the old empty array that could not say which it was.
+  if (quotes.length === 0) {
+    return { ok: false, reason: "no_delivery_options" };
+  }
+
+  return { ok: true, quotes };
 }
 
 export async function listPickupPoints(

@@ -20,6 +20,13 @@
 
 ---
 
+- **2026-07 · calculateQuotes — CarrierQuotesResult; fault throws, no_delivery_options ok:false, tariff-level no_service просто отсутствует.**
+Почему: fetchQuote `!ok→null` + filter прятал 500/timeout как «нет тарифа»
+(3-й случай дефекта S0/O2.5). Теперь fetchQuote: code no_delivery_options →
+sentinel no_service; прочий non-200 → throw; 200 → quote. calculateQuotes на
+Promise.allSettled — fault одного тарифа НЕ прячется за успехом другого
+(re-throw), а no_service отличим от throw; оба no_delivery_options → ok:false.
+Отвергли: `| null`+filter; Promise.all (теряет, какой тариф упал); ok:true с [].
 - **2026-07 · POST /api/shipments/[id]/cancel — accepted≠CANCELED; TrackingEvent only; not_found leaves row.**
 Почему: cancel стартует отмену, не завершает; писать CANCELED — та же ложь,
 от которой ушли с CarrierCancelResult. Event в словах Яндекса
