@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DeliveryInterval, PickupPoint } from "@oco/apiship";
+import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
+import type { OfferDto } from "@/lib/shipments/offer-dto";
+import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 
 type RankTag = "fast" | "cheap" | "optimal";
@@ -31,6 +33,9 @@ type CreateResult = {
   plannedDeliveryDays: number | null;
 };
 
+/** Yandex pickup-points list row (browser DTO). */
+type YandexPickupPoint = PickupPointDto;
+
 const TAG_LABELS: Record<RankTag, string> = {
   fast: "Быстро",
   cheap: "Дёшево",
@@ -52,6 +57,10 @@ const RECALCULATE_AFTER_CREATE_HINT =
   "Для следующего отправления рассчитайте тарифы заново";
 const RECALCULATE_AFTER_PARAMS_HINT =
   "Параметры изменились — рассчитайте тарифы заново";
+const YANDEX_SUBMIT_NEXT_STEP_NOTE =
+  "Оформление заказа у перевозчика — следующий шаг";
+const NO_DELIVERY_TO_POINT =
+  "Доставка в этот пункт недоступна";
 
 type CalculationSnapshot = {
   recipientName: string;
@@ -60,6 +69,11 @@ type CalculationSnapshot = {
   lengthCm: string;
   widthCm: string;
   heightCm: string;
+  /** PVZ / Yandex only — ignored for COURIER invalidation. */
+  declaredValueRub: string;
+  destCity: string;
+  pointOutId: string;
+  pickupType: "PVZ" | "COURIER";
 };
 
 function quoteRowKey(quote: Quote): string {
@@ -71,12 +85,25 @@ function recipientPhoneForSnapshot(phone: string): string {
   return result.ok ? result.value : phone.trim();
 }
 
+function formatOfferDeliveryDay(isoFrom: string): string {
+  const parsed = new Date(isoFrom);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoFrom;
+  }
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+  }).format(parsed);
+}
+
 export function NewOrderForm() {
   const [category, setCategory] = useState("OTHER");
   const [weightG, setWeightG] = useState("1000");
   const [lengthCm, setLengthCm] = useState("30");
   const [widthCm, setWidthCm] = useState("20");
   const [heightCm, setHeightCm] = useState("10");
+  const [declaredValueRub, setDeclaredValueRub] = useState("");
   const [destCity, setDestCity] = useState("");
   const [destCityDisplayValue, setDestCityDisplayValue] = useState("");
   const [destAddress, setDestAddress] = useState("");
@@ -87,9 +114,9 @@ export function NewOrderForm() {
   const [recipientPhone, setRecipientPhone] = useState("");
   const [recipientPhoneError, setRecipientPhoneError] = useState("");
   const [legalBasisConfirmed, setLegalBasisConfirmed] = useState(false);
-  /** Stable per mount — for create-draft idempotency (wired in a later slice). */
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const [points, setPoints] = useState<PickupPoint[]>([]);
+  /** Shared across PVZ re-quotes; regenerated when draft-affecting PVZ params change. */
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [points, setPoints] = useState<YandexPickupPoint[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
   const [senderConfigured, setSenderConfigured] = useState(true);
@@ -112,6 +139,10 @@ export function NewOrderForm() {
   const [intervals, setIntervals] = useState<DeliveryInterval[]>([]);
   const [selectedInterval, setSelectedInterval] = useState<DeliveryInterval | null>(null);
   const [intervalsLoading, setIntervalsLoading] = useState(false);
+  const [yandexOffers, setYandexOffers] = useState<OfferDto[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [draftShipmentId, setDraftShipmentId] = useState<string | null>(null);
+  const [noDeliveryToPoint, setNoDeliveryToPoint] = useState(false);
   const pointsRequestId = useRef(0);
   const intervalsRequestId = useRef(0);
   const calculationSnapshot = useRef<CalculationSnapshot | null>(null);
@@ -135,6 +166,10 @@ export function NewOrderForm() {
     setIntervals([]);
     setSelectedInterval(null);
     setIntervalsLoading(false);
+    setYandexOffers([]);
+    setSelectedOfferId(null);
+    setDraftShipmentId(null);
+    setNoDeliveryToPoint(false);
     calculationSnapshot.current = null;
   }
 
@@ -147,6 +182,7 @@ export function NewOrderForm() {
       destCity,
       destAddress: pickupType === "COURIER" ? destAddress.trim() : undefined,
       pickupType,
+      // COURIER path only — PVZ no longer uses APIShip calculate/intervals.
       pointOutId:
         pickupType === "PVZ" ? Number(pointOutId || meta?.pointOutId) : undefined,
     };
@@ -160,26 +196,55 @@ export function NewOrderForm() {
       lengthCm,
       widthCm,
       heightCm,
+      declaredValueRub,
+      destCity: destCity.trim(),
+      pointOutId,
+      pickupType,
     };
   }
 
+  /**
+   * COURIER: recipient + dims only (byte-identical to 1a09745 — destination edits
+   * do not tear down quotes; they only re-run the intervals effect).
+   * PVZ: also declaredValueRub, destCity, pointOutId (Yandex draft/offer inputs).
+   */
   function snapshotsEqual(a: CalculationSnapshot, b: CalculationSnapshot): boolean {
-    return (
+    const baseEqual =
       a.recipientName === b.recipientName &&
       a.recipientPhone === b.recipientPhone &&
       a.weightG === b.weightG &&
       a.lengthCm === b.lengthCm &&
       a.widthCm === b.widthCm &&
-      a.heightCm === b.heightCm
+      a.heightCm === b.heightCm;
+
+    if (!baseEqual) {
+      return false;
+    }
+
+    if (b.pickupType === "COURIER") {
+      return true;
+    }
+
+    return (
+      a.declaredValueRub === b.declaredValueRub &&
+      a.destCity === b.destCity &&
+      a.pointOutId === b.pointOutId
     );
   }
 
   function invalidateQuotesIfParamsChanged() {
     const snapshot = calculationSnapshot.current;
-    if (!snapshot || quotes.length === 0) {
+    const hasResults =
+      quotes.length > 0 || yandexOffers.length > 0 || noDeliveryToPoint;
+    if (!snapshot || !hasResults) {
       return;
     }
     if (!snapshotsEqual(snapshot, snapshotFromForm())) {
+      // Mint a new key only when clearing a PVZ quote — so the next create-draft
+      // is not deduped onto a stale draft with old params.
+      if (yandexOffers.length > 0 || noDeliveryToPoint || draftShipmentId != null) {
+        setIdempotencyKey(crypto.randomUUID());
+      }
       clearQuoteSelection();
       setRecalculateHint(RECALCULATE_AFTER_PARAMS_HINT);
     }
@@ -221,7 +286,7 @@ export function NewOrderForm() {
 
     try {
       const response = await fetch(
-        `/api/shipments/points?city=${encodeURIComponent(trimmed)}&limit=100`,
+        `/api/shipments/pickup-points?city=${encodeURIComponent(trimmed)}`,
       );
       if (requestId !== pointsRequestId.current) {
         return;
@@ -297,10 +362,26 @@ export function NewOrderForm() {
   useEffect(() => {
     invalidateQuotesIfParamsChanged();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- сравниваем снимок расчёта с текущими полями
-  }, [recipientName, recipientPhone, weightG, lengthCm, widthCm, heightCm, quotes.length]);
+  }, [
+    recipientName,
+    recipientPhone,
+    weightG,
+    lengthCm,
+    widthCm,
+    heightCm,
+    declaredValueRub,
+    destCity,
+    pointOutId,
+    pickupType,
+    quotes.length,
+    yandexOffers.length,
+    noDeliveryToPoint,
+    draftShipmentId,
+  ]);
 
   useEffect(() => {
-    if (!selectedKey) {
+    // Intervals are APIShip-only (COURIER). PVZ uses Yandex day offers.
+    if (pickupType !== "COURIER" || !selectedKey) {
       setIntervals([]);
       setSelectedInterval(null);
       setIntervalsLoading(false);
@@ -387,6 +468,121 @@ export function NewOrderForm() {
     }
   }
 
+  async function handleCalculatePvzYandex() {
+    const declared = Number(declaredValueRub);
+    if (!declaredValueRub.trim() || !Number.isFinite(declared) || declared <= 0) {
+      setError("Укажите объявленную ценность больше 0");
+      return;
+    }
+
+    if (!legalBasisConfirmed) {
+      setError("Подтвердите правовое основание обработки персональных данных");
+      return;
+    }
+
+    if (!recipientName.trim() || !recipientPhone.trim()) {
+      setError("Укажите имя и телефон получателя");
+      return;
+    }
+
+    const phoneResult = normalizeRecipientPhone(recipientPhone);
+    if (!phoneResult.ok) {
+      setRecipientPhoneError(phoneResult.error);
+      return;
+    }
+    if (!phoneResult.value) {
+      setRecipientPhoneError("Укажите телефон получателя");
+      return;
+    }
+
+    // Reuse idempotencyKey when params are unchanged (create-draft dedups).
+    // A new key is minted only in invalidateQuotesIfParamsChanged when PVZ
+    // draft-affecting params change.
+    setLoading(true);
+    clearQuoteSelection();
+
+    try {
+      const draftResponse = await fetch("/api/shipments/create-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey,
+          category,
+          destCity,
+          pickupType: "PVZ",
+          pvzCode: pointOutId,
+          weightG: Number(weightG),
+          lengthCm: Number(lengthCm),
+          widthCm: Number(widthCm),
+          heightCm: Number(heightCm),
+          recipientName: recipientName.trim(),
+          recipientPhone: phoneResult.value,
+          legalBasisConfirmed: true,
+          declaredValueRub: declared,
+          selectionMode,
+        }),
+      });
+
+      const draftData = await draftResponse.json().catch(() => ({}));
+      if (!draftResponse.ok) {
+        setError(
+          typeof draftData.error === "string"
+            ? draftData.error
+            : "Не удалось рассчитать тарифы",
+        );
+        return;
+      }
+
+      const shipmentId =
+        typeof draftData.shipmentId === "string" ? draftData.shipmentId : "";
+      if (!shipmentId) {
+        setError("Не удалось рассчитать тарифы");
+        return;
+      }
+
+      setDraftShipmentId(shipmentId);
+
+      const offersResponse = await fetch(`/api/shipments/${shipmentId}/offers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const offersData = await offersResponse.json().catch(() => ({}));
+      if (!offersResponse.ok) {
+        setError(
+          typeof offersData.error === "string"
+            ? offersData.error
+            : "Не удалось рассчитать тарифы",
+        );
+        return;
+      }
+
+      if (offersData.status === "no_delivery_options") {
+        setNoDeliveryToPoint(true);
+        setYandexOffers([]);
+        setSelectedOfferId(null);
+        calculationSnapshot.current = snapshotFromForm();
+        return;
+      }
+
+      const nextOffers: OfferDto[] = Array.isArray(offersData.offers)
+        ? offersData.offers
+        : [];
+      setNoDeliveryToPoint(false);
+      setYandexOffers(nextOffers);
+      setSelectedOfferId(null);
+      calculationSnapshot.current = snapshotFromForm();
+
+      if (nextOffers.length === 0) {
+        setNoDeliveryToPoint(true);
+      }
+    } catch {
+      setError("Не удалось связаться с сервером");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleCalculate(event: React.FormEvent) {
     event.preventDefault();
     setError("");
@@ -405,6 +601,11 @@ export function NewOrderForm() {
 
     if (pickupType === "PVZ" && !pointOutId) {
       setError("Выберите пункт выдачи (ПВЗ)");
+      return;
+    }
+
+    if (pickupType === "PVZ") {
+      await handleCalculatePvzYandex();
       return;
     }
 
@@ -457,6 +658,11 @@ export function NewOrderForm() {
     setError("");
     setCreateResult(null);
 
+    // PVZ Yandex submit is STEP 2 — not wired yet.
+    if (pickupType === "PVZ") {
+      return;
+    }
+
     if (!selectedKey || !quoteIds[selectedKey]) {
       setError("Выберите вариант доставки в таблице");
       return;
@@ -497,16 +703,8 @@ export function NewOrderForm() {
           widthCm: Number(widthCm),
           heightCm: Number(heightCm),
           destCity,
-          destAddress: pickupType === "COURIER" ? destAddress.trim() : undefined,
-          pickupType,
-          pointOutId:
-            pickupType === "PVZ"
-              ? Number(pointOutId || meta?.pointOutId)
-              : undefined,
-          pvzCode:
-            pickupType === "PVZ"
-              ? points.find((p) => String(p.id) === pointOutId)?.code
-              : undefined,
+          destAddress: destAddress.trim(),
+          pickupType: "COURIER",
           recipientName: recipientName.trim(),
           recipientPhone: phoneResult.value,
           selectionMode,
@@ -613,7 +811,19 @@ export function NewOrderForm() {
             </label>
             <select
               value={pickupType}
-              onChange={(e) => setPickupType(e.target.value as "PVZ" | "COURIER")}
+              onChange={(e) => {
+                const next = e.target.value as "PVZ" | "COURIER";
+                // Leaving a PVZ draft behind: mint a fresh key so a later return
+                // to PVZ cannot reuse a stale create-draft row.
+                if (next !== pickupType) {
+                  setIdempotencyKey(crypto.randomUUID());
+                }
+                setPickupType(next);
+                clearQuoteSelection();
+                setRecalculateHint(null);
+                setError("");
+                setCreateResult(null);
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
             >
               <option value="PVZ">До пункта выдачи (ПВЗ)</option>
@@ -646,8 +856,8 @@ export function NewOrderForm() {
                       : "Выберите пункт выдачи"}
                 </option>
                 {points.map((point) => (
-                  <option key={point.id} value={String(point.id)}>
-                    {point.providerKey.toUpperCase()} — {point.name} ({point.address})
+                  <option key={point.id} value={point.id}>
+                    {point.name} — {point.address}
                   </option>
                 ))}
               </select>
@@ -800,6 +1010,41 @@ export function NewOrderForm() {
           </div>
         </div>
 
+        {pickupType === "PVZ" && (
+          <div className="max-w-xs">
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Объявленная ценность, ₽
+            </label>
+            <input
+              required
+              type="number"
+              min={1}
+              step={1}
+              value={declaredValueRub}
+              onChange={(e) => setDeclaredValueRub(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="Например, 3000"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Сумма объявленной ценности посылки (страховая сумма).
+            </p>
+          </div>
+        )}
+
+        {pickupType === "PVZ" && (
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={legalBasisConfirmed}
+              onChange={(e) => setLegalBasisConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Подтверждаю правовое основание обработки персональных данных получателя (152-ФЗ)
+            </span>
+          </label>
+        )}
+
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
             {error}
@@ -813,8 +1058,10 @@ export function NewOrderForm() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover"
+          disabled={
+            loading || (pickupType === "PVZ" && !legalBasisConfirmed)
+          }
+          className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
         >
           {loading ? (
             <>
@@ -852,7 +1099,57 @@ export function NewOrderForm() {
         </p>
       )}
 
-      {quotes.length > 0 && (
+      {pickupType === "PVZ" && noDeliveryToPoint && (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
+          {NO_DELIVERY_TO_POINT}
+        </p>
+      )}
+
+      {pickupType === "PVZ" && yandexOffers.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">День доставки</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Выберите день — цена указана за доставку в этот день.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {yandexOffers.map((offer) => {
+              const isSelected = selectedOfferId === offer.offerId;
+              return (
+                <button
+                  key={offer.offerId}
+                  type="button"
+                  onClick={() => setSelectedOfferId(offer.offerId)}
+                  className={`rounded-xl border px-4 py-3 text-left transition ${
+                    isSelected
+                      ? "border-primary bg-sky-50 ring-2 ring-primary/30"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="text-sm font-medium text-slate-900">
+                    {formatOfferDeliveryDay(offer.deliveryIntervalFrom)}
+                  </div>
+                  <div className="mt-1 text-base font-semibold text-slate-900">
+                    {offer.priceRub.toLocaleString("ru-RU")} ₽
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <button
+              type="button"
+              disabled
+              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white opacity-60"
+            >
+              Создать отправление
+            </button>
+            <p className="text-sm text-slate-600">{YANDEX_SUBMIT_NEXT_STEP_NOTE}</p>
+          </div>
+        </div>
+      )}
+
+      {pickupType === "COURIER" && quotes.length > 0 && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-900">
