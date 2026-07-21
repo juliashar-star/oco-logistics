@@ -33,6 +33,13 @@ type CreateResult = {
   plannedDeliveryDays: number | null;
 };
 
+type YandexSubmitResult = {
+  shipmentId: string;
+  requestId: string;
+  deliveryDayLabel: string;
+  priceRub: number;
+};
+
 /** Yandex pickup-points list row (browser DTO). */
 type YandexPickupPoint = PickupPointDto;
 
@@ -57,8 +64,6 @@ const RECALCULATE_AFTER_CREATE_HINT =
   "Для следующего отправления рассчитайте тарифы заново";
 const RECALCULATE_AFTER_PARAMS_HINT =
   "Параметры изменились — рассчитайте тарифы заново";
-const YANDEX_SUBMIT_NEXT_STEP_NOTE =
-  "Оформление заказа у перевозчика — следующий шаг";
 const NO_DELIVERY_TO_POINT =
   "Доставка в этот пункт недоступна";
 
@@ -143,6 +148,9 @@ export function NewOrderForm() {
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [draftShipmentId, setDraftShipmentId] = useState<string | null>(null);
   const [noDeliveryToPoint, setNoDeliveryToPoint] = useState(false);
+  const [submittingPvz, setSubmittingPvz] = useState(false);
+  const [yandexSubmitResult, setYandexSubmitResult] =
+    useState<YandexSubmitResult | null>(null);
   const pointsRequestId = useRef(0);
   const intervalsRequestId = useRef(0);
   const calculationSnapshot = useRef<CalculationSnapshot | null>(null);
@@ -170,6 +178,7 @@ export function NewOrderForm() {
     setSelectedOfferId(null);
     setDraftShipmentId(null);
     setNoDeliveryToPoint(false);
+    setYandexSubmitResult(null);
     calculationSnapshot.current = null;
   }
 
@@ -658,7 +667,7 @@ export function NewOrderForm() {
     setError("");
     setCreateResult(null);
 
-    // PVZ Yandex submit is STEP 2 — not wired yet.
+    // PVZ Yandex submit uses handleSubmitPvzYandex — leave this path courier-only.
     if (pickupType === "PVZ") {
       return;
     }
@@ -740,6 +749,56 @@ export function NewOrderForm() {
       setError("Не удалось связаться с сервером");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleSubmitPvzYandex() {
+    setError("");
+
+    if (!draftShipmentId || !selectedOfferId) {
+      setError("Выберите день доставки");
+      return;
+    }
+
+    const selectedOffer = yandexOffers.find((o) => o.offerId === selectedOfferId);
+    if (!selectedOffer) {
+      setError("Выберите день доставки");
+      return;
+    }
+
+    setSubmittingPvz(true);
+
+    try {
+      const response = await fetch(`/api/shipments/${draftShipmentId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerId: selectedOfferId }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(
+          typeof data.error === "string"
+            ? data.error
+            : "Не удалось создать отправление",
+        );
+        return;
+      }
+
+      const requestId =
+        typeof data.requestId === "string" ? data.requestId : "";
+      setIdempotencyKey(crypto.randomUUID());
+      setYandexSubmitResult({
+        shipmentId: draftShipmentId,
+        requestId,
+        deliveryDayLabel: formatOfferDeliveryDay(selectedOffer.deliveryIntervalFrom),
+        priceRub: selectedOffer.priceRub,
+      });
+    } catch {
+      setError("Не удалось связаться с сервером");
+    } finally {
+      setSubmittingPvz(false);
     }
   }
 
@@ -1137,14 +1196,61 @@ export function NewOrderForm() {
           </div>
 
           <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <button
-              type="button"
-              disabled
-              className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white opacity-60"
-            >
-              Создать отправление
-            </button>
-            <p className="text-sm text-slate-600">{YANDEX_SUBMIT_NEXT_STEP_NOTE}</p>
+            {yandexSubmitResult ? (
+              <div className="space-y-2 text-sm text-slate-800">
+                <p className="font-semibold text-emerald-900">Отправление создано</p>
+                <p>
+                  Доставка: <strong>{yandexSubmitResult.deliveryDayLabel}</strong>
+                  {" · "}
+                  <strong>
+                    {yandexSubmitResult.priceRub.toLocaleString("ru-RU")} ₽
+                  </strong>
+                </p>
+                <Link
+                  href="/shipments"
+                  className="inline-flex font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-950"
+                >
+                  Перейти к отправлениям
+                </Link>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleSubmitPvzYandex()}
+                disabled={
+                  submittingPvz || !selectedOfferId || !draftShipmentId
+                }
+                className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+              >
+                {submittingPvz ? (
+                  <>
+                    <svg
+                      className="-ml-1 mr-2 inline h-4 w-4 animate-spin text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    Создание…
+                  </>
+                ) : (
+                  "Создать отправление"
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
