@@ -27,7 +27,7 @@ export function UserSettingsTabs({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <h2 className="text-2xl font-semibold text-slate-900">Настройки</h2>
-      <p className="mt-2 text-text-3">Профиль, безопасность и подключение к APIShip.</p>
+      <p className="mt-2 text-text-3">Профиль, безопасность и подключения.</p>
 
       <div
         role="tablist"
@@ -75,7 +75,7 @@ export function UserSettingsTabs({
 
         {activeTab === "connection" && (
           <div role="tabpanel">
-            <h3 className="font-medium text-slate-900">APIShip</h3>
+            <h3 className="font-medium text-slate-900">Расчёт тарифов</h3>
             <p className="mt-1 mb-6 text-sm text-text-3">
               Логин и пароль для расчёта тарифов и создания отправлений.
             </p>

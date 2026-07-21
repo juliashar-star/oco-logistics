@@ -24,7 +24,7 @@ export const POST = withAuth(async (request, user) => {
 
   if (!company || !canUseApiship(company)) {
     return NextResponse.json(
-      { error: "APIShip не подключён. Укажите логин и пароль в настройках." },
+      { error: "Расчёт тарифов не подключён. Укажите логин и пароль в настройках." },
       { status: 400 },
     );
   }
@@ -159,7 +159,7 @@ export const POST = withAuth(async (request, user) => {
         {
           error:
             error.message ||
-            "APIShip не смог создать отправление. Проверьте данные и попробуйте снова.",
+            "Не удалось создать отправление. Проверьте данные и попробуйте снова.",
         },
         { status: 502 },
       );

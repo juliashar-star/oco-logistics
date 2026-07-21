@@ -157,7 +157,7 @@ export function CompanySettingsForm() {
           Телефон отправителя
         </label>
         <p className="mb-2 text-xs text-slate-500">
-          Для создания отправлений в APIShip. Формат: +7 и 10 цифр.
+          Для создания отправлений. Формат: +7 и 10 цифр.
         </p>
         <Input
           id="sender-phone"

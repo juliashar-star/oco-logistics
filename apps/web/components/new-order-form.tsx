@@ -243,7 +243,7 @@ export function NewOrderForm() {
       setPoints(nextPoints);
       setPointOutId("");
       if (nextPoints.length === 0) {
-        setPointsError("APIShip не нашёл ПВЗ в этом городе — проверьте название");
+        setPointsError("Не найдено пунктов выдачи в этом городе — проверьте название");
       }
     } catch {
       if (requestId !== pointsRequestId.current) {
@@ -628,7 +628,7 @@ export function NewOrderForm() {
               Пункт выдачи (ПВЗ)
             </label>
             <p className="mb-2 text-xs text-slate-500">
-              Список загружается из APIShip по городу назначения.
+              Список пунктов выдачи загружается по городу назначения.
             </p>
             <div className="flex flex-wrap gap-2">
               <select

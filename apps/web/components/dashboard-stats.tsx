@@ -200,7 +200,7 @@ export function DashboardStats({
                 aria-hidden
               />
               <Link href="/settings" className="underline-offset-2 hover:underline">
-                Подключить APIShip — это займёт минуту
+                Подключить доставку — это займёт минуту
               </Link>
             </li>
             <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">

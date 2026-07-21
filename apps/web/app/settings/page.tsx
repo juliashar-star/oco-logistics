@@ -15,7 +15,7 @@ export default async function SettingsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <h2 className="text-2xl font-semibold text-slate-900">Настройки</h2>
           <p className="mt-2 text-text-3">
-            Профиль компании и подключение APIShip для расчёта тарифов.
+            Профиль компании и подключение доставки для расчёта тарифов.
           </p>
           <div className="mt-8 max-w-md">
             <h3 className="font-medium text-slate-900">Адрес отправителя</h3>
@@ -30,7 +30,7 @@ export default async function SettingsPage() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="max-w-md">
-            <h3 className="font-medium text-slate-900">APIShip</h3>
+            <h3 className="font-medium text-slate-900">Расчёт тарифов</h3>
             <p className="mt-1 text-sm text-text-3">
               Логин и пароль для расчёта тарифов и создания отправлений.
             </p>

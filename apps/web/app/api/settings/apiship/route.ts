@@ -53,7 +53,7 @@ export const POST = withAuth(async (request, user) => {
     const password = String(body.password ?? "");
 
     if (!login) {
-      return NextResponse.json({ error: "Укажите логин APIShip" }, { status: 400 });
+      return NextResponse.json({ error: "Укажите логин" }, { status: 400 });
     }
 
     const existing = await prisma.company.findFirst({
@@ -62,7 +62,7 @@ export const POST = withAuth(async (request, user) => {
     });
 
     if (!password && !existing?.apishipPasswordEnc) {
-      return NextResponse.json({ error: "Укажите пароль APIShip" }, { status: 400 });
+      return NextResponse.json({ error: "Укажите пароль" }, { status: 400 });
     }
 
     if (!isApishipEncryptionConfigured()) {
@@ -101,7 +101,7 @@ export const POST = withAuth(async (request, user) => {
       );
     }
     return NextResponse.json(
-      { error: "Не удалось сохранить настройки APIShip" },
+      { error: "Не удалось сохранить настройки" },
       { status: 500 },
     );
   }

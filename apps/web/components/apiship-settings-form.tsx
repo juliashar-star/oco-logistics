@@ -37,11 +37,11 @@ export function ApishipSettingsForm() {
     setMessage("");
 
     if (!login.trim()) {
-      setError("Укажите логин APIShip");
+      setError("Укажите логин");
       return;
     }
     if (!password) {
-      setError("Укажите пароль APIShip для проверки");
+      setError("Укажите пароль для проверки");
       return;
     }
 
@@ -71,7 +71,7 @@ export function ApishipSettingsForm() {
     setMessage("");
 
     if (!login.trim()) {
-      setError("Укажите логин APIShip");
+      setError("Укажите логин");
       return;
     }
 
@@ -87,7 +87,7 @@ export function ApishipSettingsForm() {
         setError(data.error ?? "Ошибка сохранения");
         return;
       }
-      setMessage("Настройки APIShip сохранены");
+      setMessage("Настройки сохранены");
       setPassword("");
       const refreshed = await fetch("/api/settings/apiship").then((r) => r.json());
       setStatus(refreshed);
@@ -102,20 +102,20 @@ export function ApishipSettingsForm() {
     <form onSubmit={handleSave} noValidate autoComplete="off" className="space-y-4">
       {status?.isSandbox && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Тестовый контур APIShip. Для разработки можно использовать логин и пароль{" "}
+          Тестовый контур. Для разработки можно использовать логин и пароль{" "}
           <strong>test</strong>.
         </p>
       )}
 
       {status?.connected && (
         <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
-          APIShip подключён{status.login ? ` (${status.login})` : ""}.
+          Подключение активно{status.login ? ` (${status.login})` : ""}.
         </p>
       )}
 
       {!status?.encryptionConfigured && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Для сохранения пароля APIShip на сервере нужен ключ{" "}
+          Для сохранения пароля на сервере нужен ключ{" "}
           <code className="text-xs">APISHIP_ENCRYPTION_KEY</code> в файле{" "}
           <code className="text-xs">.env</code> (минимум 32 символа). После добавления перезапустите{" "}
           <code className="text-xs">npm run dev</code>.
@@ -124,16 +124,16 @@ export function ApishipSettingsForm() {
 
       {!status?.canCalculate && !status?.envConfigured && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          APIShip не настроен — расчёт тарифов недоступен.
+          Расчёт тарифов не настроен.
         </p>
       )}
 
       <div>
         <label htmlFor="apiship-user" className="mb-1 block text-sm font-medium text-slate-700">
-          Логин APIShip
+          Логин
         </label>
         <p className="mb-2 text-xs text-slate-500">
-          Любая строка от APIShip, например <strong>test</strong> — не обязательно email.
+          Любая строка от провайдера, например <strong>test</strong> — не обязательно email.
         </p>
         <input
           id="apiship-user"
@@ -153,7 +153,7 @@ export function ApishipSettingsForm() {
 
       <div>
         <label htmlFor="apiship-secret" className="mb-1 block text-sm font-medium text-slate-700">
-          Пароль APIShip
+          Пароль
         </label>
         <input
           id="apiship-secret"

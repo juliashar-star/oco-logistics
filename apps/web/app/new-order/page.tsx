@@ -12,7 +12,7 @@ export default async function NewOrderPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Новый заказ</h2>
         <p className="mt-2 text-slate-600">
-          Укажите параметры посылки — система запросит тарифы у APIShip и покажет варианты.
+          Укажите параметры посылки — система запросит тарифы у перевозчиков и покажет варианты.
         </p>
         <div className="mt-8">
           <NewOrderForm />

@@ -24,7 +24,7 @@ export const POST = withAuth(async (request, user) => {
     return NextResponse.json(
       {
         error:
-          "APIShip не подключён. Укажите логин и пароль в настройках или задайте APIShip в .env",
+          "Расчёт тарифов не подключён. Укажите логин и пароль в настройках или задайте учётные данные в .env",
       },
       { status: 400 },
     );
@@ -126,7 +126,7 @@ export const POST = withAuth(async (request, user) => {
         {
           error:
             error.message ||
-            "APIShip не смог получить интервалы доставки. Проверьте адреса и параметры посылки.",
+            "Не удалось получить интервалы доставки. Проверьте адреса и параметры посылки.",
         },
         { status: 502 },
       );

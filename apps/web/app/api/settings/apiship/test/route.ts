@@ -11,7 +11,7 @@ export const POST = withAuth(async (request, user) => {
 
     if (!login || !password) {
       return NextResponse.json(
-        { error: "Укажите логин и пароль APIShip для проверки" },
+        { error: "Укажите логин и пароль для проверки" },
         { status: 400 },
       );
     }
@@ -21,18 +21,18 @@ export const POST = withAuth(async (request, user) => {
 
     return NextResponse.json({
       ok: true,
-      message: "Подключение к APIShip успешно",
+      message: "Подключение успешно",
     });
   } catch (error) {
     if (error instanceof ApishipError) {
       return NextResponse.json(
-        { error: error.message || "APIShip отклонил подключение" },
+        { error: error.message || "Подключение отклонено" },
         { status: 502 },
       );
     }
     console.error("apiship test failed");
     return NextResponse.json(
-      { error: "Не удалось проверить подключение к APIShip" },
+      { error: "Не удалось проверить подключение" },
       { status: 500 },
     );
   }
