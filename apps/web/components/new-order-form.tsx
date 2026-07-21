@@ -45,6 +45,9 @@ const QUICK_SELECT: { mode: SelectionMode; tag: RankTag; label: string }[] = [
 
 const MIN_CITY_LENGTH_FOR_PVZ = 3;
 
+const DEST_CITY_PICK_REQUIRED =
+  "Выберите город доставки из списка";
+
 const RECALCULATE_AFTER_CREATE_HINT =
   "Для следующего отправления рассчитайте тарифы заново";
 const RECALCULATE_AFTER_PARAMS_HINT =
@@ -74,7 +77,7 @@ export function NewOrderForm() {
   const [lengthCm, setLengthCm] = useState("30");
   const [widthCm, setWidthCm] = useState("20");
   const [heightCm, setHeightCm] = useState("10");
-  const [destCity, setDestCity] = useState("Санкт-Петербург");
+  const [destCity, setDestCity] = useState("");
   const [destCityDisplayValue, setDestCityDisplayValue] = useState("");
   const [destAddress, setDestAddress] = useState("");
   const [destAddressDisplayValue, setDestAddressDisplayValue] = useState("");
@@ -112,6 +115,13 @@ export function NewOrderForm() {
   const pointsRequestId = useRef(0);
   const intervalsRequestId = useRef(0);
   const calculationSnapshot = useRef<CalculationSnapshot | null>(null);
+  const destCityInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    destCityInputRef.current?.setCustomValidity(
+      destCityDisplayValue.trim() ? "" : DEST_CITY_PICK_REQUIRED,
+    );
+  }, [destCityDisplayValue]);
 
   const recipientPhoneValidation = normalizeRecipientPhone(recipientPhone);
   const isRecipientPhoneValid =
@@ -259,6 +269,16 @@ export function NewOrderForm() {
       return;
     }
 
+    // Confirmed city IFF user picked a suggestion (displayValue set; raw typing clears it).
+    if (!destCityDisplayValue.trim()) {
+      pointsRequestId.current += 1;
+      setPoints([]);
+      setPointOutId("");
+      setPointsError(DEST_CITY_PICK_REQUIRED);
+      setPointsLoading(false);
+      return;
+    }
+
     const trimmed = destCity.trim();
     if (trimmed.length < MIN_CITY_LENGTH_FOR_PVZ) {
       setPoints([]);
@@ -272,7 +292,7 @@ export function NewOrderForm() {
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [destCity, pickupType, loadPoints]);
+  }, [destCity, destCityDisplayValue, pickupType, loadPoints]);
 
   useEffect(() => {
     invalidateQuotesIfParamsChanged();
@@ -568,6 +588,7 @@ export function NewOrderForm() {
               Город назначения
             </label>
             <AddressAutocomplete
+              ref={destCityInputRef}
               value={destCity}
               displayValue={destCityDisplayValue || undefined}
               onChange={(raw) => {
@@ -632,8 +653,18 @@ export function NewOrderForm() {
               </select>
               <button
                 type="button"
-                onClick={() => void loadPoints(destCity)}
-                disabled={pointsLoading || destCity.trim().length < MIN_CITY_LENGTH_FOR_PVZ}
+                onClick={() => {
+                  if (!destCityDisplayValue.trim()) {
+                    setPointsError(DEST_CITY_PICK_REQUIRED);
+                    return;
+                  }
+                  void loadPoints(destCity);
+                }}
+                disabled={
+                  pointsLoading ||
+                  !destCityDisplayValue.trim() ||
+                  destCity.trim().length < MIN_CITY_LENGTH_FOR_PVZ
+                }
                 className="rounded-lg border border-primary bg-white px-3 py-2 text-sm text-primary hover:bg-primary-soft disabled:opacity-60"
               >
                 {pointsLoading ? "Загрузка..." : "Загрузить ПВЗ"}
