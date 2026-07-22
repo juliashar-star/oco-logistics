@@ -16,6 +16,9 @@ export type AddressSuggestion = {
   city: string;
   addressString: string;
   fullAddress: string;
+  street: string | null;
+  house: string | null;
+  flat: string | null;
 };
 
 type Props = {

@@ -28,6 +28,9 @@ export type AddressSuggestion = {
   city: string;
   addressString: string;
   fullAddress: string;
+  street: string | null;
+  house: string | null;
+  flat: string | null;
 };
 
 function mapSuggestion(suggestion: DadataSuggestion): AddressSuggestion | null {
@@ -52,6 +55,9 @@ function mapSuggestion(suggestion: DadataSuggestion): AddressSuggestion | null {
     city,
     addressString,
     fullAddress,
+    street: data.street_with_type?.trim() ?? null,
+    house: data.house?.trim() ?? null,
+    flat: data.flat?.trim() ?? null,
   };
 }
 
