@@ -421,6 +421,96 @@ test("getOffers with both pointOutId and address: pointOutId wins, no custom_loc
   });
 });
 
+test("getOffers courier with deliveryApartment + deliveryComment: details has room + comment; full_address unchanged", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawOffer(0)] }),
+    );
+
+    try {
+      await getOffers(
+        baseInput({
+          deliveryApartment: " 42 ",
+          deliveryComment: " Домофон 42# ",
+        }),
+        VALID_CREDS,
+      );
+
+      const details = mock.calls[0].body.destination.custom_location.details;
+      assert.equal(details.full_address, "Москва, ул. Тверская, д. 1");
+      assert.equal(details.room, "42");
+      assert.equal(details.comment, "Домофон 42#");
+      assert.deepEqual(Object.keys(details).sort(), [
+        "comment",
+        "full_address",
+        "room",
+      ]);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers courier without apartment/comment: details has ONLY full_address", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawOffer(0)] }),
+    );
+
+    try {
+      await getOffers(
+        baseInput({
+          deliveryApartment: "   ",
+          deliveryComment: null,
+        }),
+        VALID_CREDS,
+      );
+
+      const details = mock.calls[0].body.destination.custom_location.details;
+      assert.deepEqual(details, {
+        full_address: "Москва, ул. Тверская, д. 1",
+      });
+      assert.equal("room" in details, false);
+      assert.equal("comment" in details, false);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getOffers PVZ path unaffected when deliveryApartment/comment set (platform_station, no details)", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawOffer(0)] }),
+    );
+
+    try {
+      await getOffers(
+        baseInput({
+          pointOutId: "019c6bee642d770a937e0d33b27f6467",
+          deliveryApartment: "42",
+          deliveryComment: "ignore me",
+          recipient: {
+            ...RECIPIENT,
+            addressString: undefined,
+          },
+        }),
+        VALID_CREDS,
+      );
+
+      const body = mock.calls[0].body;
+      assert.deepEqual(body.destination, {
+        type: "platform_station",
+        platform_station: { platform_id: "019c6bee642d770a937e0d33b27f6467" },
+      });
+      assert.equal(body.last_mile_policy, "self_pickup");
+      assert.equal("custom_location" in body.destination, false);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
 test("getOffers with neither pointOutId nor address throws YANDEX_NO_DESTINATION", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
     let fetchCalled = false;
