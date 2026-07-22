@@ -477,7 +477,7 @@ export function NewOrderForm() {
     }
   }
 
-  async function handleCalculatePvzYandex() {
+  async function handleCalculateYandex() {
     const declared = Number(declaredValueRub);
     if (!declaredValueRub.trim() || !Number.isFinite(declared) || declared <= 0) {
       setError("Укажите объявленную ценность больше 0");
@@ -614,7 +614,7 @@ export function NewOrderForm() {
     }
 
     if (pickupType === "PVZ") {
-      await handleCalculatePvzYandex();
+      await handleCalculateYandex();
       return;
     }
 
@@ -667,7 +667,7 @@ export function NewOrderForm() {
     setError("");
     setCreateResult(null);
 
-    // PVZ Yandex submit uses handleSubmitPvzYandex — leave this path courier-only.
+    // PVZ Yandex submit uses handleSubmitYandex — leave this path courier-only.
     if (pickupType === "PVZ") {
       return;
     }
@@ -752,7 +752,7 @@ export function NewOrderForm() {
     }
   }
 
-  async function handleSubmitPvzYandex() {
+  async function handleSubmitYandex() {
     setError("");
 
     if (!draftShipmentId || !selectedOfferId) {
@@ -1216,7 +1216,7 @@ export function NewOrderForm() {
             ) : (
               <button
                 type="button"
-                onClick={() => void handleSubmitPvzYandex()}
+                onClick={() => void handleSubmitYandex()}
                 disabled={
                   submittingPvz || !selectedOfferId || !draftShipmentId
                 }
