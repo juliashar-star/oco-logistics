@@ -21,6 +21,8 @@ export type CreateDraftInput = {
   declaredValueRub?: number;
   destCity: string;
   destAddress?: string;
+  destApartment?: string;
+  deliveryComment?: string;
   pvzCode?: string;
   pickupType: PickupType;
   recipientName: string;
@@ -55,6 +57,8 @@ export async function createDraftOrder(
     recipientName: input.recipientName,
     recipientPhone: input.recipientPhone,
     destAddress: input.destAddress,
+    destApartment: input.destApartment,
+    deliveryComment: input.deliveryComment,
   });
 
   const declaredValue =
@@ -76,6 +80,8 @@ export async function createDraftOrder(
         declaredValue,
         destCity: input.destCity.trim(),
         destAddress: encryptedRecipient.destAddress,
+        destApartment: encryptedRecipient.destApartment,
+        deliveryComment: encryptedRecipient.deliveryComment,
         pvzCode: input.pvzCode?.trim() || null,
         pickupType: input.pickupType,
         recipientName: encryptedRecipient.recipientName,

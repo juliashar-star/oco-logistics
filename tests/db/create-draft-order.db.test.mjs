@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { createDraftOrder } from "../../apps/web/lib/shipments/create-draft-order.ts";
+import { decryptShipmentRecipientPii } from "../../apps/web/lib/recipient-pii.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const PII_ENV = "RECIPIENT_PII_ENCRYPTION_KEY";
@@ -44,7 +45,7 @@ async function seedCompany(companyName, email) {
 /**
  * @param {string} companyId
  * @param {string} idempotencyKey
- * @param {Partial<{ legalBasisConfirmed: boolean; recipientName: string; destAddress?: string }>} [overrides]
+ * @param {Partial<{ legalBasisConfirmed: boolean; recipientName: string; destAddress?: string; destApartment?: string; deliveryComment?: string }>} [overrides]
  */
 function draftInput(companyId, idempotencyKey, overrides = {}) {
   return {
@@ -58,6 +59,8 @@ function draftInput(companyId, idempotencyKey, overrides = {}) {
     heightCm: 10,
     destCity: "Москва",
     destAddress: overrides.destAddress ?? "ул. Тестовая, 1",
+    destApartment: overrides.destApartment,
+    deliveryComment: overrides.deliveryComment,
     pickupType: /** @type {const} */ ("COURIER"),
     recipientName: overrides.recipientName ?? "Иван Тестов",
     recipientPhone: "+79001234567",
@@ -107,6 +110,43 @@ describe("createDraftOrder", { concurrency: false }, () => {
       assert.equal(result.shipment.carrierId, null);
       assert.equal(result.shipment.serviceCode, null);
       assert.equal(result.shipment.apishipOrderId, null);
+    });
+  });
+
+  test("(i-b) courier with destApartment + deliveryComment → encrypted at rest + decrypt round-trip", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Apt Co",
+        `draft-apt-${Date.now()}@example.com`,
+      );
+      const plainApartment = "42";
+      const plainComment = "Домофон 42#, код 1234";
+      const key = `idem-${Date.now()}-apt`;
+
+      const result = await createDraftOrder(
+        prisma,
+        draftInput(company.id, key, {
+          destApartment: plainApartment,
+          deliveryComment: plainComment,
+        }),
+      );
+
+      assert.equal(result.created, true);
+      assert.ok(result.shipment.destApartment);
+      assert.ok(result.shipment.deliveryComment);
+      assert.notEqual(result.shipment.destApartment, plainApartment);
+      assert.notEqual(result.shipment.deliveryComment, plainComment);
+
+      const decrypted = decryptShipmentRecipientPii({
+        recipientName: result.shipment.recipientName,
+        recipientPhone: result.shipment.recipientPhone,
+        destAddress: result.shipment.destAddress,
+        destApartment: result.shipment.destApartment,
+        deliveryComment: result.shipment.deliveryComment,
+        isAnonymized: result.shipment.isAnonymized,
+      });
+      assert.equal(decrypted.destApartment, plainApartment);
+      assert.equal(decrypted.deliveryComment, plainComment);
     });
   });
 

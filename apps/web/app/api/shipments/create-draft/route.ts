@@ -14,6 +14,8 @@ export const POST = withAuth(async (request, user) => {
     const pickupType = String(body.pickupType ?? "PVZ");
     const destCity = String(body.destCity ?? "").trim();
     const destAddress = String(body.destAddress ?? "").trim();
+    const destApartment = String(body.destApartment ?? "").trim() || undefined;
+    const deliveryComment = String(body.deliveryComment ?? "").trim() || undefined;
     const recipientName = String(body.recipientName ?? "").trim();
     const recipientPhone = String(body.recipientPhone ?? "").trim();
     const selectionMode = String(body.selectionMode ?? "MANUAL") as SelectionMode;
@@ -88,6 +90,8 @@ export const POST = withAuth(async (request, user) => {
       heightCm,
       destCity,
       destAddress: pickupType === "COURIER" ? destAddress : undefined,
+      destApartment: pickupType === "COURIER" ? destApartment : undefined,
+      deliveryComment: pickupType === "COURIER" ? deliveryComment : undefined,
       pvzCode,
       pickupType: pickupType === "COURIER" ? "COURIER" : "PVZ",
       recipientName,
