@@ -1122,9 +1122,14 @@ export function NewOrderForm() {
 
       {yandexOffers.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">День доставки</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Ориентировочный день доставки</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Выберите день — цена указана за доставку в этот день.
+            Выберите желаемый день. Точный срок перевозчик уточнит после приёма заказа.
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {pickupType === "COURIER"
+              ? "Курьер свяжется с получателем для согласования времени доставки."
+              : "Получатель получит уведомление, когда заказ прибудет в пункт выдачи."}
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {yandexOffers.map((offer) => {
@@ -1156,7 +1161,8 @@ export function NewOrderForm() {
               <div className="space-y-2 text-sm text-slate-800">
                 <p className="font-semibold text-emerald-900">Отправление создано</p>
                 <p>
-                  Доставка: <strong>{yandexSubmitResult.deliveryDayLabel}</strong>
+                  Ориентировочный срок доставки:{" "}
+                  <strong>{yandexSubmitResult.deliveryDayLabel}</strong>
                   {" · "}
                   <strong>
                     {yandexSubmitResult.priceRub.toLocaleString("ru-RU")} ₽
