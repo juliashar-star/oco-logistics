@@ -117,6 +117,8 @@ export function NewOrderForm() {
   const [destAddress, setDestAddress] = useState("");
   const [destAddressDisplayValue, setDestAddressDisplayValue] = useState("");
   const [destAddressHasHouse, setDestAddressHasHouse] = useState(false);
+  const [destApartment, setDestApartment] = useState("");
+  const [deliveryComment, setDeliveryComment] = useState("");
   const [pickupType, setPickupType] = useState<"PVZ" | "COURIER">("PVZ");
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -522,7 +524,11 @@ export function NewOrderForm() {
           pickupType,
           ...(pickupType === "PVZ"
             ? { pvzCode: pointOutId }
-            : { destAddress: destAddress.trim() }),
+            : {
+                destAddress: destAddress.trim(),
+                destApartment: destApartment.trim() || undefined,
+                deliveryComment: deliveryComment.trim() || undefined,
+              }),
           weightG: Number(weightG),
           lengthCm: Number(lengthCm),
           widthCm: Number(widthCm),
@@ -929,8 +935,30 @@ export function NewOrderForm() {
                   setDestCityDisplayValue(result.city);
                 }
               }}
-              placeholder="Улица, дом, квартира"
+              placeholder="Улица и дом"
             />
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Квартира / офис
+              </label>
+              <input
+                value={destApartment}
+                onChange={(e) => setDestApartment(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="кв. 12 или офис 305"
+              />
+            </div>
+            <div className="mt-4">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Комментарий курьеру
+              </label>
+              <input
+                value={deliveryComment}
+                onChange={(e) => setDeliveryComment(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="Домофон, этаж, подъезд — или куда оставить"
+              />
+            </div>
           </div>
         )}
 
