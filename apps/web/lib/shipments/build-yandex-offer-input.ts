@@ -16,6 +16,8 @@ export type BuildYandexOfferShipment = {
   destCity: string;
   /** Already decrypted — route decrypts before calling. */
   destAddress: string | null;
+  destApartment?: string | null;
+  deliveryComment?: string | null;
   recipientName: string;
   recipientPhone: string;
 };
@@ -149,6 +151,8 @@ export function buildYandexOfferInput(args: {
       city: shipment.destCity,
       ...(addressString !== undefined ? { addressString } : {}),
     },
+    deliveryApartment: shipment.destApartment ?? null,
+    deliveryComment: shipment.deliveryComment ?? null,
     items,
   };
 
