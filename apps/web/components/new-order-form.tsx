@@ -66,6 +66,8 @@ const RECALCULATE_AFTER_PARAMS_HINT =
   "Параметры изменились — рассчитайте тарифы заново";
 const NO_DELIVERY_TO_POINT =
   "Доставка в этот пункт недоступна";
+const NO_DELIVERY_TO_ADDRESS =
+  "Доставка по этому адресу недоступна";
 
 type CalculationSnapshot = {
   recipientName: string;
@@ -74,9 +76,10 @@ type CalculationSnapshot = {
   lengthCm: string;
   widthCm: string;
   heightCm: string;
-  /** PVZ / Yandex only — ignored for COURIER invalidation. */
+  /** Yandex draft/offer input — both PVZ and COURIER. */
   declaredValueRub: string;
   destCity: string;
+  destAddress: string;
   pointOutId: string;
   pickupType: "PVZ" | "COURIER";
 };
@@ -113,6 +116,7 @@ export function NewOrderForm() {
   const [destCityDisplayValue, setDestCityDisplayValue] = useState("");
   const [destAddress, setDestAddress] = useState("");
   const [destAddressDisplayValue, setDestAddressDisplayValue] = useState("");
+  const [destAddressHasHouse, setDestAddressHasHouse] = useState(false);
   const [pickupType, setPickupType] = useState<"PVZ" | "COURIER">("PVZ");
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -207,15 +211,16 @@ export function NewOrderForm() {
       heightCm,
       declaredValueRub,
       destCity: destCity.trim(),
+      destAddress: destAddress.trim(),
       pointOutId,
       pickupType,
     };
   }
 
   /**
-   * COURIER: recipient + dims only (byte-identical to 1a09745 — destination edits
-   * do not tear down quotes; they only re-run the intervals effect).
-   * PVZ: also declaredValueRub, destCity, pointOutId (Yandex draft/offer inputs).
+   * Yandex draft/offer inputs for both PVZ and COURIER: base fields +
+   * declaredValueRub + destCity, then destination key by type
+   * (destAddress for COURIER, pointOutId for PVZ).
    */
   function snapshotsEqual(a: CalculationSnapshot, b: CalculationSnapshot): boolean {
     const baseEqual =
@@ -230,15 +235,10 @@ export function NewOrderForm() {
       return false;
     }
 
-    if (b.pickupType === "COURIER") {
-      return true;
-    }
-
-    return (
-      a.declaredValueRub === b.declaredValueRub &&
-      a.destCity === b.destCity &&
-      a.pointOutId === b.pointOutId
-    );
+    if (a.declaredValueRub !== b.declaredValueRub) return false;
+    if (a.destCity !== b.destCity) return false;
+    if (b.pickupType === "COURIER") return a.destAddress === b.destAddress;
+    return a.pointOutId === b.pointOutId;
   }
 
   function invalidateQuotesIfParamsChanged() {
@@ -380,6 +380,7 @@ export function NewOrderForm() {
     heightCm,
     declaredValueRub,
     destCity,
+    destAddress,
     pointOutId,
     pickupType,
     quotes.length,
@@ -518,8 +519,10 @@ export function NewOrderForm() {
           idempotencyKey,
           category,
           destCity,
-          pickupType: "PVZ",
-          pvzCode: pointOutId,
+          pickupType,
+          ...(pickupType === "PVZ"
+            ? { pvzCode: pointOutId }
+            : { destAddress: destAddress.trim() }),
           weightG: Number(weightG),
           lengthCm: Number(lengthCm),
           widthCm: Number(widthCm),
@@ -603,8 +606,8 @@ export function NewOrderForm() {
       return;
     }
 
-    if (pickupType === "COURIER" && !destAddress.trim()) {
-      setError("Укажите полный адрес доставки для курьера");
+    if (pickupType === "COURIER" && (!destAddress.trim() || !destAddressHasHouse)) {
+      setError("Укажите адрес до дома (номер дома)");
       return;
     }
 
@@ -613,54 +616,7 @@ export function NewOrderForm() {
       return;
     }
 
-    if (pickupType === "PVZ") {
-      await handleCalculateYandex();
-      return;
-    }
-
-    setLoading(true);
-    clearQuoteSelection();
-
-    try {
-      const response = await fetch("/api/shipments/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(shipmentParamsForIntervals()),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error ?? "Не удалось рассчитать тарифы");
-        return;
-      }
-
-      const nextQuotes: Quote[] = data.quotes ?? [];
-      setQuotes(nextQuotes);
-      setQuoteIds(data.quoteIds ?? {});
-      setMeta({
-        fromCity: data.fromCity,
-        destCity: data.destCity,
-        fromAddress: data.fromAddress,
-        pointOutId: data.pointOutId ?? null,
-      });
-
-      if (nextQuotes.length === 0) {
-        setError("Перевозчики не дали тариф для этих параметров — проверьте вес и габариты.");
-        return;
-      }
-
-      calculationSnapshot.current = snapshotFromForm();
-
-      const optimal = nextQuotes.find((q) => q.tags.includes("optimal"));
-      if (optimal) {
-        selectQuote(optimal, "OPTIMAL");
-      }
-    } catch {
-      setError("Не удалось связаться с сервером");
-    } finally {
-      setLoading(false);
-    }
+    await handleCalculateYandex();
   }
 
   async function handleCreateShipment() {
@@ -958,10 +914,16 @@ export function NewOrderForm() {
               onChange={(raw) => {
                 setDestAddress(raw);
                 setDestAddressDisplayValue("");
+                setDestAddressHasHouse(false);
               }}
               onSelect={(result) => {
-                setDestAddress(result.addressString);
+                const houseLevel = [result.street, result.house]
+                  .map((p) => p?.trim())
+                  .filter(Boolean)
+                  .join(", ");
+                setDestAddress(houseLevel);
                 setDestAddressDisplayValue(result.fullAddress);
+                setDestAddressHasHouse(Boolean(result.house));
                 if (result.city) {
                   setDestCity(result.city);
                   setDestCityDisplayValue(result.city);
@@ -1069,40 +1031,36 @@ export function NewOrderForm() {
           </div>
         </div>
 
-        {pickupType === "PVZ" && (
-          <div className="max-w-xs">
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Объявленная ценность, ₽
-            </label>
-            <input
-              required
-              type="number"
-              min={1}
-              step={1}
-              value={declaredValueRub}
-              onChange={(e) => setDeclaredValueRub(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              placeholder="Например, 3000"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Сумма объявленной ценности посылки (страховая сумма).
-            </p>
-          </div>
-        )}
-
-        {pickupType === "PVZ" && (
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={legalBasisConfirmed}
-              onChange={(e) => setLegalBasisConfirmed(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Подтверждаю правовое основание обработки персональных данных получателя (152-ФЗ)
-            </span>
+        <div className="max-w-xs">
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Объявленная ценность, ₽
           </label>
-        )}
+          <input
+            required
+            type="number"
+            min={1}
+            step={1}
+            value={declaredValueRub}
+            onChange={(e) => setDeclaredValueRub(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="Например, 3000"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Сумма объявленной ценности посылки (страховая сумма).
+          </p>
+        </div>
+
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={legalBasisConfirmed}
+            onChange={(e) => setLegalBasisConfirmed(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Подтверждаю правовое основание обработки персональных данных получателя (152-ФЗ)
+          </span>
+        </label>
 
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
@@ -1117,9 +1075,7 @@ export function NewOrderForm() {
 
         <button
           type="submit"
-          disabled={
-            loading || (pickupType === "PVZ" && !legalBasisConfirmed)
-          }
+          disabled={loading || !legalBasisConfirmed}
           className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
         >
           {loading ? (
@@ -1158,13 +1114,13 @@ export function NewOrderForm() {
         </p>
       )}
 
-      {pickupType === "PVZ" && noDeliveryToPoint && (
+      {noDeliveryToPoint && (
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
-          {NO_DELIVERY_TO_POINT}
+          {pickupType === "PVZ" ? NO_DELIVERY_TO_POINT : NO_DELIVERY_TO_ADDRESS}
         </p>
       )}
 
-      {pickupType === "PVZ" && yandexOffers.length > 0 && (
+      {yandexOffers.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-slate-900">День доставки</h3>
           <p className="mt-1 text-sm text-slate-600">
