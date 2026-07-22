@@ -148,6 +148,12 @@ export type CarrierCreateOrderInput = {
   deliveryDate?: string;
   deliveryTimeStart?: string;
   deliveryTimeEnd?: string;
+  /**
+   * Courier door details (Yandex: custom_location.details.room / .comment).
+   * Neutral OCO fields — not on CreateOrderAddress (APIShip-derived).
+   */
+  deliveryApartment?: string | null;
+  deliveryComment?: string | null;
 };
 
 export type CarrierCreateOrderResult = {

@@ -452,6 +452,9 @@ function buildPlatformOrderBody(
 
   const { firstName, lastName } = splitRecipientName(input.recipient.contactName);
 
+  const apt = input.deliveryApartment?.trim() ?? "";
+  const comment = input.deliveryComment?.trim() ?? "";
+
   const destination =
     choice.kind === "pickup_point"
       ? {
@@ -464,7 +467,10 @@ function buildPlatformOrderBody(
             details: {
               // Known open issue: Yandex FAQ expects comma-separated parts without postal
               // code or apartment number — we pass recipient input as-is without stripping.
+              // room/comment are sibling fields under details (not baked into full_address).
               full_address: `${input.recipient.city}, ${choice.addressString}`,
+              ...(apt ? { room: apt } : {}),
+              ...(comment ? { comment } : {}),
             },
           },
         };
