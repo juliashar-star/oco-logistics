@@ -6,6 +6,7 @@ import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
 import type { OfferDto } from "@/lib/shipments/offer-dto";
+import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 
@@ -319,7 +320,7 @@ export function NewOrderForm() {
       setPoints(nextPoints);
       setPointOutId("");
       if (nextPoints.length === 0) {
-        setPointsError("Не найдено пунктов выдачи в этом городе — проверьте название");
+        setPointsError(describeEmptyPickupPoints(data.carriers));
       }
     } catch {
       if (requestId !== pointsRequestId.current) {
