@@ -71,9 +71,6 @@ export const POST = withAuth(async (request, user) => {
         senderCity: data.senderCity,
         senderAddress: data.senderAddress,
         senderPhone: data.senderPhone,
-        apishipLogin: null,
-        apishipPasswordEnc: null,
-        apishipConnectedAt: null,
       },
     });
 
@@ -90,8 +87,6 @@ export const POST = withAuth(async (request, user) => {
       restoredFrom: payload.exportedAt,
       companyName: payload.company.name,
       senderConfigured: Boolean(data.senderCity),
-      apishipConnected: false,
-      requiresApishipReconnect: true,
     });
   } catch (error) {
     if (error instanceof BodyTooLargeError) {

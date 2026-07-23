@@ -6,9 +6,6 @@ export type SettingsBackupCompany = {
   senderCity: string | null;
   senderAddress: string | null;
   senderPhone: string | null;
-  apishipLogin: string | null;
-  apishipPasswordEnc: string | null;
-  apishipConnectedAt: string | null;
 };
 
 export type SettingsBackupPayload = {
@@ -23,9 +20,6 @@ export type CompanyBackupSource = {
   senderCity: string | null;
   senderAddress: string | null;
   senderPhone: string | null;
-  apishipLogin: string | null;
-  apishipPasswordEnc: string | null;
-  apishipConnectedAt: Date | null;
 };
 
 export type RestoreSettingsData = {
@@ -49,11 +43,6 @@ function trimOrNull(value: unknown): string | null {
   return trimmed || null;
 }
 
-function isEncryptedPasswordPayload(value: string): boolean {
-  const parts = value.split(".");
-  return parts.length === 3 && parts.every((part) => part.length > 0);
-}
-
 export function buildSettingsBackup(
   company: CompanyBackupSource,
   exportedAt = new Date(),
@@ -67,9 +56,6 @@ export function buildSettingsBackup(
       senderCity: trimOrNull(company.senderCity),
       senderAddress: trimOrNull(company.senderAddress),
       senderPhone: trimOrNull(company.senderPhone),
-      apishipLogin: trimOrNull(company.apishipLogin),
-      apishipPasswordEnc: trimOrNull(company.apishipPasswordEnc),
-      apishipConnectedAt: company.apishipConnectedAt?.toISOString() ?? null,
     },
   };
 }
@@ -114,25 +100,6 @@ export function parseSettingsBackup(raw: unknown): SettingsBackupPayload {
     senderPhone = normalized.value || null;
   }
 
-  const apishipLogin = trimOrNull(companyData.apishipLogin);
-  const apishipPasswordEnc = trimOrNull(companyData.apishipPasswordEnc);
-
-  if (apishipPasswordEnc && !isEncryptedPasswordPayload(apishipPasswordEnc)) {
-    throw new SettingsBackupError("Некорректный формат пароля APIShip в резервной копии");
-  }
-
-  if (apishipPasswordEnc && !apishipLogin) {
-    throw new SettingsBackupError("В резервной копии есть пароль APIShip, но нет логина");
-  }
-
-  const apishipConnectedAtRaw = companyData.apishipConnectedAt;
-  if (
-    apishipConnectedAtRaw != null &&
-    (typeof apishipConnectedAtRaw !== "string" || Number.isNaN(Date.parse(apishipConnectedAtRaw)))
-  ) {
-    throw new SettingsBackupError("Некорректная дата подключения APIShip в резервной копии");
-  }
-
   return {
     format: SETTINGS_BACKUP_FORMAT,
     version: SETTINGS_BACKUP_VERSION,
@@ -142,10 +109,6 @@ export function parseSettingsBackup(raw: unknown): SettingsBackupPayload {
       senderCity: trimOrNull(companyData.senderCity),
       senderAddress: trimOrNull(companyData.senderAddress),
       senderPhone,
-      apishipLogin,
-      apishipPasswordEnc,
-      apishipConnectedAt:
-        apishipConnectedAtRaw == null ? null : String(apishipConnectedAtRaw),
     },
   };
 }

@@ -10,11 +10,6 @@ function trimOrNull(value) {
   return trimmed || null;
 }
 
-function isEncryptedPasswordPayload(value) {
-  const parts = value.split(".");
-  return parts.length === 3 && parts.every((part) => part.length > 0);
-}
-
 function parseSettingsBackup(raw) {
   if (!raw || typeof raw !== "object") {
     throw new Error("Файл резервной копии повреждён или пуст");
@@ -39,17 +34,17 @@ function parseSettingsBackup(raw) {
   const name = trimOrNull(company.name);
   if (!name) throw new Error("В резервной копии не указано название компании");
 
-  const apishipLogin = trimOrNull(company.apishipLogin);
-  const apishipPasswordEnc = trimOrNull(company.apishipPasswordEnc);
-
-  if (apishipPasswordEnc && !isEncryptedPasswordPayload(apishipPasswordEnc)) {
-    throw new Error("Некорректный формат пароля APIShip в резервной копии");
-  }
-  if (apishipPasswordEnc && !apishipLogin) {
-    throw new Error("В резервной копии есть пароль APIShip, но нет логина");
-  }
-
-  return data;
+  return {
+    format: SETTINGS_BACKUP_FORMAT,
+    version: SETTINGS_BACKUP_VERSION,
+    exportedAt: data.exportedAt,
+    company: {
+      name,
+      senderCity: trimOrNull(company.senderCity),
+      senderAddress: trimOrNull(company.senderAddress),
+      senderPhone: trimOrNull(company.senderPhone),
+    },
+  };
 }
 
 const validBackup = {
@@ -61,9 +56,6 @@ const validBackup = {
     senderCity: "Москва",
     senderAddress: "ул. Тестовая, д. 1",
     senderPhone: "+79001234567",
-    apishipLogin: "test",
-    apishipPasswordEnc: "aabb.ccdd.eeff",
-    apishipConnectedAt: "2026-06-18T10:00:00.000Z",
   },
 };
 
@@ -79,37 +71,21 @@ test("parseSettingsBackup rejects wrong format", () => {
   );
 });
 
-test("parseSettingsBackup rejects password without login", () => {
-  assert.throws(
-    () =>
-      parseSettingsBackup({
-        ...validBackup,
-        company: { ...validBackup.company, apishipLogin: null },
-      }),
-    /нет логина/,
-  );
-});
-
-test("parseSettingsBackup rejects malformed encrypted password", () => {
-  assert.throws(
-    () =>
-      parseSettingsBackup({
-        ...validBackup,
-        company: { ...validBackup.company, apishipPasswordEnc: "not-valid" },
-      }),
-    /Некорректный формат пароля/,
-  );
-});
-
-test("parseSettingsBackup accepts backup without APIShip", () => {
+test("parseSettingsBackup accepts old v1 backup that still carries APIShip keys", () => {
   const parsed = parseSettingsBackup({
     ...validBackup,
     company: {
       ...validBackup.company,
-      apishipLogin: null,
-      apishipPasswordEnc: null,
-      apishipConnectedAt: null,
+      apishipLogin: "test",
+      apishipPasswordEnc: "aabb.ccdd.eeff",
+      apishipConnectedAt: "2026-06-18T10:00:00.000Z",
     },
   });
-  assert.equal(parsed.company.apishipLogin, null);
+  assert.equal(parsed.company.name, "Brand Co");
+  assert.equal(parsed.company.senderCity, "Москва");
+  assert.equal(parsed.company.senderAddress, "ул. Тестовая, д. 1");
+  assert.equal(parsed.company.senderPhone, "+79001234567");
+  assert.equal("apishipLogin" in parsed.company, false);
+  assert.equal("apishipPasswordEnc" in parsed.company, false);
+  assert.equal("apishipConnectedAt" in parsed.company, false);
 });

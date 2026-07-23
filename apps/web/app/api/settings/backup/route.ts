@@ -14,9 +14,6 @@ export const GET = withAuth(async (request, user) => {
       senderCity: true,
       senderAddress: true,
       senderPhone: true,
-      apishipLogin: true,
-      apishipPasswordEnc: true,
-      apishipConnectedAt: true,
     },
   });
 

@@ -1,23 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-const APISHIP_RECONNECT_NOTICE_KEY = "oco-settings-restore-apiship-reconnect";
+import { useRef, useState } from "react";
 
 export function SettingsBackupPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [apishipReconnectNotice, setApishipReconnectNotice] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
-
-  useEffect(() => {
-    if (sessionStorage.getItem(APISHIP_RECONNECT_NOTICE_KEY) === "1") {
-      sessionStorage.removeItem(APISHIP_RECONNECT_NOTICE_KEY);
-      setApishipReconnectNotice(true);
-    }
-  }, []);
 
   async function handleDownload() {
     setError("");
@@ -88,10 +78,6 @@ export function SettingsBackupPanel() {
         return;
       }
 
-      if (data.requiresApishipReconnect === true) {
-        sessionStorage.setItem(APISHIP_RECONNECT_NOTICE_KEY, "1");
-      }
-
       const parts: string[] = ["Настройки восстановлены"];
       if (typeof data.companyName === "string") {
         parts.push(`из копии компании «${data.companyName}»`);
@@ -108,21 +94,13 @@ export function SettingsBackupPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Сохраните адрес отправителя и подключение доставки в файл — при сбое или переустановке
+        Сохраните адрес отправителя и данные компании в файл — при сбое или переустановке
         можно быстро восстановить настройки одним кликом.
       </p>
 
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        Файл содержит зашифрованный пароль подключения и данные компании. Не отправляйте его в чат и
-        не публикуйте — храните как секрет (Bitwarden, зашифрованная папка).
+        Файл содержит данные компании и адрес отправителя. Не публикуйте его.
       </p>
-
-      {apishipReconnectNotice && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-          Резервная копия восстановлена. Подключение доставки сброшено — введите пароль
-          повторно в настройках.
-        </p>
-      )}
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
