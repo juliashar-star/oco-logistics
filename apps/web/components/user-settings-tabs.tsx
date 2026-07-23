@@ -14,13 +14,9 @@ const TABS: { id: TabId; label: string }[] = [
 
 type UserSettingsTabsProps = {
   initialName: string;
-  initialWarehouseAddress: string;
 };
 
-export function UserSettingsTabs({
-  initialName,
-  initialWarehouseAddress,
-}: UserSettingsTabsProps) {
+export function UserSettingsTabs({ initialName }: UserSettingsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("profile");
 
   return (
@@ -57,11 +53,8 @@ export function UserSettingsTabs({
       <div className="mt-8 max-w-md">
         {activeTab === "profile" && (
           <div role="tabpanel">
-            <p className="mb-6 text-text-3">Ваше имя и адрес склада для отправлений.</p>
-            <UserProfileForm
-              initialName={initialName}
-              initialWarehouseAddress={initialWarehouseAddress}
-            />
+            <p className="mb-6 text-text-3">Ваше имя.</p>
+            <UserProfileForm initialName={initialName} />
           </div>
         )}
 

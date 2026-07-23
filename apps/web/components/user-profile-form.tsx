@@ -1,21 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Input } from "@/components/ui/input";
 
 type UserProfileFormProps = {
   initialName: string;
-  initialWarehouseAddress: string;
 };
 
-export function UserProfileForm({
-  initialName,
-  initialWarehouseAddress,
-}: UserProfileFormProps) {
+export function UserProfileForm({ initialName }: UserProfileFormProps) {
   const [name, setName] = useState(initialName);
-  const [warehouseAddress, setWarehouseAddress] = useState(initialWarehouseAddress);
-  const [warehouseAddressDisplayValue, setWarehouseAddressDisplayValue] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +23,7 @@ export function UserProfileForm({
       const response = await fetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, warehouseAddress }),
+        body: JSON.stringify({ name }),
       });
       const data = await response.json();
 
@@ -40,8 +33,6 @@ export function UserProfileForm({
       }
 
       setName(data.user?.name ?? name);
-      setWarehouseAddress(data.user?.warehouseAddress ?? warehouseAddress);
-      setWarehouseAddressDisplayValue("");
       setMessage("Профиль сохранён");
     } catch {
       setError("Не удалось сохранить профиль");
@@ -62,26 +53,6 @@ export function UserProfileForm({
           onChange={(e) => setName(e.target.value)}
           placeholder="Как к вам обращаться"
           maxLength={100}
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          Адрес склада отправления
-        </label>
-        <AddressAutocomplete
-          value={warehouseAddress}
-          displayValue={warehouseAddressDisplayValue || undefined}
-          onChange={(raw) => {
-            setWarehouseAddress(raw);
-            setWarehouseAddressDisplayValue("");
-          }}
-          onSelect={(result) => {
-            setWarehouseAddress(result.fullAddress);
-            setWarehouseAddressDisplayValue(result.fullAddress);
-          }}
-          placeholder="Город, улица, склад"
-          disabled={loading}
         />
       </div>
 

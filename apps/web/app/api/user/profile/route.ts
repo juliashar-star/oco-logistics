@@ -10,14 +10,9 @@ export const PATCH = withAuth(async (request, user) => {
       body.name === undefined || body.name === null
         ? undefined
         : String(body.name).trim();
-    const warehouseAddress =
-      body.warehouseAddress === undefined || body.warehouseAddress === null
-        ? undefined
-        : String(body.warehouseAddress).trim();
 
     const errors = validateUserProfile({
       name: name ?? "",
-      warehouseAddress: warehouseAddress ?? "",
     });
     if (errors.length > 0) {
       return NextResponse.json({ error: errors[0].message, errors }, { status: 400 });
@@ -27,14 +22,10 @@ export const PATCH = withAuth(async (request, user) => {
       where: { id: user.userId },
       data: {
         ...(name !== undefined && { name: name || null }),
-        ...(warehouseAddress !== undefined && {
-          warehouseAddress: warehouseAddress || null,
-        }),
       },
       select: {
         id: true,
         name: true,
-        warehouseAddress: true,
       },
     });
 
@@ -42,7 +33,6 @@ export const PATCH = withAuth(async (request, user) => {
       user: {
         id: updated.id,
         name: updated.name ?? "",
-        warehouseAddress: updated.warehouseAddress ?? "",
       },
     });
   } catch {

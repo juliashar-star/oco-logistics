@@ -10,15 +10,12 @@ export default async function UserSettingsPage() {
 
   const profile = await prisma.user.findUnique({
     where: { id: user.userId },
-    select: { name: true, warehouseAddress: true },
+    select: { name: true },
   });
 
   return (
     <CabinetShell active="/dashboard/settings">
-      <UserSettingsTabs
-        initialName={profile?.name ?? ""}
-        initialWarehouseAddress={profile?.warehouseAddress ?? ""}
-      />
+      <UserSettingsTabs initialName={profile?.name ?? ""} />
     </CabinetShell>
   );
 }

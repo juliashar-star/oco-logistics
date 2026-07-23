@@ -62,19 +62,11 @@ export function validateForgotPassword(input: { email: string }): AuthInputError
 
 export function validateUserProfile(input: {
   name?: string;
-  warehouseAddress?: string;
 }): AuthInputError[] {
   const errors: AuthInputError[] = [];
 
   if (input.name !== undefined && input.name.length > 100) {
     errors.push({ field: "name", message: "Имя — не более 100 символов" });
-  }
-
-  if (input.warehouseAddress !== undefined && input.warehouseAddress.length > 500) {
-    errors.push({
-      field: "warehouseAddress",
-      message: "Адрес склада — не более 500 символов",
-    });
   }
 
   return errors;
