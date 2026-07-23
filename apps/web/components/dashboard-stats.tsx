@@ -162,7 +162,7 @@ export function DashboardStats({
       {showOnboarding && (
         <div className="mt-4 rounded-lg bg-primary-soft p-5">
           <h3 className="mb-3 text-sm font-semibold text-primary">
-            Четыре шага до первой доставки
+            Три шага до первой доставки
           </h3>
           <ol>
             <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
@@ -200,17 +200,8 @@ export function DashboardStats({
                 aria-hidden
               />
               <Link href="/settings" className="underline-offset-2 hover:underline">
-                Подключить доставку — это займёт минуту
+                Указать адрес, откуда отправляете посылки
               </Link>
-            </li>
-            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
-              <input
-                type="checkbox"
-                readOnly
-                className="h-4 w-4 shrink-0 rounded border-border"
-                aria-hidden
-              />
-              Указать адрес, откуда отправляете посылки
             </li>
             <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
               <input

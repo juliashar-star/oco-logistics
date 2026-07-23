@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ApishipSettingsForm } from "@/components/apiship-settings-form";
 import { UserPasswordForm } from "@/components/user-password-form";
 import { UserProfileForm } from "@/components/user-profile-form";
 
@@ -75,11 +74,14 @@ export function UserSettingsTabs({
 
         {activeTab === "connection" && (
           <div role="tabpanel">
-            <h3 className="font-medium text-slate-900">Расчёт тарифов</h3>
-            <p className="mt-1 mb-6 text-sm text-text-3">
-              Логин и пароль для расчёта тарифов и создания отправлений.
+            <h3 className="font-medium text-slate-900">Подключение перевозчиков</h3>
+            <p className="mt-1 mb-2 text-sm text-text-3">
+              Здесь вы подключите своих перевозчиков. Порядок подключения: Яндекс Доставка,
+              затем СДЭК, затем остальные.
             </p>
-            <ApishipSettingsForm />
+            <p className="text-sm text-text-3">
+              Форма подключения появится в ближайшем обновлении.
+            </p>
           </div>
         )}
       </div>
