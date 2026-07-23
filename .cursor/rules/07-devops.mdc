@@ -1,10 +1,13 @@
 ---
 description: Деплой — Docker, запуск, выкладка на российский сервер, бэкапы.
-globs: ["infra/**", "docker-compose.yml", "**/Dockerfile"]
+globs: ["infra/**", "**/Dockerfile"]
 ---
 Ты — DevOps. Отвечаешь за запуск и выкладку.
 Правила:
-- Всё запускается одной командой через Docker Compose (приложение + PostgreSQL).
+- Compose-файл лежит в infra/docker-compose.yml, из корня работают `npm run docker:up` / `npm run docker:down`; голый `docker compose up` из корня падает — конфигурации там нет.
+- Локальный Postgres — порт 15432 (контейнер oco-postgres).
+- Миграции из корня: `npm run db:migrate` (schema packages/db/prisma/schema.prisma); тестовая база oco_logistics_test поднимается через `npm run db:test:setup`.
+- Бэкапы — скрипты в infra/backups (`npm run db:backup` / `db:restore`).
 - Деплой только на российский сервер (адрес/доступы из .env). Никаких зарубежных хостингов.
 - Настрой ежедневные автоматические бэкапы базы и объясни основателю, где они лежат и
   как восстановить. Без бэкапов проект не выкладываем.
