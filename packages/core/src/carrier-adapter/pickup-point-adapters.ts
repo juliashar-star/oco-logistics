@@ -1,5 +1,5 @@
 import type { CarrierAdapter } from "./types";
-import { listPickupPoints as yandexListPickupPoints } from "./yandex/client";
+import { yandexAdapter } from "./yandex/adapter";
 
 /**
  * Pickup-point capability only — not a full CarrierAdapter.
@@ -13,8 +13,8 @@ export type PickupPointAdapter = {
 
 export const PICKUP_POINT_ADAPTERS: Record<string, PickupPointAdapter> = {
   yataxi: {
-    providerKey: "yataxi",
-    listPickupPoints: yandexListPickupPoints,
+    providerKey: yandexAdapter.providerKey,
+    listPickupPoints: yandexAdapter.listPickupPoints,
   },
 };
 

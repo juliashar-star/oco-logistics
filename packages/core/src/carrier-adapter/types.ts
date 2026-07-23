@@ -249,14 +249,14 @@ export interface CarrierAdapter {
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierCreateOrderResult>;
-  getOrderStatus(
+  getOrderHistory(
     providerOrderId: string,
     credentials: CarrierCredentials,
-  ): Promise<ShipmentStatus>;
+  ): Promise<CarrierOrderHistoryResult>;
   cancelOrder(
     providerOrderId: string,
     credentials: CarrierCredentials,
-  ): Promise<CarrierCancelResult>;
+  ): Promise<CarrierCancelOrderResult>;
 }
 
 export type {
