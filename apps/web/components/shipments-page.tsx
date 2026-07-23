@@ -289,7 +289,7 @@ export function ShipmentsPage() {
     setSyncError(null);
 
     try {
-      const response = await fetch("/api/shipments/sync-statuses", { method: "POST" });
+      const response = await fetch("/api/shipments/sync-yandex-statuses", { method: "POST" });
       const data = await response.json();
 
       if (!response.ok) {
@@ -301,8 +301,17 @@ export function ShipmentsPage() {
         return;
       }
 
+      const updated = data.updated ?? 0;
+      const events = data.events ?? 0;
+      const notFound = data.notFound ?? 0;
+      const summary =
+        updated === 0 && events === 0
+          ? "Новых событий нет"
+          : `Обновлено заказов: ${updated} · новых событий: ${events}`;
       setSyncNotice(
-        `Статусы обновлены: ${data.updated ?? 0} посылок, ${data.events ?? 0} новых событий`,
+        notFound > 0
+          ? `${summary}. Не найдено у перевозчика: ${notFound} — эти заказы не обновились.`
+          : summary,
       );
       await loadShipments();
     } catch {

@@ -9,8 +9,9 @@ import { syncYandexShipmentStatuses } from "@/lib/shipments/sync-yandex-statuses
 
 // Separate from POST /api/shipments/sync-statuses (APIShip): appending a Yandex
 // call there would let a Yandex fault 500 the whole request including APIShip
-// work that already succeeded — a regression on the live path. They merge when
-// the form switches to the offers flow.
+// work that already succeeded — a regression on the live path. They do NOT merge:
+// per the 2026-07-23 decision APIShip is not a delivery channel, so the APIShip
+// sync goes away with the legacy-route cleanup instead.
 
 export const POST = withAuth(async (request, user) => {
   try {
