@@ -1,28 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { CompanySettingsForm } from "@/components/company-settings-form";
+import { SettingsBackupPanel } from "@/components/settings-backup-panel";
 import { UserPasswordForm } from "@/components/user-password-form";
 import { UserProfileForm } from "@/components/user-profile-form";
 
-type TabId = "profile" | "security" | "connection";
+export type TabId = "profile" | "company" | "security" | "connection";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "profile", label: "Профиль" },
+  { id: "company", label: "Компания" },
   { id: "security", label: "Безопасность" },
   { id: "connection", label: "Подключение" },
 ];
 
 type UserSettingsTabsProps = {
   initialName: string;
+  initialTab?: TabId;
 };
 
-export function UserSettingsTabs({ initialName }: UserSettingsTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("profile");
+export function UserSettingsTabs({
+  initialName,
+  initialTab = "profile",
+}: UserSettingsTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <h2 className="text-2xl font-semibold text-slate-900">Настройки</h2>
-      <p className="mt-2 text-text-3">Профиль, безопасность и подключения.</p>
+      <p className="mt-2 text-text-3">Профиль, компания, безопасность и подключения.</p>
 
       <div
         role="tablist"
@@ -55,6 +62,30 @@ export function UserSettingsTabs({ initialName }: UserSettingsTabsProps) {
           <div role="tabpanel">
             <p className="mb-6 text-text-3">Ваше имя.</p>
             <UserProfileForm initialName={initialName} />
+          </div>
+        )}
+
+        {activeTab === "company" && (
+          <div role="tabpanel" className="space-y-8">
+            <div>
+              <h3 className="font-medium text-slate-900">Адрес отправителя</h3>
+              <p className="mt-1 text-sm text-text-3">
+                Используется при расчёте и создании отправлений по умолчанию.
+              </p>
+              <div className="mt-4">
+                <CompanySettingsForm />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium text-slate-900">Резервная копия</h3>
+              <p className="mt-1 text-sm text-text-3">
+                Экспорт и восстановление всех настроек кабинета.
+              </p>
+              <div className="mt-4">
+                <SettingsBackupPanel />
+              </div>
+            </div>
           </div>
         )}
 

@@ -4,7 +4,7 @@ import { readSessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 import { isAllowedRequestOrigin, isMutatingMethod } from "@/lib/security/csrf";
 import { nextPageWithCsp } from "@/lib/security/csp";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/new-order", "/shipments"];
+const PROTECTED_PREFIXES = ["/dashboard", "/new-order", "/shipments"];
 
 const AUTH_PAGES = ["/login", "/register"];
 

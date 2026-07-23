@@ -199,7 +199,10 @@ export function DashboardStats({
                 className="h-4 w-4 shrink-0 rounded border-border"
                 aria-hidden
               />
-              <Link href="/settings" className="underline-offset-2 hover:underline">
+              <Link
+                href="/dashboard/settings?tab=company"
+                className="underline-offset-2 hover:underline"
+              >
                 Указать адрес, откуда отправляете посылки
               </Link>
             </li>

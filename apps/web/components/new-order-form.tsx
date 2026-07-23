@@ -765,7 +765,7 @@ export function NewOrderForm() {
   }
 
   const settingsLink = (label: string) => (
-    <Link href="/settings" className="underline">
+    <Link href="/dashboard/settings?tab=company" className="underline">
       {label}
     </Link>
   );
