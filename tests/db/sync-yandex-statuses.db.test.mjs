@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { encryptCarrierCredentials } from "../../apps/web/lib/carrier-credentials.ts";
 import { syncYandexShipmentStatuses } from "../../apps/web/lib/shipments/sync-yandex-statuses.ts";
+import { YandexAuthError } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const ENV_KEY = "CARRIER_CREDENTIALS_ENCRYPTION_KEY";
@@ -34,6 +35,8 @@ async function withEnv(name, value, run) {
   }
 }
 
+const EMPTY_INFO = async () => ({ ok: true, info: {} });
+
 /**
  * @param {string} companyName
  * @param {string} email
@@ -41,6 +44,9 @@ async function withEnv(name, value, run) {
  *   status?: import("@prisma/client").ShipmentStatus,
  *   providerOrderId?: string | null,
  *   providerKey?: string | null,
+ *   trackNumber?: string | null,
+ *   trackingUrl?: string | null,
+ *   plannedDeliveryDate?: Date | null,
  * }} [extra]
  */
 async function seedYandexShipment(companyName, email, extra = {}) {
@@ -71,6 +77,11 @@ async function seedYandexShipment(companyName, email, extra = {}) {
           ? `req-${Date.now()}-${Math.random()}`
           : extra.providerOrderId,
       idempotencyKey: `idem-${Date.now()}-${Math.random()}`,
+      ...(extra.trackNumber !== undefined ? { trackNumber: extra.trackNumber } : {}),
+      ...(extra.trackingUrl !== undefined ? { trackingUrl: extra.trackingUrl } : {}),
+      ...(extra.plannedDeliveryDate !== undefined
+        ? { plannedDeliveryDate: extra.plannedDeliveryDate }
+        : {}),
     },
   });
   return { company, shipment };
@@ -113,9 +124,10 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
-      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0 });
+      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const events = await prisma.trackingEvent.findMany({
@@ -156,6 +168,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       assert.equal(result.updated, 1);
@@ -189,6 +202,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
@@ -207,6 +221,10 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       const { company } = await seedYandexShipment(
         "Idempotent Co",
         `sync-idem-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+        },
       );
       const history = {
         ok: true,
@@ -226,12 +244,14 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
 
       const first = await syncYandexShipmentStatuses(prisma, company.id, {
         getHistory: async () => history,
+        getInfo: EMPTY_INFO,
       });
       assert.equal(first.events, 2);
       assert.equal(first.updated, 1);
 
       const second = await syncYandexShipmentStatuses(prisma, company.id, {
         getHistory: async () => history,
+        getInfo: EMPTY_INFO,
       });
       assert.equal(second.events, 0);
       assert.equal(second.updated, 0);
@@ -264,6 +284,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
@@ -291,6 +312,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
@@ -324,6 +346,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       assert.equal(result.updated, 0);
@@ -347,9 +370,10 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
 
       const result = await syncYandexShipmentStatuses(prisma, company.id, {
         getHistory: async () => ({ ok: false, reason: "order_not_found" }),
+        getInfo: EMPTY_INFO,
       });
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const count = await prisma.trackingEvent.count({
@@ -382,9 +406,10 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             ],
           };
         },
+        getInfo: EMPTY_INFO,
       });
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0 });
       assert.equal(getHistoryCalls, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "DELIVERED");
@@ -413,6 +438,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           ],
         }),
+        getInfo: EMPTY_INFO,
       });
 
       const rowB = await prisma.shipment.findUnique({ where: { id: bShip.id } });
@@ -422,6 +448,436 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       });
       assert.equal(bEvents, 0);
       void b;
+    });
+  });
+
+  test("(xi) new event + empty columns → trackNumber, trackingUrl, plannedDeliveryDate filled", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Fill Info Co",
+        `sync-fill-${Date.now()}@example.com`,
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            trackingNumber: "10014440",
+            trackingUrl:
+              "https://logistics-frontend.taxi.tst.yandex.ru/route/abc",
+            plannedDeliveryFrom: "2026-07-27T06:00:00+0000",
+            plannedDeliveryTo: "2026-07-27T15:00:00+0000",
+          },
+        }),
+      });
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.trackNumber, "10014440");
+      assert.equal(
+        row?.trackingUrl,
+        "https://logistics-frontend.taxi.tst.yandex.ru/route/abc",
+      );
+      assert.equal(
+        row?.plannedDeliveryDate?.toISOString(),
+        new Date("2026-07-27T06:00:00+0000").toISOString(),
+      );
+    });
+  });
+
+  test("(xii) columns already filled, no new events → getInfo NOT called", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const heldDate = new Date("2026-07-27T06:00:00.000Z");
+      const { company, shipment } = await seedYandexShipment(
+        "Skip Info Co",
+        `sync-skip-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: heldDate,
+        },
+      );
+      await prisma.trackingEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          statusCode: "CREATED",
+          statusText: "Принят",
+          eventAt: new Date("2026-07-17T10:00:00.000Z"),
+        },
+      });
+
+      let getInfoCalls = 0;
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => {
+          getInfoCalls += 1;
+          return { ok: true, info: {} };
+        },
+      });
+
+      assert.equal(getInfoCalls, 0);
+    });
+  });
+
+  test("(xiii) no new events but trackingUrl empty → getInfo IS called", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Url Empty Co",
+        `sync-url-${Date.now()}@example.com`,
+        { trackNumber: "10014440", trackingUrl: null },
+      );
+      await prisma.trackingEvent.create({
+        data: {
+          shipmentId: shipment.id,
+          statusCode: "CREATED",
+          statusText: "Принят",
+          eventAt: new Date("2026-07-17T10:00:00.000Z"),
+        },
+      });
+
+      let getInfoCalls = 0;
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => {
+          getInfoCalls += 1;
+          return {
+            ok: true,
+            info: { trackingUrl: "https://example.test/track/filled" },
+          };
+        },
+      });
+
+      assert.equal(getInfoCalls, 1);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.trackingUrl, "https://example.test/track/filled");
+    });
+  });
+
+  test("(xiv) plannedDeliveryDate differs → column updated + OCO_DELIVERY_DATE_CHANGED", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const heldDate = new Date("2026-07-27T06:00:00.000Z");
+      const { company, shipment } = await seedYandexShipment(
+        "Date Change Co",
+        `sync-date-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: heldDate,
+        },
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            plannedDeliveryFrom: "2026-07-28T06:00:00+0000",
+          },
+        }),
+      });
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(
+        row?.plannedDeliveryDate?.toISOString(),
+        new Date("2026-07-28T06:00:00+0000").toISOString(),
+      );
+      const oco = await prisma.trackingEvent.findFirst({
+        where: {
+          shipmentId: shipment.id,
+          statusCode: "OCO_DELIVERY_DATE_CHANGED",
+        },
+      });
+      assert.ok(oco);
+      assert.match(oco.statusText, /27\.07\.2026/);
+      assert.match(oco.statusText, /28\.07\.2026/);
+      assert.match(oco.statusText, /→/);
+    });
+  });
+
+  test("(xv) plannedDeliveryDate identical → no new event, no write", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const heldDate = new Date("2026-07-27T06:00:00.000Z");
+      const { company, shipment } = await seedYandexShipment(
+        "Date Same Co",
+        `sync-same-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: heldDate,
+        },
+      );
+
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            plannedDeliveryFrom: "2026-07-27T06:00:00.000Z",
+          },
+        }),
+      });
+
+      // One provider CREATED event only — no OCO date-change event.
+      assert.equal(result.events, 1);
+      const ocoCount = await prisma.trackingEvent.count({
+        where: {
+          shipmentId: shipment.id,
+          statusCode: "OCO_DELIVERY_DATE_CHANGED",
+        },
+      });
+      assert.equal(ocoCount, 0);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.plannedDeliveryDate?.toISOString(), heldDate.toISOString());
+    });
+  });
+
+  test("(xvi) getInfo order_not_found → row untouched, sync completes", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Info Nf Co",
+        `sync-infonf-${Date.now()}@example.com`,
+        { status: "CREATED" },
+      );
+
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({ ok: false, reason: "order_not_found" }),
+      });
+
+      assert.equal(result.notFound, 0);
+      assert.equal(result.infoFailed, 1);
+      assert.equal(result.events, 1);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.trackNumber, null);
+      assert.equal(row?.trackingUrl, null);
+      assert.equal(row?.plannedDeliveryDate, null);
+    });
+  });
+
+  test("(xvii) trackNumber already set, provider returns different → ours NOT overwritten", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Keep Track Co",
+        `sync-keep-${Date.now()}@example.com`,
+        {
+          trackNumber: "OURS-KEEP",
+          trackingUrl: null,
+        },
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            trackingNumber: "PROVIDER-OTHER",
+            trackingUrl: "https://example.test/track/new",
+          },
+        }),
+      });
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.trackNumber, "OURS-KEEP");
+      assert.equal(row?.trackingUrl, "https://example.test/track/new");
+    });
+  });
+
+  test("(xviii) getInfo plain Error on A → B still processed, infoFailed 1, A untouched", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment: shipA } = await seedYandexShipment(
+        "Info Fail Co",
+        `sync-infofail-${Date.now()}@example.com`,
+      );
+      const shipB = await prisma.shipment.create({
+        data: {
+          companyId: company.id,
+          weightG: 500,
+          lengthCm: 10,
+          widthCm: 10,
+          heightCm: 10,
+          destCity: "Москва",
+          recipientName: "Recipient B",
+          recipientPhone: "+79007654321",
+          status: "CREATED",
+          providerKey: PROVIDER_YANDEX,
+          providerOrderId: `req-b-${Date.now()}-${Math.random()}`,
+          idempotencyKey: `idem-b-${Date.now()}-${Math.random()}`,
+        },
+      });
+
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async (providerOrderId) => {
+          if (providerOrderId === shipA.providerOrderId) {
+            throw new Error("provider info boom");
+          }
+          return {
+            ok: true,
+            info: {
+              trackingNumber: "TRACK-B",
+              trackingUrl: "https://example.test/track/b",
+            },
+          };
+        },
+      });
+
+      assert.equal(result.infoFailed, 1);
+      const rowA = await prisma.shipment.findUnique({ where: { id: shipA.id } });
+      assert.equal(rowA?.trackNumber, null);
+      assert.equal(rowA?.trackingUrl, null);
+      const rowB = await prisma.shipment.findUnique({ where: { id: shipB.id } });
+      assert.equal(rowB?.trackNumber, "TRACK-B");
+      assert.equal(rowB?.trackingUrl, "https://example.test/track/b");
+    });
+  });
+
+  test("(xix) getInfo YandexAuthError → whole sync rejects", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company } = await seedYandexShipment(
+        "Auth Fail Co",
+        `sync-authfail-${Date.now()}@example.com`,
+      );
+
+      await assert.rejects(
+        () =>
+          syncYandexShipmentStatuses(prisma, company.id, {
+            getHistory: async () => ({
+              ok: true,
+              events: [
+                {
+                  statusCode: "CREATED",
+                  statusText: "Принят",
+                  eventAt: "2026-07-17T10:00:00.000Z",
+                },
+              ],
+            }),
+            getInfo: async () => {
+              throw new YandexAuthError("Yandex Delivery auth failed: HTTP 401");
+            },
+          }),
+        (err) => {
+          assert.ok(err instanceof YandexAuthError);
+          return true;
+        },
+      );
+    });
+  });
+
+  test("(xx) plannedDeliveryDate null → column filled, no OCO_DELIVERY_DATE_CHANGED", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Date First Co",
+        `sync-datefirst-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: null,
+        },
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, {
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            plannedDeliveryFrom: "2026-07-27T06:00:00+0000",
+          },
+        }),
+      });
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(
+        row?.plannedDeliveryDate?.toISOString(),
+        new Date("2026-07-27T06:00:00+0000").toISOString(),
+      );
+      const ocoCount = await prisma.trackingEvent.count({
+        where: {
+          shipmentId: shipment.id,
+          statusCode: "OCO_DELIVERY_DATE_CHANGED",
+        },
+      });
+      assert.equal(ocoCount, 0);
     });
   });
 });

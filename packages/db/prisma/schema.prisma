@@ -144,6 +144,7 @@ model Shipment {
 
   apishipOrderId       String?
   trackNumber          String?
+  trackingUrl          String?    // страница отслеживания от перевозчика
   labelUrl             String?    // URL этикетки PDF от APIShip
 
   idempotencyKey         String?

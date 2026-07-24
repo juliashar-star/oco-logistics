@@ -1,7 +1,7 @@
 import type { PickupType, ShipmentStatus } from "@prisma/client";
+import { MOSCOW_TIMEZONE, formatDateMoscow } from "@/lib/date/format-date-moscow";
 import { PICKUP_TYPE_LABELS, STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 
-const MOSCOW_TIMEZONE = "Europe/Moscow";
 const CSV_SEPARATOR = ";";
 const CSV_LINE_BREAK = "\r\n";
 const CSV_BOM = "\uFEFF";
@@ -51,20 +51,6 @@ function formatDateTimeMoscow(date: Date): string {
     parts.find((part) => part.type === type)?.value ?? "";
 
   return `${get("day")}.${get("month")}.${get("year")} ${get("hour")}:${get("minute")}`;
-}
-
-function formatDateMoscow(date: Date): string {
-  const parts = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: MOSCOW_TIMEZONE,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).formatToParts(date);
-
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-
-  return `${get("day")}.${get("month")}.${get("year")}`;
 }
 
 function formatMoneyKopecks(kopecks: number | null): string {

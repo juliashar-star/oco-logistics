@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   YandexAuthError,
   getOrderHistory,
+  getOrderInfo,
 } from "@oco/core/carrier-adapter/yandex/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
@@ -17,6 +18,7 @@ export const POST = withAuth(async (request, user) => {
   try {
     const result = await syncYandexShipmentStatuses(prisma, user.companyId, {
       getHistory: getOrderHistory,
+      getInfo: getOrderInfo,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
