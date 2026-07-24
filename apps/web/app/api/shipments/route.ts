@@ -23,6 +23,7 @@ const shipmentSelect = {
   createdAt: true,
   status: true,
   trackNumber: true,
+  trackingUrl: true,
   labelUrl: true,
   recipientName: true,
   destCity: true,

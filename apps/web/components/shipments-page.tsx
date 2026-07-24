@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
+import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +22,7 @@ type ShipmentRow = {
   createdAt: string;
   status: ShipmentStatus;
   trackNumber: string | null;
+  trackingUrl: string | null;
   labelUrl: string | null;
   recipientName: string;
   destCity: string;
@@ -452,7 +454,18 @@ export function ShipmentsPage() {
                         {formatReturnReason(shipment.returnReason) || "—"}
                       </TableCell>
                       <TableCell className="font-mono text-sm">
-                        {shipment.trackNumber ?? "—"}
+                        {isHttpsUrl(shipment.trackingUrl) ? (
+                          <a
+                            href={shipment.trackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sky-700 hover:underline"
+                          >
+                            {shipment.trackNumber ?? "Отследить"}
+                          </a>
+                        ) : (
+                          (shipment.trackNumber ?? "—")
+                        )}
                       </TableCell>
                       <TableCell>{formatPrice(shipment.plannedCost)}</TableCell>
                       <TableCell>
@@ -537,6 +550,23 @@ export function ShipmentsPage() {
                   <dt className="text-slate-500">Трек-номер</dt>
                   <dd className="font-mono text-slate-900">
                     {selectedShipment.trackNumber ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Отслеживание</dt>
+                  <dd className="text-slate-900">
+                    {isHttpsUrl(selectedShipment.trackingUrl) ? (
+                      <a
+                        href={selectedShipment.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Отследить у перевозчика
+                      </a>
+                    ) : (
+                      "—"
+                    )}
                   </dd>
                 </div>
                 <div>
