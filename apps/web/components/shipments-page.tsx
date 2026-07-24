@@ -459,7 +459,7 @@ export function ShipmentsPage() {
                             href={shipment.trackingUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sky-700 hover:underline"
+                            className="text-primary hover:underline"
                           >
                             {shipment.trackNumber ?? "Отследить"}
                           </a>
