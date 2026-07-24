@@ -6,6 +6,7 @@ import {
   confirmOffer,
   createOrder,
   getOrderHistory,
+  getOrderInfo,
   cancelOrder,
 } from "./client";
 
@@ -18,5 +19,6 @@ export const yandexAdapter = {
   confirmOffer,
   createOrder,
   getOrderHistory,
+  getOrderInfo,
   cancelOrder,
 } satisfies CarrierAdapter;

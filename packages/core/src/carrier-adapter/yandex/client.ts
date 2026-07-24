@@ -12,6 +12,8 @@ import type {
   CarrierOffersResult,
   CarrierQuotesResult,
   CarrierOrderHistoryResult,
+  CarrierOrderInfo,
+  CarrierOrderInfoResult,
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
@@ -760,6 +762,110 @@ export async function getOrderHistory(
     .filter((event): event is CarrierTrackingEvent => event !== null);
 
   return { ok: true, events };
+}
+
+/**
+ * GET /request/info?request_id= — provider-side identifiers + promised window.
+ *
+ * Does NOT carry status (getOrderHistory is the single source) and does NOT
+ * retain the raw body (it echoes recipient PD).
+ *
+ * customer_order_not_found (keyed on CODE, not HTTP status) →
+ * { ok: false, reason: "order_not_found" }. Other non-200 → throw.
+ * 200 whose body is not an object → throw malformed.
+ */
+export async function getOrderInfo(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierOrderInfoResult> {
+  const creds = assertYandexCredentials(credentials);
+  const path =
+    `/api/b2b/platform/request/info?request_id=${encodeURIComponent(providerOrderId)}`;
+
+  const response = await yandexGet(creds, path);
+  const rawText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawText) as unknown;
+  } catch {
+    raw = rawText;
+  }
+
+  // Key on the provider CODE, not the HTTP status — same as getOrderHistory /
+  // getOffers no_delivery_options.
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "code" in raw &&
+    (raw as { code: unknown }).code === "customer_order_not_found"
+  ) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  if (response.status !== 200) {
+    // The body is NOT safe to interpolate: request/info echoes recipient PD
+    // (name, phone, full address). Carry the provider's own error classification
+    // when it is present, and nothing else — never the raw body.
+    const errorCode =
+      raw !== null && typeof raw === "object" && "code" in raw
+        ? String((raw as { code: unknown }).code)
+        : undefined;
+    throw new Error(
+      errorCode
+        ? `Yandex Delivery get order info failed: HTTP ${response.status} (${errorCode})`
+        : `Yandex Delivery get order info failed: HTTP ${response.status}`,
+    );
+  }
+
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(
+      "Yandex Delivery get order info failed: malformed response (body is not an object)",
+    );
+  }
+
+  const body = raw as Record<string, unknown>;
+  const info: CarrierOrderInfo = {};
+
+  const trackingNumber = body.courier_order_id;
+  if (typeof trackingNumber === "string" && trackingNumber.length > 0) {
+    info.trackingNumber = trackingNumber;
+  }
+
+  const trackingUrl = body.sharing_url;
+  if (typeof trackingUrl === "string" && trackingUrl.length > 0) {
+    info.trackingUrl = trackingUrl;
+  }
+
+  const destination =
+    body.request !== null &&
+    typeof body.request === "object" &&
+    !Array.isArray(body.request) &&
+    "destination" in (body.request as object)
+      ? (body.request as { destination: unknown }).destination
+      : undefined;
+  const intervalUtc =
+    destination !== null &&
+    typeof destination === "object" &&
+    !Array.isArray(destination) &&
+    "interval_utc" in destination
+      ? (destination as { interval_utc: unknown }).interval_utc
+      : undefined;
+  if (
+    intervalUtc !== null &&
+    typeof intervalUtc === "object" &&
+    !Array.isArray(intervalUtc)
+  ) {
+    const from = (intervalUtc as { from?: unknown }).from;
+    const to = (intervalUtc as { to?: unknown }).to;
+    if (typeof from === "string" && from.length > 0) {
+      info.plannedDeliveryFrom = from;
+    }
+    if (typeof to === "string" && to.length > 0) {
+      info.plannedDeliveryTo = to;
+    }
+  }
+
+  return { ok: true, info };
 }
 
 /**

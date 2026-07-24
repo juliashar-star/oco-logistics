@@ -207,6 +207,29 @@ export type CarrierOrderHistoryResult =
   | { ok: true; events: CarrierTrackingEvent[] }
   | { ok: false; reason: "order_not_found" };
 
+/** Provider-side identifiers and the current promised delivery window.
+ *  Deliberately carries NO status: the status timeline (getOrderHistory) is the
+ *  single source of truth for status, and a second source would eventually
+ *  disagree with it.
+ *  Deliberately carries NO raw field, unlike the other neutral types: the
+ *  provider's body echoes recipient PD (name, phone, full address), so keeping
+ *  it would create a plaintext PD store. */
+export type CarrierOrderInfo = {
+  /** Short human-facing number — what a seller reads out to support. */
+  trackingNumber?: string;
+  /** Buyer-facing tracking page. STORE AS RETURNED — never rebuild it from an
+   *  id: the host differs between test and production. */
+  trackingUrl?: string;
+  /** Current promised window, ISO-8601 strings, same convention as
+   *  CarrierTrackingEvent.eventAt — the caller parses. */
+  plannedDeliveryFrom?: string;
+  plannedDeliveryTo?: string;
+};
+
+export type CarrierOrderInfoResult =
+  | { ok: true; info: CarrierOrderInfo }
+  | { ok: false; reason: "order_not_found" };
+
 export type CarrierCancelResult = {
   /** Provider accepted the cancellation *request*. For Yandex this is HTTP 200 on
    *  request/cancel; it does NOT mean the order is cancelled — cancellation is
@@ -253,6 +276,10 @@ export interface CarrierAdapter {
     providerOrderId: string,
     credentials: CarrierCredentials,
   ): Promise<CarrierOrderHistoryResult>;
+  getOrderInfo(
+    providerOrderId: string,
+    credentials: CarrierCredentials,
+  ): Promise<CarrierOrderInfoResult>;
   cancelOrder(
     providerOrderId: string,
     credentials: CarrierCredentials,
