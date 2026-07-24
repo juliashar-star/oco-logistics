@@ -11,7 +11,9 @@
     ".": "./src/index.ts",
     "./crypto/field-encryption": "./src/crypto/field-encryption.ts",
     "./carrier-adapter/types": "./src/carrier-adapter/types.ts",
+    "./carrier-adapter/errors": "./src/carrier-adapter/errors.ts",
     "./carrier-adapter/pickup-point-adapters": "./src/carrier-adapter/pickup-point-adapters.ts",
+    "./carrier-adapter/status-sync-adapters": "./src/carrier-adapter/status-sync-adapters.ts",
     "./carrier-adapter/yandex/parse-price": "./src/carrier-adapter/yandex/parse-price.ts",
     "./carrier-adapter/yandex/map-status": "./src/carrier-adapter/yandex/map-status.ts",
     "./carrier-adapter/yandex/client": "./src/carrier-adapter/yandex/client.ts"

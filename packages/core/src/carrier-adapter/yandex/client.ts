@@ -17,9 +17,10 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
+import { CarrierAuthError } from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
 
-export class YandexAuthError extends Error {
+export class YandexAuthError extends CarrierAuthError {
   constructor(message: string) {
     super(message);
     this.name = "YandexAuthError";

@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  YandexAuthError,
-  getOrderHistory,
-  getOrderInfo,
-} from "@oco/core/carrier-adapter/yandex/client";
+import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
+import { STATUS_SYNC_ADAPTERS } from "@oco/core/carrier-adapter/status-sync-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { syncYandexShipmentStatuses } from "@/lib/shipments/sync-yandex-statuses";
@@ -17,12 +14,11 @@ import { syncYandexShipmentStatuses } from "@/lib/shipments/sync-yandex-statuses
 export const POST = withAuth(async (request, user) => {
   try {
     const result = await syncYandexShipmentStatuses(prisma, user.companyId, {
-      getHistory: getOrderHistory,
-      getInfo: getOrderInfo,
+      adapters: STATUS_SYNC_ADAPTERS,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    if (error instanceof YandexAuthError) {
+    if (error instanceof CarrierAuthError) {
       return NextResponse.json(
         {
           error:

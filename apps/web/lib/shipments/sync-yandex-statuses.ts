@@ -1,19 +1,21 @@
+/**
+ * Carrier-neutral status sync. The file and route are still named "yandex" only
+ * because /api/shipments/sync-statuses is taken by the legacy APIShip route and
+ * both get renamed together when that is removed.
+ */
 import type { Prisma, PrismaClient, ShipmentStatus } from "@prisma/client";
 import type {
-  CarrierCredentials,
-  CarrierOrderHistoryResult,
   CarrierOrderInfo,
   CarrierOrderInfoResult,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
-import { mapYandexStatusToShipmentStatus } from "@oco/core/carrier-adapter/yandex/map-status";
-import { YandexAuthError } from "@oco/core/carrier-adapter/yandex/client";
+import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
+import type { StatusSyncAdapter } from "@oco/core/carrier-adapter/status-sync-adapters";
 
 import { formatDateMoscow } from "../date/format-date-moscow";
 import { getCarrierCredentials } from "./get-carrier-credentials";
 
 const TERMINAL_STATUSES: ShipmentStatus[] = ["DELIVERED", "RETURNED", "CANCELED"];
-const PROVIDER_KEY_YANDEX = "yataxi";
 const NOT_CONNECTED_LOG_MARKER = "[syncYandexShipmentStatuses] NOT_CONNECTED";
 const ORDER_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] ORDER_NOT_FOUND";
@@ -21,8 +23,8 @@ const INFO_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] INFO_FAILED";
 const INFO_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] INFO_NOT_FOUND";
 
-/** Ours, not a provider status. mapYandexStatusToShipmentStatus returns null for
- *  unknown codes, so writing this event never changes Shipment.status. */
+/** Ours, not a provider status. mapStatus returns null for unknown codes, so
+ *  writing this event never changes Shipment.status. */
 const OCO_DELIVERY_DATE_CHANGED = "OCO_DELIVERY_DATE_CHANGED";
 
 export type SyncYandexShipmentStatusesResult = {
@@ -30,21 +32,16 @@ export type SyncYandexShipmentStatusesResult = {
   events: number;
   notFound: number;
   infoFailed: number;
+  notConnected: number;
 };
 
 export type SyncYandexShipmentStatusesDeps = {
-  getHistory: (
-    providerOrderId: string,
-    credentials: CarrierCredentials,
-  ) => Promise<CarrierOrderHistoryResult>;
-  getInfo: (
-    providerOrderId: string,
-    credentials: CarrierCredentials,
-  ) => Promise<CarrierOrderInfoResult>;
+  adapters: Record<string, StatusSyncAdapter>;
 };
 
 type ShipmentForSync = {
   id: string;
+  providerKey: string;
   providerOrderId: string;
   status: ShipmentStatus;
   arrivedAtPvzAt: Date | null;
@@ -103,6 +100,7 @@ async function processShipmentHistory(
   prisma: PrismaClient,
   shipment: ShipmentForSync,
   events: CarrierTrackingEvent[],
+  mapStatus: StatusSyncAdapter["mapStatus"],
   counters: { updated: number; events: number },
 ): Promise<number> {
   const sorted = sortEventsByEventAt(events);
@@ -166,7 +164,7 @@ async function processShipmentHistory(
       createdEvents += 1;
     }
 
-    const mappedStatus = mapYandexStatusToShipmentStatus(statusCode);
+    const mappedStatus = mapStatus(statusCode);
     if (mappedStatus == null) {
       continue;
     }
@@ -298,26 +296,37 @@ async function applyOrderInfo(
   });
 }
 
+function emptyResult(): SyncYandexShipmentStatusesResult {
+  return { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0 };
+}
+
 /**
- * Sync Yandex (yataxi) shipment statuses from request/history into TrackingEvent
- * + Shipment. Inject getHistory / getInfo so db tests need no network
- * (submitOrder precedent). Faults from getHistory propagate — a broken token is
- * an incident, not a skip. getInfo faults (except YandexAuthError) are per-row.
+ * Sync shipment statuses from carrier history/info into TrackingEvent + Shipment.
+ * Inject adapters so db tests need no network (submitOrder precedent). Faults from
+ * getOrderHistory propagate — a broken token is an incident, not a skip. getOrderInfo
+ * faults (except CarrierAuthError) are per-row. Missing credentials for one provider
+ * skip that provider's rows without aborting the rest.
  */
 export async function syncYandexShipmentStatuses(
   prisma: PrismaClient,
   companyId: string,
   deps: SyncYandexShipmentStatusesDeps,
 ): Promise<SyncYandexShipmentStatusesResult> {
+  const adapterKeys = Object.keys(deps.adapters);
+  if (adapterKeys.length === 0) {
+    return emptyResult();
+  }
+
   const rows = await prisma.shipment.findMany({
     where: {
       companyId,
-      providerKey: PROVIDER_KEY_YANDEX,
+      providerKey: { in: adapterKeys },
       providerOrderId: { not: null },
       status: { notIn: TERMINAL_STATUSES },
     },
     select: {
       id: true,
+      providerKey: true,
       providerOrderId: true,
       status: true,
       arrivedAtPvzAt: true,
@@ -332,12 +341,13 @@ export async function syncYandexShipmentStatuses(
   });
 
   const shipments: ShipmentForSync[] = rows.flatMap((row) => {
-    if (!row.providerOrderId) {
+    if (!row.providerOrderId || !row.providerKey) {
       return [];
     }
     return [
       {
         id: row.id,
+        providerKey: row.providerKey,
         providerOrderId: row.providerOrderId,
         status: row.status,
         arrivedAtPvzAt: row.arrivedAtPvzAt,
@@ -353,97 +363,120 @@ export async function syncYandexShipmentStatuses(
   });
 
   if (shipments.length === 0) {
-    return { updated: 0, events: 0, notFound: 0, infoFailed: 0 };
+    return emptyResult();
   }
 
-  const credsResult = await getCarrierCredentials(
-    prisma,
-    companyId,
-    PROVIDER_KEY_YANDEX,
-  );
-  // Rows exist that were created WITH yataxi credentials — their absence now
-  // is an inconsistency worth logging, not a user case worth throwing over.
-  if (!credsResult.ok) {
-    console.error(NOT_CONNECTED_LOG_MARKER, JSON.stringify({ companyId }));
-    return { updated: 0, events: 0, notFound: 0, infoFailed: 0 };
-  }
-
-  const counters = { updated: 0, events: 0, notFound: 0, infoFailed: 0 };
-
+  const byProvider = new Map<string, ShipmentForSync[]>();
   for (const shipment of shipments) {
-    const history = await deps.getHistory(
-      shipment.providerOrderId,
-      credsResult.credentials,
-    );
+    const list = byProvider.get(shipment.providerKey) ?? [];
+    list.push(shipment);
+    byProvider.set(shipment.providerKey, list);
+  }
 
-    if (!history.ok) {
-      // Yandex not knowing an id we hold is our inconsistency, not evidence
-      // about the order — do not change the row's status.
-      counters.notFound += 1;
-      console.error(
-        ORDER_NOT_FOUND_LOG_MARKER,
-        JSON.stringify({
-          companyId,
-          shipmentId: shipment.id,
-          providerOrderId: shipment.providerOrderId,
-        }),
-      );
+  const counters = {
+    updated: 0,
+    events: 0,
+    notFound: 0,
+    infoFailed: 0,
+    notConnected: 0,
+  };
+
+  for (const [providerKey, providerShipments] of byProvider) {
+    const adapter = deps.adapters[providerKey];
+    if (!adapter) {
       continue;
     }
 
-    const createdEvents = await processShipmentHistory(
+    const credsResult = await getCarrierCredentials(
       prisma,
-      shipment,
-      history.events,
-      counters,
+      companyId,
+      providerKey,
     );
-
-    const needInfo =
-      createdEvents > 0 ||
-      isBlank(shipment.trackNumber) ||
-      isBlank(shipment.trackingUrl);
-
-    if (!needInfo) {
+    if (!credsResult.ok) {
+      console.error(
+        NOT_CONNECTED_LOG_MARKER,
+        JSON.stringify({ companyId, providerKey }),
+      );
+      counters.notConnected += providerShipments.length;
       continue;
     }
 
-    // getInfo is enrichment, not the substance of the sync. A provider 500 on
-    // request/info must not abort status updates for every other shipment.
-    let infoResult: CarrierOrderInfoResult;
-    try {
-      infoResult = await deps.getInfo(
+    for (const shipment of providerShipments) {
+      const history = await adapter.getOrderHistory(
         shipment.providerOrderId,
         credsResult.credentials,
       );
-    } catch (error) {
-      if (error instanceof YandexAuthError) {
-        throw error;
-      }
-      counters.infoFailed += 1;
-      console.error(INFO_FAILED_LOG_MARKER, {
-        companyId,
-        shipmentId: shipment.id,
-        error,
-      });
-      continue;
-    }
 
-    if (!infoResult.ok) {
-      // History succeeded; only enrichment failed. Do not count as notFound —
-      // the UI treats notFound as «orders did not update».
-      counters.infoFailed += 1;
-      console.error(
-        INFO_NOT_FOUND_LOG_MARKER,
-        JSON.stringify({
+      if (!history.ok) {
+        // Provider not knowing an id we hold is our inconsistency, not evidence
+        // about the order — do not change the row's status.
+        counters.notFound += 1;
+        console.error(
+          ORDER_NOT_FOUND_LOG_MARKER,
+          JSON.stringify({
+            companyId,
+            shipmentId: shipment.id,
+            providerOrderId: shipment.providerOrderId,
+          }),
+        );
+        continue;
+      }
+
+      const createdEvents = await processShipmentHistory(
+        prisma,
+        shipment,
+        history.events,
+        adapter.mapStatus,
+        counters,
+      );
+
+      const needInfo =
+        createdEvents > 0 ||
+        isBlank(shipment.trackNumber) ||
+        isBlank(shipment.trackingUrl);
+
+      if (!needInfo) {
+        continue;
+      }
+
+      // getOrderInfo is enrichment, not the substance of the sync. A provider
+      // 500 on info must not abort status updates for every other shipment.
+      let infoResult: CarrierOrderInfoResult;
+      try {
+        infoResult = await adapter.getOrderInfo(
+          shipment.providerOrderId,
+          credsResult.credentials,
+        );
+      } catch (error) {
+        if (error instanceof CarrierAuthError) {
+          throw error;
+        }
+        counters.infoFailed += 1;
+        console.error(INFO_FAILED_LOG_MARKER, {
           companyId,
           shipmentId: shipment.id,
-          providerOrderId: shipment.providerOrderId,
-        }),
-      );
-      continue;
-    }
+          error,
+        });
+        continue;
+      }
 
-    await applyOrderInfo(prisma, shipment, infoResult.info, counters);
+      if (!infoResult.ok) {
+        // History succeeded; only enrichment failed. Do not count as notFound —
+        // the UI treats notFound as «orders did not update».
+        counters.infoFailed += 1;
+        console.error(
+          INFO_NOT_FOUND_LOG_MARKER,
+          JSON.stringify({
+            companyId,
+            shipmentId: shipment.id,
+            providerOrderId: shipment.providerOrderId,
+          }),
+        );
+        continue;
+      }
+
+      await applyOrderInfo(prisma, shipment, infoResult.info, counters);
+    }
   }
 
   return {
@@ -451,5 +484,6 @@ export async function syncYandexShipmentStatuses(
     events: counters.events,
     notFound: counters.notFound,
     infoFailed: counters.infoFailed,
+    notConnected: counters.notConnected,
   };
 }

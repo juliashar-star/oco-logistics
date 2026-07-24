@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { encryptCarrierCredentials } from "../../apps/web/lib/carrier-credentials.ts";
 import { syncYandexShipmentStatuses } from "../../apps/web/lib/shipments/sync-yandex-statuses.ts";
 import { YandexAuthError } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
+import { mapYandexStatusToShipmentStatus } from "../../packages/core/src/carrier-adapter/yandex/map-status.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const ENV_KEY = "CARRIER_CREDENTIALS_ENCRYPTION_KEY";
@@ -36,6 +37,26 @@ async function withEnv(name, value, run) {
 }
 
 const EMPTY_INFO = async () => ({ ok: true, info: {} });
+
+/**
+ * @param {{
+ *   getHistory: Function,
+ *   getInfo: Function,
+ *   mapStatus?: (statusCode: string) => import("@prisma/client").ShipmentStatus | null,
+ * }} stubs
+ */
+function adaptersWith(stubs) {
+  return {
+    adapters: {
+      yataxi: {
+        providerKey: PROVIDER_YANDEX,
+        getOrderHistory: stubs.getHistory,
+        getOrderInfo: stubs.getInfo,
+        mapStatus: stubs.mapStatus ?? mapYandexStatusToShipmentStatus,
+      },
+    },
+  };
+}
 
 /**
  * @param {string} companyName
@@ -106,7 +127,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-two-${Date.now()}@example.com`,
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -125,9 +146,9 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
-      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0 });
+      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, notConnected: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const events = await prisma.trackingEvent.findMany({
@@ -147,7 +168,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-counter-${Date.now()}@example.com`,
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -169,7 +190,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       assert.equal(result.updated, 1);
       assert.equal(result.events, 3);
@@ -186,7 +207,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-ooo-${Date.now()}@example.com`,
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -203,7 +224,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
@@ -242,17 +263,17 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         ],
       };
 
-      const first = await syncYandexShipmentStatuses(prisma, company.id, {
+      const first = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => history,
         getInfo: EMPTY_INFO,
-      });
+      }));
       assert.equal(first.events, 2);
       assert.equal(first.updated, 1);
 
-      const second = await syncYandexShipmentStatuses(prisma, company.id, {
+      const second = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => history,
         getInfo: EMPTY_INFO,
-      });
+      }));
       assert.equal(second.events, 0);
       assert.equal(second.updated, 0);
 
@@ -273,7 +294,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       );
       const eventAt = "2026-07-18T09:30:00.000Z";
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -285,7 +306,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "AT_PVZ");
@@ -301,7 +322,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-cancel-${Date.now()}@example.com`,
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -313,7 +334,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "CANCELED");
@@ -330,7 +351,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         { status: "CREATED" },
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -347,7 +368,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       assert.equal(result.updated, 0);
       assert.equal(result.events, 2);
@@ -368,12 +389,12 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         { status: "IN_TRANSIT" },
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({ ok: false, reason: "order_not_found" }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, notConnected: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const count = await prisma.trackingEvent.count({
@@ -392,7 +413,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       );
 
       let getHistoryCalls = 0;
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => {
           getHistoryCalls += 1;
           return {
@@ -407,9 +428,9 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           };
         },
         getInfo: EMPTY_INFO,
-      });
+      }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0 });
       assert.equal(getHistoryCalls, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "DELIVERED");
@@ -427,7 +448,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-b-${Date.now()}@example.com`,
       );
 
-      await syncYandexShipmentStatuses(prisma, a.id, {
+      await syncYandexShipmentStatuses(prisma, a.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -439,7 +460,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: EMPTY_INFO,
-      });
+      }));
 
       const rowB = await prisma.shipment.findUnique({ where: { id: bShip.id } });
       assert.equal(rowB?.status, "CREATED");
@@ -458,7 +479,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         `sync-fill-${Date.now()}@example.com`,
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -479,7 +500,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             plannedDeliveryTo: "2026-07-27T15:00:00+0000",
           },
         }),
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.trackNumber, "10014440");
@@ -516,7 +537,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       });
 
       let getInfoCalls = 0;
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -531,7 +552,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           getInfoCalls += 1;
           return { ok: true, info: {} };
         },
-      });
+      }));
 
       assert.equal(getInfoCalls, 0);
     });
@@ -554,7 +575,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       });
 
       let getInfoCalls = 0;
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -572,7 +593,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             info: { trackingUrl: "https://example.test/track/filled" },
           };
         },
-      });
+      }));
 
       assert.equal(getInfoCalls, 1);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
@@ -593,7 +614,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -610,7 +631,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             plannedDeliveryFrom: "2026-07-28T06:00:00+0000",
           },
         }),
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(
@@ -643,7 +664,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -660,7 +681,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             plannedDeliveryFrom: "2026-07-27T06:00:00.000Z",
           },
         }),
-      });
+      }));
 
       // One provider CREATED event only — no OCO date-change event.
       assert.equal(result.events, 1);
@@ -684,7 +705,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         { status: "CREATED" },
       );
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -696,7 +717,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           ],
         }),
         getInfo: async () => ({ ok: false, reason: "order_not_found" }),
-      });
+      }));
 
       assert.equal(result.notFound, 0);
       assert.equal(result.infoFailed, 1);
@@ -719,7 +740,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -737,7 +758,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             trackingUrl: "https://example.test/track/new",
           },
         }),
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.trackNumber, "OURS-KEEP");
@@ -768,7 +789,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       });
 
-      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+      const result = await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -791,7 +812,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             },
           };
         },
-      });
+      }));
 
       assert.equal(result.infoFailed, 1);
       const rowA = await prisma.shipment.findUnique({ where: { id: shipA.id } });
@@ -812,7 +833,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
 
       await assert.rejects(
         () =>
-          syncYandexShipmentStatuses(prisma, company.id, {
+          syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
             getHistory: async () => ({
               ok: true,
               events: [
@@ -826,7 +847,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             getInfo: async () => {
               throw new YandexAuthError("Yandex Delivery auth failed: HTTP 401");
             },
-          }),
+          })),
         (err) => {
           assert.ok(err instanceof YandexAuthError);
           return true;
@@ -847,7 +868,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       );
 
-      await syncYandexShipmentStatuses(prisma, company.id, {
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
         getHistory: async () => ({
           ok: true,
           events: [
@@ -864,7 +885,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             plannedDeliveryFrom: "2026-07-27T06:00:00+0000",
           },
         }),
-      });
+      }));
 
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(
@@ -878,6 +899,126 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         },
       });
       assert.equal(ocoCount, 0);
+    });
+  });
+
+  test("(xxi) two providers, only one connected → connected syncs, notConnected 1, other untouched", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment: yandexShip } = await seedYandexShipment(
+        "Two Prov Co",
+        `sync-twoprov-${Date.now()}@example.com`,
+      );
+      const otherShip = await prisma.shipment.create({
+        data: {
+          companyId: company.id,
+          weightG: 500,
+          lengthCm: 10,
+          widthCm: 10,
+          heightCm: 10,
+          destCity: "Москва",
+          recipientName: "Other Recipient",
+          recipientPhone: "+79007654321",
+          status: "CREATED",
+          providerKey: "othercarrier",
+          providerOrderId: `req-other-${Date.now()}-${Math.random()}`,
+          idempotencyKey: `idem-other-${Date.now()}-${Math.random()}`,
+        },
+      });
+
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        adapters: {
+          yataxi: {
+            providerKey: PROVIDER_YANDEX,
+            getOrderHistory: async () => ({
+              ok: true,
+              events: [
+                {
+                  statusCode: "SORTING_CENTER_AT_START",
+                  statusText: "В точке приема",
+                  eventAt: "2026-07-17T12:00:00.000Z",
+                },
+              ],
+            }),
+            getOrderInfo: EMPTY_INFO,
+            mapStatus: mapYandexStatusToShipmentStatus,
+          },
+          othercarrier: {
+            providerKey: "othercarrier",
+            getOrderHistory: async () => {
+              throw new Error("othercarrier history must not be called");
+            },
+            getOrderInfo: EMPTY_INFO,
+            mapStatus: () => null,
+          },
+        },
+      });
+
+      assert.equal(result.notConnected, 1);
+      assert.equal(result.updated, 1);
+      const yandexRow = await prisma.shipment.findUnique({
+        where: { id: yandexShip.id },
+      });
+      assert.equal(yandexRow?.status, "IN_TRANSIT");
+      const otherRow = await prisma.shipment.findUnique({
+        where: { id: otherShip.id },
+      });
+      assert.equal(otherRow?.status, "CREATED");
+      const otherEvents = await prisma.trackingEvent.count({
+        where: { shipmentId: otherShip.id },
+      });
+      assert.equal(otherEvents, 0);
+    });
+  });
+
+  test("(xxii) providerKey not in adapters → never selected, getOrderHistory never called", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Unknown Prov Co",
+        `sync-unk-${Date.now()}@example.com`,
+        { providerKey: "not_in_registry" },
+      );
+
+      let historyCalls = 0;
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
+        getHistory: async () => {
+          historyCalls += 1;
+          return { ok: true, events: [] };
+        },
+        getInfo: EMPTY_INFO,
+      }));
+
+      assert.equal(historyCalls, 0);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "CREATED");
+      assert.equal(row?.providerKey, "not_in_registry");
+    });
+  });
+
+  test("(xxiii) mapStatus from registry: fake mapper can deliver unknown code", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Fake Map Co",
+        `sync-fakemap-${Date.now()}@example.com`,
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "MADE_UP_FOR_TEST",
+              statusText: "Synthetic",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: EMPTY_INFO,
+        mapStatus: (code) => (code === "MADE_UP_FOR_TEST" ? "DELIVERED" : null),
+      }));
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "DELIVERED");
+      assert.equal(mapYandexStatusToShipmentStatus("MADE_UP_FOR_TEST"), null);
     });
   });
 });
