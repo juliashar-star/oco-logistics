@@ -1021,4 +1021,57 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       assert.equal(mapYandexStatusToShipmentStatus("MADE_UP_FOR_TEST"), null);
     });
   });
+
+  test("(xxiv) unknown mapper code → status untouched, event written once, second sync events 0", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Unmapped Once Co",
+        `sync-unmap-once-${Date.now()}@example.com`,
+        { status: "CREATED" },
+      );
+
+      const history = {
+        ok: true,
+        events: [
+          {
+            statusCode: "DELIVERY_TIME_INTERVALS_UPDATED",
+            statusText: "Интервал",
+            eventAt: "2026-07-17T10:00:00.000Z",
+          },
+        ],
+      };
+
+      const first = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async () => history,
+          getInfo: EMPTY_INFO,
+        }),
+      );
+      assert.equal(first.updated, 0);
+      assert.equal(first.events, 1);
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "CREATED");
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
+        1,
+      );
+
+      const second = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async () => history,
+          getInfo: EMPTY_INFO,
+        }),
+      );
+      assert.equal(second.events, 0);
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
+        1,
+      );
+    });
+  });
 });

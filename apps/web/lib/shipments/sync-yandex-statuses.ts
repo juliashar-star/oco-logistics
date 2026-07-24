@@ -22,6 +22,8 @@ const ORDER_NOT_FOUND_LOG_MARKER =
 const INFO_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] INFO_FAILED";
 const INFO_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] INFO_NOT_FOUND";
+const UNMAPPED_STATUS_LOG_MARKER =
+  "[syncYandexShipmentStatuses] UNMAPPED_STATUS";
 
 /** Ours, not a provider status. mapStatus returns null for unknown codes, so
  *  writing this event never changes Shipment.status. */
@@ -145,7 +147,8 @@ async function processShipmentHistory(
       where: compositeKey,
     });
 
-    if (!existingEvent) {
+    const wasNew = !existingEvent;
+    if (wasNew) {
       await prisma.trackingEvent.upsert({
         where: compositeKey,
         create: {
@@ -166,6 +169,20 @@ async function processShipmentHistory(
 
     const mappedStatus = mapStatus(statusCode);
     if (mappedStatus == null) {
+      // warn, not error: unmapped is information, not a failure — must not page anyone.
+      // Log the code only (not statusText): provider free text; we cannot promise it
+      // carries no personal data. The text is not lost — it sits in the TrackingEvent
+      // row and can be read from the DB.
+      if (wasNew) {
+        console.warn(
+          UNMAPPED_STATUS_LOG_MARKER,
+          JSON.stringify({
+            providerKey: shipment.providerKey,
+            shipmentId: shipment.id,
+            statusCode,
+          }),
+        );
+      }
       continue;
     }
 
