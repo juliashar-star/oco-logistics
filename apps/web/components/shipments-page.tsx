@@ -136,12 +136,6 @@ export function ShipmentsPage() {
   }, [trackInput]);
 
   useEffect(() => {
-    if (!syncNotice) return;
-    const timer = window.setTimeout(() => setSyncNotice(null), 3500);
-    return () => window.clearTimeout(timer);
-  }, [syncNotice]);
-
-  useEffect(() => {
     if (!selectedShipment) {
       document.body.style.overflow = "";
       return;
