@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
+import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -303,18 +304,7 @@ export function ShipmentsPage() {
         return;
       }
 
-      const updated = data.updated ?? 0;
-      const events = data.events ?? 0;
-      const notFound = data.notFound ?? 0;
-      const summary =
-        updated === 0 && events === 0
-          ? "Новых событий нет"
-          : `Обновлено заказов: ${updated} · новых событий: ${events}`;
-      setSyncNotice(
-        notFound > 0
-          ? `${summary}. Не найдено у перевозчика: ${notFound} — эти заказы не обновились.`
-          : summary,
-      );
+      setSyncNotice(describeSyncResult(data));
       await loadShipments();
     } catch {
       setSyncError("Не удалось обновить статусы, попробуйте позже");
