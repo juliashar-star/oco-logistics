@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
+import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -453,7 +454,7 @@ export function ShipmentsPage() {
                       </TableCell>
                       <TableCell>{formatPrice(shipment.plannedCost)}</TableCell>
                       <TableCell>
-                        {shipment.labelUrl ? (
+                        {isHttpOrHttpsUrl(shipment.labelUrl) ? (
                           <a
                             href={shipment.labelUrl}
                             target="_blank"

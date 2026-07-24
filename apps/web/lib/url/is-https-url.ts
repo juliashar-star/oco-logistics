@@ -1,4 +1,8 @@
-/** Stored external data goes straight into href; https-only cheaply blocks javascript:/data:. */
+/**
+ * WHY https-only (vs isHttpOrHttpsUrl for labels): the tracking link is a page we
+ * send a BUYER to, so https-only; the label comes from APIShip, whose dev contour
+ * serves http://, so labels use isHttpOrHttpsUrl. Both block javascript:/data:.
+ */
 export function isHttpsUrl(value: unknown): value is string {
   if (typeof value !== "string") {
     return false;

@@ -9,6 +9,7 @@ import type { OfferDto } from "@/lib/shipments/offer-dto";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
+import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 
 type RankTag = "fast" | "cheap" | "optimal";
 
@@ -1403,7 +1404,7 @@ export function NewOrderForm() {
                 Обещанный срок: <strong>{createResult.plannedDeliveryDays} дн.</strong>
               </li>
             )}
-            {createResult.labelUrl && (
+            {isHttpOrHttpsUrl(createResult.labelUrl) && (
               <li>
                 <a
                   href={createResult.labelUrl}
