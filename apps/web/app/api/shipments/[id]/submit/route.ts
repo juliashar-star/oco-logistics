@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
-import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
+import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
 import type { CarrierOffer } from "@oco/core/carrier-adapter/types";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
@@ -15,6 +15,13 @@ function isCarrierOffer(value: unknown): value is CarrierOffer {
     return false;
   }
   const o = value as Record<string, unknown>;
+  if (
+    "adapterKey" in o &&
+    o.adapterKey !== undefined &&
+    typeof o.adapterKey !== "string"
+  ) {
+    return false;
+  }
   return (
     typeof o.offerId === "string" &&
     typeof o.expiresAt === "string" &&
@@ -145,70 +152,73 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    const decrypted = decryptShipmentRecipientPii(row);
-
-    const company = await prisma.company.findFirst({
-      where: { id: user.companyId },
-      select: {
-        name: true,
-        inn: true,
-        contactEmail: true,
-        senderCity: true,
-        senderAddress: true,
-        senderPhone: true,
-      },
-    });
-
-    if (!company) {
-      console.error(
-        "[shipments/submit] company not found for authenticated session",
-        user.companyId,
-      );
-      return NextResponse.json(
-        { error: "Не удалось оформить заказ. Мы уже разбираемся." },
-        { status: 500 },
-      );
-    }
-
-    const built = buildYandexOfferInput({
-      shipment: {
-        companyId: decrypted.companyId,
-        idempotencyKey: decrypted.idempotencyKey,
-        declaredValue: decrypted.declaredValue,
-        weightG: decrypted.weightG,
-        lengthCm: decrypted.lengthCm,
-        widthCm: decrypted.widthCm,
-        heightCm: decrypted.heightCm,
-        pickupType: decrypted.pickupType,
-        pvzCode: decrypted.pvzCode,
-        destCity: decrypted.destCity,
-        destAddress: decrypted.destAddress,
-        destApartment: decrypted.destApartment,
-        deliveryComment: decrypted.deliveryComment,
-        recipientName: decrypted.recipientName,
-        recipientPhone: decrypted.recipientPhone,
-      },
-      company,
-    });
-
-    if (!built.ok) {
-      return NextResponse.json(
-        {
-          error: messageForBuildFailure(built.reason, decrypted.pickupType),
-        },
-        { status: 400 },
-      );
-    }
+    const orderAdapter = resolveOrderAdapter(offer.adapterKey);
 
     try {
       const credsResult = await getCarrierCredentials(
         prisma,
         user.companyId,
-        DEFAULT_ORDER_ADAPTER.providerKey,
+        orderAdapter.providerKey,
       );
       if (!credsResult.ok) {
         return NextResponse.json(
           { error: "Яндекс Доставка не подключена" },
+          { status: 400 },
+        );
+      }
+
+      // Decrypt only after credentials succeed — missing carrier must not touch PII.
+      const decrypted = decryptShipmentRecipientPii(row);
+
+      const company = await prisma.company.findFirst({
+        where: { id: user.companyId },
+        select: {
+          name: true,
+          inn: true,
+          contactEmail: true,
+          senderCity: true,
+          senderAddress: true,
+          senderPhone: true,
+        },
+      });
+
+      if (!company) {
+        console.error(
+          "[shipments/submit] company not found for authenticated session",
+          user.companyId,
+        );
+        return NextResponse.json(
+          { error: "Не удалось оформить заказ. Мы уже разбираемся." },
+          { status: 500 },
+        );
+      }
+
+      const built = buildYandexOfferInput({
+        shipment: {
+          companyId: decrypted.companyId,
+          idempotencyKey: decrypted.idempotencyKey,
+          declaredValue: decrypted.declaredValue,
+          weightG: decrypted.weightG,
+          lengthCm: decrypted.lengthCm,
+          widthCm: decrypted.widthCm,
+          heightCm: decrypted.heightCm,
+          pickupType: decrypted.pickupType,
+          pvzCode: decrypted.pvzCode,
+          destCity: decrypted.destCity,
+          destAddress: decrypted.destAddress,
+          destApartment: decrypted.destApartment,
+          deliveryComment: decrypted.deliveryComment,
+          recipientName: decrypted.recipientName,
+          recipientPhone: decrypted.recipientPhone,
+        },
+        company,
+      });
+
+      if (!built.ok) {
+        return NextResponse.json(
+          {
+            error: messageForBuildFailure(built.reason, decrypted.pickupType),
+          },
           { status: 400 },
         );
       }
@@ -219,8 +229,9 @@ export const POST = withAuth<{ id: string }>(
         offer,
         input: built.input,
         credentials: credsResult.credentials,
-        confirm: DEFAULT_ORDER_ADAPTER.confirmOffer,
-        providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
+        confirm: orderAdapter.confirmOffer,
+        providerKey: orderAdapter.providerKey,
+        orderAdapterKey: orderAdapter.key,
       });
 
       if (result.ok) {

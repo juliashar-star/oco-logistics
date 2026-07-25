@@ -181,6 +181,11 @@ export type CarrierOffer = {
   pickupIntervalFrom: string;
   pickupIntervalTo: string;
   priceRub: number;
+  /**
+   * Set by the order route from the resolved registry entry, NOT populated by
+   * adapters — an adapter does not know its own registry key.
+   */
+  adapterKey?: string;
   /** Full raw provider offer object (data asset). */
   rawOffer?: unknown;
 };

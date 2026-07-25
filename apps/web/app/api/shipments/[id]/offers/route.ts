@@ -163,18 +163,31 @@ export const POST = withAuth<{ id: string }>(
         credsResult.credentials,
       );
 
+      // Tag with the registry key before persist — adapters do not know it.
+      // Client DTO (toOffersResponse) stays without adapterKey.
+      const taggedOffers = offersResult.ok
+        ? offersResult.offers.map((offer) => ({
+            ...offer,
+            adapterKey: DEFAULT_ORDER_ADAPTER.key,
+          }))
+        : [];
+
       // CarrierOffer.rawOffer is `unknown`; Prisma.InputJsonValue rejects it
       // without a cast. Same pattern as persist-tariff-quotes (as InputJsonValue).
-      const quotedOffers = (
-        offersResult.ok ? offersResult.offers : []
-      ) as unknown as Prisma.InputJsonValue;
+      const quotedOffers = taggedOffers as unknown as Prisma.InputJsonValue;
 
       await prisma.shipment.update({
         where: { id: row.id },
         data: { quotedOffers },
       });
 
-      return NextResponse.json(toOffersResponse(offersResult));
+      return NextResponse.json(
+        toOffersResponse(
+          offersResult.ok
+            ? { ok: true, offers: taggedOffers }
+            : offersResult,
+        ),
+      );
     } catch (error) {
       if (error instanceof CarrierAuthError) {
         return NextResponse.json(

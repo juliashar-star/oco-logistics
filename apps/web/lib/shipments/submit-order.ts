@@ -30,6 +30,8 @@ export type SubmitOrderArgs = {
   confirm: ConfirmOfferFn;
   /** Credential / Shipment.providerKey for the adapter that confirmed. */
   providerKey: string;
+  /** ORDER_ADAPTERS key written to Shipment.orderAdapterKey on CREATED. */
+  orderAdapterKey: string;
 };
 
 export type SubmitOrderResult =
@@ -70,6 +72,7 @@ export async function submitOrder(
     credentials,
     confirm,
     providerKey,
+    orderAdapterKey,
   } = args;
 
   const capture = await captureForSubmit(prisma, shipmentId, companyId);
@@ -122,6 +125,7 @@ export async function submitOrder(
           providerOrderId: requestId,
           plannedDeliveryDate: new Date(offer.deliveryIntervalFrom),
           providerKey,
+          orderAdapterKey,
           selectedOfferId: offer.offerId,
           selectedOfferExpiresAt: new Date(offer.expiresAt),
           // plannedCost is kopecks (docs/DATABASE.md; every reader divides by 100);

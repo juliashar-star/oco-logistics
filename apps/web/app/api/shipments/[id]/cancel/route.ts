@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
-import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
+import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
@@ -25,6 +25,7 @@ export const POST = withAuth<{ id: string }>(
         id: true,
         status: true,
         providerOrderId: true,
+        orderAdapterKey: true,
       },
     });
 
@@ -50,11 +51,13 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
+    const orderAdapter = resolveOrderAdapter(row.orderAdapterKey);
+
     try {
       const credsResult = await getCarrierCredentials(
         prisma,
         user.companyId,
-        DEFAULT_ORDER_ADAPTER.providerKey,
+        orderAdapter.providerKey,
       );
       if (!credsResult.ok) {
         return NextResponse.json(
@@ -63,7 +66,7 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      const cancelResult = await DEFAULT_ORDER_ADAPTER.cancelOrder(
+      const cancelResult = await orderAdapter.cancelOrder(
         row.providerOrderId,
         credsResult.credentials,
       );

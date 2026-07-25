@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 
 import {
+  DEFAULT_ORDER_ADAPTER,
+  resolveOrderAdapter,
+} from "../../packages/core/src/carrier-adapter/order-adapters.ts";
+import {
   YandexAuthError,
   YandexOfferExpiredError,
 } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
@@ -150,6 +154,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => {
         confirmCalls += 1;
         return { requestId: "should-not-run", rawResponse: {} };
@@ -183,6 +188,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "test-provider",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async (offerId, input, credentials) => {
         assert.equal(offerId, OFFER.offerId);
         assert.deepEqual(input, ORDER_INPUT);
@@ -197,6 +203,7 @@ describe("submitOrder", { concurrency: false }, () => {
     assert.equal(row.status, "CREATED");
     assert.equal(row.providerOrderId, REQUEST_ID);
     assert.equal(row.providerKey, "test-provider");
+    assert.equal(row.orderAdapterKey, "yataxi:next_day");
     assert.equal(row.selectedOfferId, OFFER.offerId);
     assert.ok(row.plannedDeliveryDate instanceof Date);
     assert.equal(
@@ -225,6 +232,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => {
         throw new YandexOfferExpiredError("offer_was_not_found");
       },
@@ -254,6 +262,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => {
         throw new YandexAuthError("HTTP 401");
       },
@@ -282,6 +291,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => {
         throw new Error("network timeout");
       },
@@ -316,6 +326,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
@@ -351,6 +362,7 @@ describe("submitOrder", { concurrency: false }, () => {
       input: ORDER_INPUT,
       credentials: CREDS,
       providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
@@ -387,6 +399,7 @@ describe("submitOrder", { concurrency: false }, () => {
           input: ORDER_INPUT,
           credentials: CREDS,
           providerKey: "yataxi",
+          orderAdapterKey: "yataxi:next_day",
           confirm: async () => {
             throw new YandexOfferExpiredError("offer_was_not_found");
           },
@@ -396,5 +409,65 @@ describe("submitOrder", { concurrency: false }, () => {
 
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "PROBLEM");
+  });
+
+  test("(ix) submit writes orderAdapterKey onto the row", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Adapter Key Co",
+      `submit-adapter-key-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "yandex-request-adapter-key-1";
+    const adapterKey = "yataxi:next_day";
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: { ...OFFER, adapterKey },
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "yataxi",
+      orderAdapterKey: adapterKey,
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+      }),
+    });
+
+    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    assert.equal(row.orderAdapterKey, adapterKey);
+  });
+
+  test("(x) offer with no adapterKey still submits via resolveOrderAdapter fallback", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Fallback Adapter Co",
+      `submit-adapter-fallback-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "yandex-request-adapter-fallback-1";
+    const offerWithoutKey = { ...OFFER };
+    assert.equal(offerWithoutKey.adapterKey, undefined);
+
+    const adapter = resolveOrderAdapter(offerWithoutKey.adapterKey);
+    assert.equal(adapter.key, DEFAULT_ORDER_ADAPTER.key);
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: offerWithoutKey,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: adapter.providerKey,
+      orderAdapterKey: adapter.key,
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+      }),
+    });
+
+    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    assert.equal(row.orderAdapterKey, DEFAULT_ORDER_ADAPTER.key);
   });
 });

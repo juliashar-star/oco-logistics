@@ -150,6 +150,9 @@ model Shipment {
   idempotencyKey         String?
   providerKey            String?
   providerOrderId        String?
+  // ORDER_ADAPTERS key that produced this order, e.g. "yataxi:next_day";
+  // null means it predates this field and falls back to the default entry.
+  orderAdapterKey        String?
   selectedOfferId        String?
   selectedOfferExpiresAt DateTime?
   submittingAt           DateTime?
