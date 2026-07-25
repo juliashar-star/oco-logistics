@@ -1,14 +1,14 @@
 import type { PrismaClient } from "@prisma/client";
+import {
+  CarrierAuthError,
+  CarrierOfferExpiredError,
+} from "@oco/core/carrier-adapter/errors";
 import type {
   CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierOffer,
 } from "@oco/core/carrier-adapter/types";
-import {
-  YandexAuthError,
-  YandexOfferExpiredError,
-} from "@oco/core/carrier-adapter/yandex/client";
 
 import { captureForSubmit } from "./capture-for-submit";
 import { deriveOperatorRequestId } from "./operator-request-id";
@@ -28,6 +28,8 @@ export type SubmitOrderArgs = {
   input: CarrierCreateOrderInput;
   credentials: CarrierCredentials;
   confirm: ConfirmOfferFn;
+  /** Credential / Shipment.providerKey for the adapter that confirmed. */
+  providerKey: string;
 };
 
 export type SubmitOrderResult =
@@ -39,8 +41,6 @@ export type SubmitOrderResult =
       reason: "offer_expired" | "auth" | "unknown";
     }
   | { ok: false; stage: "write-after-confirm"; requestId: string };
-
-const PROVIDER_KEY_YANDEX = "yataxi";
 
 const WRITE_AFTER_CONFIRM_LOG_MARKER =
   "[submitOrder] WRITE_AFTER_CONFIRM_BOTH_FAILED";
@@ -62,7 +62,15 @@ export async function submitOrder(
   prisma: PrismaClient,
   args: SubmitOrderArgs,
 ): Promise<SubmitOrderResult> {
-  const { shipmentId, companyId, offer, input, credentials, confirm } = args;
+  const {
+    shipmentId,
+    companyId,
+    offer,
+    input,
+    credentials,
+    confirm,
+    providerKey,
+  } = args;
 
   const capture = await captureForSubmit(prisma, shipmentId, companyId);
   if (!capture.captured) {
@@ -85,14 +93,14 @@ export async function submitOrder(
       const confirmed = await confirm(offer.offerId, input, credentials);
       requestId = confirmed.requestId;
     } catch (error) {
-      if (error instanceof YandexOfferExpiredError) {
+      if (error instanceof CarrierOfferExpiredError) {
         await prisma.shipment.updateMany({
           where: { id: shipmentId, companyId },
           data: { status: "DRAFT", submittingAt: null },
         });
         return { ok: false, stage: "confirm", reason: "offer_expired" };
       }
-      if (error instanceof YandexAuthError) {
+      if (error instanceof CarrierAuthError) {
         await prisma.shipment.updateMany({
           where: { id: shipmentId, companyId },
           data: { status: "PROBLEM" },
@@ -113,7 +121,7 @@ export async function submitOrder(
           status: "CREATED",
           providerOrderId: requestId,
           plannedDeliveryDate: new Date(offer.deliveryIntervalFrom),
-          providerKey: PROVIDER_KEY_YANDEX,
+          providerKey,
           selectedOfferId: offer.offerId,
           selectedOfferExpiresAt: new Date(offer.expiresAt),
           // plannedCost is kopecks (docs/DATABASE.md; every reader divides by 100);

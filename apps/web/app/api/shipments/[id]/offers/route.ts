@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
-import { YandexAuthError } from "@oco/core/carrier-adapter/yandex/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
@@ -176,7 +176,7 @@ export const POST = withAuth<{ id: string }>(
 
       return NextResponse.json(toOffersResponse(offersResult));
     } catch (error) {
-      if (error instanceof YandexAuthError) {
+      if (error instanceof CarrierAuthError) {
         return NextResponse.json(
           {
             error:

@@ -149,6 +149,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => {
         confirmCalls += 1;
         return { requestId: "should-not-run", rawResponse: {} };
@@ -181,6 +182,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "test-provider",
       confirm: async (offerId, input, credentials) => {
         assert.equal(offerId, OFFER.offerId);
         assert.deepEqual(input, ORDER_INPUT);
@@ -194,7 +196,7 @@ describe("submitOrder", { concurrency: false }, () => {
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
     assert.equal(row.providerOrderId, REQUEST_ID);
-    assert.equal(row.providerKey, "yataxi");
+    assert.equal(row.providerKey, "test-provider");
     assert.equal(row.selectedOfferId, OFFER.offerId);
     assert.ok(row.plannedDeliveryDate instanceof Date);
     assert.equal(
@@ -222,6 +224,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => {
         throw new YandexOfferExpiredError("offer_was_not_found");
       },
@@ -250,6 +253,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => {
         throw new YandexAuthError("HTTP 401");
       },
@@ -277,6 +281,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => {
         throw new Error("network timeout");
       },
@@ -310,6 +315,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
@@ -344,6 +350,7 @@ describe("submitOrder", { concurrency: false }, () => {
       offer: OFFER,
       input: ORDER_INPUT,
       credentials: CREDS,
+      providerKey: "yataxi",
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
@@ -379,6 +386,7 @@ describe("submitOrder", { concurrency: false }, () => {
           offer: OFFER,
           input: ORDER_INPUT,
           credentials: CREDS,
+          providerKey: "yataxi",
           confirm: async () => {
             throw new YandexOfferExpiredError("offer_was_not_found");
           },

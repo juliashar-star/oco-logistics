@@ -17,7 +17,7 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
-import { CarrierAuthError } from "../errors";
+import { CarrierAuthError, CarrierOfferExpiredError } from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
 
 export class YandexAuthError extends CarrierAuthError {
@@ -28,7 +28,7 @@ export class YandexAuthError extends CarrierAuthError {
 }
 
 /** Expired or otherwise invalid offer_id on offers/confirm (provider code offer_was_not_found). */
-export class YandexOfferExpiredError extends Error {
+export class YandexOfferExpiredError extends CarrierOfferExpiredError {
   constructor(message: string) {
     super(message);
     this.name = "YandexOfferExpiredError";
