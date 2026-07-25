@@ -44,6 +44,8 @@ const exportSelect = {
   deliveredAt: true,
   returnReason: true,
   isAnonymized: true,
+  providerKey: true,
+  orderAdapterKey: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 

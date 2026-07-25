@@ -1,6 +1,10 @@
 import type { PickupType, ShipmentStatus } from "@prisma/client";
 import { MOSCOW_TIMEZONE, formatDateMoscow } from "@/lib/date/format-date-moscow";
 import { PICKUP_TYPE_LABELS, STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
+import {
+  shipmentCarrierLabel,
+  shipmentTariffLabel,
+} from "@/lib/shipments/shipment-list-labels";
 
 const CSV_SEPARATOR = ";";
 const CSV_LINE_BREAK = "\r\n";
@@ -10,6 +14,8 @@ export type ShipmentExportRow = {
   createdAt: Date;
   trackNumber: string | null;
   status: ShipmentStatus;
+  providerKey: string | null;
+  orderAdapterKey: string | null;
   carrier: { name: string } | null;
   recipientName: string;
   recipientPhone: string;
@@ -107,8 +113,19 @@ const EXPORT_COLUMNS: CsvColumn[] = [
     text: true,
   },
   {
-    header: "СД",
-    getValue: (row) => row.carrier?.name ?? "",
+    header: "Перевозчик",
+    getValue: (row) => {
+      const label = shipmentCarrierLabel(row);
+      return label === "—" ? "" : label;
+    },
+    text: true,
+  },
+  {
+    header: "Тариф",
+    getValue: (row) => {
+      const label = shipmentTariffLabel(row);
+      return label === "—" ? "" : label;
+    },
     text: true,
   },
   {

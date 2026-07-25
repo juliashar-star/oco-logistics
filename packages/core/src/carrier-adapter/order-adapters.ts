@@ -14,6 +14,12 @@ import { yandexAdapter } from "./yandex/adapter";
 export type OrderAdapter = {
   key: string;
   providerKey: string;
+  /**
+   * Seller-facing name of the SERVICE.
+   * Descriptive wording on purpose — not the carrier's own product name,
+   * which is covered by the display-name masking in provider-seller-display-names.
+   */
+  title: string;
   getOffers: CarrierAdapter["getOffers"];
   confirmOffer: CarrierAdapter["confirmOffer"];
   cancelOrder: CarrierAdapter["cancelOrder"];
@@ -23,6 +29,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
   "yataxi:next_day": {
     key: "yataxi:next_day",
     providerKey: yandexAdapter.providerKey,
+    title: "Доставка на следующий день",
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,

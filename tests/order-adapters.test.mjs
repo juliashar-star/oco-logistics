@@ -11,3 +11,10 @@ test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon",
     );
   }
 });
+
+test("yataxi:next_day has seller-facing service title", () => {
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:next_day"].title,
+    "Доставка на следующий день",
+  );
+});

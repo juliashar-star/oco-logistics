@@ -5,6 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
+import {
+  shipmentCarrierLabel,
+  shipmentTariffLabel,
+} from "@/lib/shipments/shipment-list-labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
@@ -32,6 +36,8 @@ type ShipmentRow = {
   plannedDeliveryDays: number | null;
   returnReason: string | null;
   isAnonymized: boolean;
+  providerKey: string | null;
+  orderAdapterKey: string | null;
   carrier: { name: string } | null;
 };
 
@@ -99,7 +105,7 @@ function ShipmentsSkeleton() {
     <TableBody>
       {Array.from({ length: SKELETON_ROWS }).map((_, index) => (
         <TableRow key={index}>
-          {Array.from({ length: 8 }).map((__, cellIndex) => (
+          {Array.from({ length: 9 }).map((__, cellIndex) => (
             <TableCell key={cellIndex}>
               <div className="h-4 animate-pulse rounded bg-slate-200" />
             </TableCell>
@@ -405,6 +411,7 @@ export function ShipmentsPage() {
                   <TableHead>Дата</TableHead>
                   <TableHead>Получатель</TableHead>
                   <TableHead>Перевозчик</TableHead>
+                  <TableHead>Тариф</TableHead>
                   <TableHead>Статус</TableHead>
                   <TableHead>Причина</TableHead>
                   <TableHead>Трек</TableHead>
@@ -429,7 +436,8 @@ export function ShipmentsPage() {
                           {shipment.destCity}
                         </div>
                       </TableCell>
-                      <TableCell>{shipment.carrier?.name ?? "—"}</TableCell>
+                      <TableCell>{shipmentCarrierLabel(shipment)}</TableCell>
+                      <TableCell>{shipmentTariffLabel(shipment)}</TableCell>
                       <TableCell>
                         <Badge className={STATUS_BADGE_CLASS[shipment.status]}>
                           {STATUS_LABELS[shipment.status]}
@@ -528,7 +536,13 @@ export function ShipmentsPage() {
                 <div>
                   <dt className="text-slate-500">Перевозчик</dt>
                   <dd className="text-slate-900">
-                    {selectedShipment.carrier?.name ?? "—"}
+                    {shipmentCarrierLabel(selectedShipment)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Тариф</dt>
+                  <dd className="text-slate-900">
+                    {shipmentTariffLabel(selectedShipment)}
                   </dd>
                 </div>
                 <div>
