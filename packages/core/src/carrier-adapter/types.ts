@@ -264,8 +264,14 @@ export interface CarrierAdapter {
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierOffersResult>;
+  /**
+   * Confirm a previously fetched offer.
+   * `input` is the SAME shape getOffers receives; two-phase carriers may need
+   * it to create the order after the offer is chosen.
+   */
   confirmOffer(
     offerId: string,
+    input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierConfirmResult>;
   createOrder(

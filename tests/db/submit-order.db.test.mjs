@@ -33,6 +33,37 @@ const OFFER = {
 
 const CREDS = { platformStationId: "station-1", token: "test-token" };
 
+/** Minimal CarrierCreateOrderInput — passed through to confirm. */
+const ORDER_INPUT = {
+  clientNumber: "oco-submit-test",
+  providerKey: "yataxi",
+  sender: {
+    countryCode: "RU",
+    contactName: "Sender",
+    phone: "+79001111111",
+    city: "Москва",
+    addressString: "Москва",
+  },
+  recipient: {
+    countryCode: "RU",
+    contactName: "Recipient",
+    phone: "+79002222222",
+    city: "Москва",
+  },
+  items: [
+    {
+      name: "Посылка",
+      quantity: 1,
+      unitPriceRub: 273.28,
+      weightG: 500,
+      lengthCm: 10,
+      widthCm: 10,
+      heightCm: 10,
+    },
+  ],
+  pointOutId: "station-out-1",
+};
+
 /**
  * @param {string} companyName
  * @param {string} email
@@ -116,6 +147,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => {
         confirmCalls += 1;
@@ -147,9 +179,11 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
-      confirm: async (offerId, credentials) => {
+      confirm: async (offerId, input, credentials) => {
         assert.equal(offerId, OFFER.offerId);
+        assert.deepEqual(input, ORDER_INPUT);
         assert.deepEqual(credentials, CREDS);
         return { requestId: REQUEST_ID, rawResponse: { request_id: REQUEST_ID } };
       },
@@ -186,6 +220,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => {
         throw new YandexOfferExpiredError("offer_was_not_found");
@@ -213,6 +248,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => {
         throw new YandexAuthError("HTTP 401");
@@ -239,6 +275,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => {
         throw new Error("network timeout");
@@ -271,6 +308,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => ({
         requestId: REQUEST_ID,
@@ -304,6 +342,7 @@ describe("submitOrder", { concurrency: false }, () => {
       shipmentId: shipment.id,
       companyId: company.id,
       offer: OFFER,
+      input: ORDER_INPUT,
       credentials: CREDS,
       confirm: async () => ({
         requestId: REQUEST_ID,
@@ -338,6 +377,7 @@ describe("submitOrder", { concurrency: false }, () => {
           shipmentId: shipment.id,
           companyId: company.id,
           offer: OFFER,
+          input: ORDER_INPUT,
           credentials: CREDS,
           confirm: async () => {
             throw new YandexOfferExpiredError("offer_was_not_found");

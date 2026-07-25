@@ -7,6 +7,8 @@ import {
 } from "@oco/core/carrier-adapter/yandex/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
+import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
+import { buildYandexOfferInput } from "@/lib/shipments/build-yandex-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { submitOrder } from "@/lib/shipments/submit-order";
 
@@ -40,6 +42,31 @@ function findQuotedOffer(
     }
   }
   return null;
+}
+
+function messageForBuildFailure(
+  reason:
+    | "no_declared_value"
+    | "no_sender"
+    | "no_sender_phone"
+    | "no_idempotency_key"
+    | "no_destination",
+  pickupType: "PVZ" | "COURIER",
+): string {
+  switch (reason) {
+    case "no_declared_value":
+      return "Укажите объявленную ценность отправления";
+    case "no_sender":
+      return "Укажите город отправления в настройках компании";
+    case "no_sender_phone":
+      return "Укажите телефон отправителя в настройках";
+    case "no_idempotency_key":
+      return "Этот заказ создан старым способом и не может быть оформлен через прямого перевозчика";
+    case "no_destination":
+      return pickupType === "PVZ"
+        ? "Выберите пункт выдачи"
+        : "Укажите адрес доставки";
+  }
 }
 
 export const POST = withAuth<{ id: string }>(
@@ -82,6 +109,22 @@ export const POST = withAuth<{ id: string }>(
       select: {
         id: true,
         quotedOffers: true,
+        companyId: true,
+        idempotencyKey: true,
+        declaredValue: true,
+        weightG: true,
+        lengthCm: true,
+        widthCm: true,
+        heightCm: true,
+        pickupType: true,
+        pvzCode: true,
+        destCity: true,
+        destAddress: true,
+        destApartment: true,
+        deliveryComment: true,
+        recipientName: true,
+        recipientPhone: true,
+        isAnonymized: true,
       },
     });
 
@@ -89,10 +132,72 @@ export const POST = withAuth<{ id: string }>(
       return NextResponse.json({ error: "Заказ не найден" }, { status: 404 });
     }
 
+    if (row.isAnonymized) {
+      return NextResponse.json(
+        { error: "Данные получателя удалены, заказ нельзя оформить" },
+        { status: 409 },
+      );
+    }
+
     const offer = findQuotedOffer(row.quotedOffers, offerIdRaw);
     if (!offer) {
       return NextResponse.json(
         { error: "Запросите тарифы заново" },
+        { status: 400 },
+      );
+    }
+
+    const decrypted = decryptShipmentRecipientPii(row);
+
+    const company = await prisma.company.findFirst({
+      where: { id: user.companyId },
+      select: {
+        name: true,
+        inn: true,
+        contactEmail: true,
+        senderCity: true,
+        senderAddress: true,
+        senderPhone: true,
+      },
+    });
+
+    if (!company) {
+      console.error(
+        "[shipments/submit] company not found for authenticated session",
+        user.companyId,
+      );
+      return NextResponse.json(
+        { error: "Не удалось оформить заказ. Мы уже разбираемся." },
+        { status: 500 },
+      );
+    }
+
+    const built = buildYandexOfferInput({
+      shipment: {
+        companyId: decrypted.companyId,
+        idempotencyKey: decrypted.idempotencyKey,
+        declaredValue: decrypted.declaredValue,
+        weightG: decrypted.weightG,
+        lengthCm: decrypted.lengthCm,
+        widthCm: decrypted.widthCm,
+        heightCm: decrypted.heightCm,
+        pickupType: decrypted.pickupType,
+        pvzCode: decrypted.pvzCode,
+        destCity: decrypted.destCity,
+        destAddress: decrypted.destAddress,
+        destApartment: decrypted.destApartment,
+        deliveryComment: decrypted.deliveryComment,
+        recipientName: decrypted.recipientName,
+        recipientPhone: decrypted.recipientPhone,
+      },
+      company,
+    });
+
+    if (!built.ok) {
+      return NextResponse.json(
+        {
+          error: messageForBuildFailure(built.reason, decrypted.pickupType),
+        },
         { status: 400 },
       );
     }
@@ -114,6 +219,7 @@ export const POST = withAuth<{ id: string }>(
         shipmentId: row.id,
         companyId: user.companyId,
         offer,
+        input: built.input,
         credentials: credsResult.credentials,
         confirm: confirmOffer,
       });

@@ -14,6 +14,37 @@ const VALID_CREDS = {
 };
 const OFFER_ID = "c1b139dbd76b4ee3b39b19180b516119";
 
+/** Minimal CarrierCreateOrderInput — confirmOffer ignores it today. */
+const ORDER_INPUT = {
+  clientNumber: "oco-test-client",
+  providerKey: "yataxi",
+  sender: {
+    countryCode: "RU",
+    contactName: "Sender",
+    phone: "+79001111111",
+    city: "Москва",
+    addressString: "Москва",
+  },
+  recipient: {
+    countryCode: "RU",
+    contactName: "Recipient",
+    phone: "+79002222222",
+    city: "Москва",
+    addressString: "Москва, Арбат 1",
+  },
+  items: [
+    {
+      name: "Посылка",
+      quantity: 1,
+      unitPriceRub: 500,
+      weightG: 1000,
+      lengthCm: 20,
+      widthCm: 15,
+      heightCm: 10,
+    },
+  ],
+};
+
 function setEnv(name, value) {
   if (value === undefined) {
     delete process.env[name];
@@ -67,7 +98,7 @@ test("confirmOffer happy path: request_id maps to requestId", async () => {
     const mock = installFetchMock(() => jsonResponse(200, raw));
 
     try {
-      const result = await confirmOffer(OFFER_ID, VALID_CREDS);
+      const result = await confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS);
 
       assert.equal(result.requestId, "77241d8009bb46d0bff5c65a73077bcd-udp");
       assert.deepEqual(result.rawResponse, raw);
@@ -84,7 +115,7 @@ test("confirmOffer request shape: POST /offers/confirm with { offer_id }", async
     );
 
     try {
-      await confirmOffer(OFFER_ID, VALID_CREDS);
+      await confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS);
 
       assert.equal(mock.calls.length, 1);
       assert.equal(
@@ -109,8 +140,8 @@ test("confirmOffer is retry-safe: same offer_id returns same request_id, no thro
     const SAME = "77241d8009bb46d0bff5c65a73077bcd-udp";
     const mock = installFetchMock(() => jsonResponse(200, { request_id: SAME }));
     try {
-      const first = await confirmOffer(OFFER_ID, VALID_CREDS);
-      const second = await confirmOffer(OFFER_ID, VALID_CREDS); // the retry
+      const first = await confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS);
+      const second = await confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS); // the retry
       assert.equal(first.requestId, SAME);
       assert.equal(second.requestId, SAME);
       assert.equal(first.requestId, second.requestId); // idempotent result
@@ -128,7 +159,7 @@ test("confirmOffer missing request_id throws with response detail", async () => 
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => {
           assert.match(error.message, /missing request_id/);
           assert.match(error.message, /200/);
@@ -153,7 +184,7 @@ test("confirmOffer error status (expired/invalid offer) throws YandexOfferExpire
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => {
           assert.ok(error instanceof YandexOfferExpiredError);
           assert.match(error.message, /400/);
@@ -175,7 +206,7 @@ test("confirmOffer other non-200 throws generic Error, not YandexOfferExpiredErr
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => {
           assert.equal(error instanceof YandexOfferExpiredError, false);
           assert.equal(error instanceof YandexAuthError, false);
@@ -208,7 +239,7 @@ test("confirmOffer malformed non-JSON 400 body throws generic Error", async () =
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => {
           assert.equal(error instanceof YandexOfferExpiredError, false);
           assert.ok(error instanceof Error);
@@ -239,7 +270,7 @@ test("confirmOffer non-JSON body containing offer_was_not_found is NOT expired",
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => {
           assert.equal(error instanceof YandexOfferExpiredError, false);
           assert.ok(error instanceof Error);
@@ -262,7 +293,7 @@ test("confirmOffer HTTP 401 throws YandexAuthError", async () => {
 
     try {
       await assert.rejects(
-        () => confirmOffer(OFFER_ID, VALID_CREDS),
+        () => confirmOffer(OFFER_ID, ORDER_INPUT, VALID_CREDS),
         (error) => error instanceof YandexAuthError,
       );
     } finally {

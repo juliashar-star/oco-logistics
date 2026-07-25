@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type {
   CarrierConfirmResult,
+  CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierOffer,
 } from "@oco/core/carrier-adapter/types";
@@ -15,6 +16,7 @@ import { deriveOperatorRequestId } from "./operator-request-id";
 /** Injected confirm — production passes Yandex `confirmOffer`; tests stub it. */
 export type ConfirmOfferFn = (
   offerId: string,
+  input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ) => Promise<CarrierConfirmResult>;
 
@@ -22,6 +24,8 @@ export type SubmitOrderArgs = {
   shipmentId: string;
   companyId: string;
   offer: CarrierOffer;
+  /** Same shape getOffers received — rebuilt per request, never persisted here. */
+  input: CarrierCreateOrderInput;
   credentials: CarrierCredentials;
   confirm: ConfirmOfferFn;
 };
@@ -58,7 +62,7 @@ export async function submitOrder(
   prisma: PrismaClient,
   args: SubmitOrderArgs,
 ): Promise<SubmitOrderResult> {
-  const { shipmentId, companyId, offer, credentials, confirm } = args;
+  const { shipmentId, companyId, offer, input, credentials, confirm } = args;
 
   const capture = await captureForSubmit(prisma, shipmentId, companyId);
   if (!capture.captured) {
@@ -78,7 +82,7 @@ export async function submitOrder(
 
   try {
     try {
-      const confirmed = await confirm(offer.offerId, credentials);
+      const confirmed = await confirm(offer.offerId, input, credentials);
       requestId = confirmed.requestId;
     } catch (error) {
       if (error instanceof YandexOfferExpiredError) {

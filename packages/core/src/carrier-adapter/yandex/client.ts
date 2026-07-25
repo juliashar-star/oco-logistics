@@ -622,9 +622,14 @@ export async function getOffers(
  * Safe to retry on network timeout: Yandex dedupes on offer_id —
  * re-confirming the same offer returns the same request_id
  * (verified by probe 2026-07-13).
+ *
+ * `input` is accepted for CarrierAdapter parity with two-phase carriers that
+ * need the order body at confirm time; this adapter ignores it — confirm
+ * body stays { offer_id } only.
  */
 export async function confirmOffer(
   offerId: string,
+  _input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ): Promise<CarrierConfirmResult> {
   const creds = assertYandexCredentials(credentials);
