@@ -253,11 +253,8 @@ export function NewOrderForm() {
       return;
     }
     if (!snapshotsEqual(snapshot, snapshotFromForm())) {
-      // Mint a new key only when clearing a PVZ quote — so the next create-draft
-      // is not deduped onto a stale draft with old params.
-      if (yandexOffers.length > 0 || noDeliveryToPoint || draftShipmentId != null) {
-        setIdempotencyKey(crypto.randomUUID());
-      }
+      // Same idempotencyKey for the form session — create-draft updates the
+      // existing DRAFT and wipes stale quotedOffers server-side.
       clearQuoteSelection();
       setRecalculateHint(RECALCULATE_AFTER_PARAMS_HINT);
     }
@@ -509,9 +506,8 @@ export function NewOrderForm() {
       return;
     }
 
-    // Reuse idempotencyKey when params are unchanged (create-draft dedups).
-    // A new key is minted only in invalidateQuotesIfParamsChanged when PVZ
-    // draft-affecting params change.
+    // One idempotencyKey per form session — create-draft creates or updates
+    // the same DRAFT row. A new key is minted only after a successful submit.
     setLoading(true);
     clearQuoteSelection();
 
@@ -836,11 +832,6 @@ export function NewOrderForm() {
               value={pickupType}
               onChange={(e) => {
                 const next = e.target.value as "PVZ" | "COURIER";
-                // Leaving a PVZ draft behind: mint a fresh key so a later return
-                // to PVZ cannot reuse a stale create-draft row.
-                if (next !== pickupType) {
-                  setIdempotencyKey(crypto.randomUUID());
-                }
                 setPickupType(next);
                 clearQuoteSelection();
                 setRecalculateHint(null);

@@ -221,7 +221,7 @@ describe("createDraftOrder", { concurrency: false }, () => {
     });
   });
 
-  test("(v) existing row past DRAFT (SUBMITTING) → created:false returns that row", async () => {
+  test("(v) existing row past DRAFT (SUBMITTING) → conflict, row untouched", async () => {
     await withEnv(PII_ENV, TEST_PII_KEY, async () => {
       const company = await seedCompany(
         "Past Draft Co",
@@ -231,16 +231,142 @@ describe("createDraftOrder", { concurrency: false }, () => {
 
       const first = await createDraftOrder(prisma, draftInput(company.id, key));
       assert.equal(first.created, true);
+      const originalWeight = first.shipment.weightG;
 
       await prisma.shipment.update({
         where: { id: first.shipment.id },
         data: { status: "SUBMITTING", submittingAt: new Date() },
       });
 
-      const second = await createDraftOrder(prisma, draftInput(company.id, key));
-      assert.equal(second.created, false);
+      const second = await createDraftOrder(
+        prisma,
+        draftInput(company.id, key, { recipientName: "Другой Получатель" }),
+      );
+      assert.equal("conflict" in second && second.conflict, true);
+      if (!("conflict" in second) || !second.conflict) {
+        assert.fail("expected conflict result");
+      }
+      assert.equal(second.reason, "not_draft");
       assert.equal(second.shipment.id, first.shipment.id);
       assert.equal(second.shipment.status, "SUBMITTING");
+
+      const row = await prisma.shipment.findUniqueOrThrow({
+        where: { id: first.shipment.id },
+      });
+      assert.equal(row.status, "SUBMITTING");
+      assert.equal(row.weightG, originalWeight);
+      assert.notEqual(row.recipientName, "Другой Получатель");
+    });
+  });
+
+  test("(vi) same key with changed parcel fields → same row id, fields updated, quotedOffers wiped", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Update Draft Co",
+        `draft-upd-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-upd`;
+
+      const first = await createDraftOrder(prisma, draftInput(company.id, key));
+      assert.equal(first.created, true);
+
+      const expiresAt = new Date("2026-07-25T12:00:00.000Z");
+      await prisma.shipment.update({
+        where: { id: first.shipment.id },
+        data: {
+          quotedOffers: [
+            { offerId: "stale-offer", priceRub: 100 },
+          ],
+          selectedOfferId: "stale-offer",
+          selectedOfferExpiresAt: expiresAt,
+        },
+      });
+
+      const second = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        weightG: 999,
+        lengthCm: 33,
+        widthCm: 22,
+        heightCm: 11,
+        declaredValueRub: 4500,
+        destCity: "Москва",
+        destAddress: "ул. Новая, 9",
+        recipientName: "Пётр Новый",
+        recipientPhone: "+79007654321",
+      });
+
+      assert.equal("created" in second && second.created, false);
+      assert.equal(!("conflict" in second), true);
+      assert.equal(second.shipment.id, first.shipment.id);
+      assert.equal(second.shipment.status, "DRAFT");
+      assert.equal(second.shipment.weightG, 999);
+      assert.equal(second.shipment.lengthCm, 33);
+      assert.equal(second.shipment.widthCm, 22);
+      assert.equal(second.shipment.heightCm, 11);
+      assert.equal(second.shipment.declaredValue, 450000);
+      assert.equal(second.shipment.selectedOfferId, null);
+      assert.equal(second.shipment.selectedOfferExpiresAt, null);
+      assert.equal(second.shipment.quotedOffers, null);
+
+      const decrypted = decryptShipmentRecipientPii({
+        recipientName: second.shipment.recipientName,
+        recipientPhone: second.shipment.recipientPhone,
+        destAddress: second.shipment.destAddress,
+        destApartment: second.shipment.destApartment,
+        deliveryComment: second.shipment.deliveryComment,
+        isAnonymized: second.shipment.isAnonymized,
+      });
+      assert.equal(decrypted.recipientName, "Пётр Новый");
+      assert.equal(decrypted.recipientPhone, "+79007654321");
+      assert.equal(decrypted.destAddress, "ул. Новая, 9");
+
+      const count = await prisma.shipment.count({
+        where: { companyId: company.id, idempotencyKey: key },
+      });
+      assert.equal(count, 1);
+    });
+  });
+
+  test("(vii) DRAFT with submittingAt set → conflict, row untouched", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "SubmittingAt Co",
+        `draft-subat-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-subat`;
+
+      const first = await createDraftOrder(prisma, draftInput(company.id, key));
+      assert.equal(first.created, true);
+
+      await prisma.shipment.update({
+        where: { id: first.shipment.id },
+        data: { submittingAt: new Date() },
+      });
+
+      const second = await createDraftOrder(
+        prisma,
+        draftInput(company.id, key, { recipientName: "Не Должен Записаться" }),
+      );
+      assert.equal("conflict" in second && second.conflict, true);
+      if (!("conflict" in second) || !second.conflict) {
+        assert.fail("expected conflict result");
+      }
+      assert.equal(second.reason, "not_draft");
+
+      const row = await prisma.shipment.findUniqueOrThrow({
+        where: { id: first.shipment.id },
+      });
+      assert.equal(row.status, "DRAFT");
+      assert.ok(row.submittingAt);
+      const decrypted = decryptShipmentRecipientPii({
+        recipientName: row.recipientName,
+        recipientPhone: row.recipientPhone,
+        destAddress: row.destAddress,
+        destApartment: row.destApartment,
+        deliveryComment: row.deliveryComment,
+        isAnonymized: row.isAnonymized,
+      });
+      assert.equal(decrypted.recipientName, "Иван Тестов");
     });
   });
 });

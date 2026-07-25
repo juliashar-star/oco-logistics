@@ -102,6 +102,16 @@ export const POST = withAuth(async (request, user) => {
         body.declaredValueRub != null ? Number(body.declaredValueRub) : undefined,
     });
 
+    if ("conflict" in result) {
+      return NextResponse.json(
+        {
+          error:
+            "Этот черновик уже отправляется или оформлен — перезагрузите страницу и создайте новый заказ",
+        },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       created: result.created,
