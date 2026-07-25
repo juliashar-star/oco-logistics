@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { YandexAuthError, getOffers } from "@oco/core/carrier-adapter/yandex/client";
+import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
+import { YandexAuthError } from "@oco/core/carrier-adapter/yandex/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
@@ -148,7 +149,7 @@ export const POST = withAuth<{ id: string }>(
       const credsResult = await getCarrierCredentials(
         prisma,
         user.companyId,
-        "yataxi",
+        DEFAULT_ORDER_ADAPTER.providerKey,
       );
       if (!credsResult.ok) {
         return NextResponse.json(
@@ -157,7 +158,7 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      const offersResult = await getOffers(
+      const offersResult = await DEFAULT_ORDER_ADAPTER.getOffers(
         built.input,
         credsResult.credentials,
       );
