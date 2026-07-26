@@ -9,6 +9,22 @@ export type ConnectedCarrier = {
 };
 
 /**
+ * Provider keys of CarrierCredential rows for a company — no decrypt.
+ * Badge / "already connected" checks only need the key, not the secret.
+ */
+export async function listConnectedProviderKeys(
+  prisma: PrismaClient,
+  companyId: string,
+): Promise<string[]> {
+  const rows = await prisma.carrierCredential.findMany({
+    where: { companyId },
+    select: { providerKey: true },
+    orderBy: { providerKey: "asc" },
+  });
+  return rows.map((row) => row.providerKey);
+}
+
+/**
  * List every CarrierCredential row for a company, decrypted.
  *
  * Boundary (same as getCarrierCredentials):

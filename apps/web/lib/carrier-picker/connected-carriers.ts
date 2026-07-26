@@ -1,11 +1,6 @@
-import { getApishipClientForCompany } from "@/lib/apiship-client-for-company";
+import { prisma } from "@/lib/db";
+import { listConnectedProviderKeys } from "@/lib/shipments/list-connected-carriers";
 
-export async function fetchConnectedCarriers(companyId: string): Promise<string[] | undefined> {
-  try {
-    const client = await getApishipClientForCompany(companyId);
-    const connections = await client.listConnections();
-    return connections.map((connection) => connection.providerKey);
-  } catch {
-    return undefined;
-  }
+export async function fetchConnectedCarriers(companyId: string): Promise<string[]> {
+  return listConnectedProviderKeys(prisma, companyId);
 }
