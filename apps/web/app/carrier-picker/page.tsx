@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { CATEGORY_TO_PROFILE } from "@oco/core";
+import { CATEGORY_TO_PROFILE, providerSellerDisplayName } from "@oco/core";
 import { Input } from "@/components/ui/input";
 
 type RecommendCarrier = {
@@ -148,7 +148,10 @@ export default function CarrierPickerPage() {
                     key={carrier.providerKey}
                     className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
                   >
-                    <p className="font-medium text-slate-900">{carrier.displayName}</p>
+                    <p className="font-medium text-slate-900">
+                      {providerSellerDisplayName(carrier.providerKey) ??
+                        carrier.displayName}
+                    </p>
                     {carrier.reasons.length > 0 && (
                       <ul className="mt-2 space-y-1">
                         {carrier.reasons.map((reason) => (

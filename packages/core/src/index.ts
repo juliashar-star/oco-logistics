@@ -35,9 +35,15 @@ export {
   type SpecialMode,
   type WeightLimits,
 } from "./carrier-picker/registry";
+export {
+  PROVIDER_SELLER_DISPLAY_NAMES,
+  providerSellerDisplayName,
+} from "./carrier-adapter/provider-seller-display-names";
 export { deriveFactBasedProfiles } from "./carrier-picker/profile-fit";
 export {
   sendPasswordResetEmail,
   sendVerificationEmail,
   sendCarrierConnectionRequestNotification,
+  sendCarrierIntegrationRequestSellerConfirmation,
+  buildCarrierIntegrationRequestSellerConfirmationPlaintext,
 } from "../lib/email";

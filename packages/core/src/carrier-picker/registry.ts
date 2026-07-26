@@ -115,6 +115,10 @@ export type SpecialMode = "fragile" | "perishable" | "cod" | "insurance" | "fitt
 
 export type Carrier = {
   providerKey: string;
+  /**
+   * REAL carrier name (ops, emails, drift checks).
+   * Any seller-facing render must go through providerSellerDisplayName().
+   */
   displayName: string;
   profiles: ProfileId[];
   methods: DeliveryMethod[];

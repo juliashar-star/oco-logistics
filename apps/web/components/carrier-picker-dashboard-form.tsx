@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { CATEGORY_TO_PROFILE, type RankedCarrier } from "@oco/core";
+import {
+  CATEGORY_TO_PROFILE,
+  providerSellerDisplayName,
+  type RankedCarrier,
+} from "@oco/core";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -38,7 +42,8 @@ function formatRequestDate(iso: string): string {
 const CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER = "требует уточнения у перевозчика";
 
 function formatContractInstruction(carrier: RankedCarrier): string {
-  const base = `Вам требуется заключить прямой договор с перевозчиком. Обратитесь в ${carrier.displayName} для заключения договора.`;
+  const name = providerSellerDisplayName(carrier.providerKey) ?? carrier.displayName;
+  const base = `Вам требуется заключить прямой договор с перевозчиком. Обратитесь в ${name} для заключения договора.`;
   const estimate = carrier.carrierContractEstimate?.value;
   if (estimate && estimate !== CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER) {
     return `${base} Ориентировочный срок заключения договора — ${estimate}.`;
@@ -358,7 +363,10 @@ export function CarrierPickerDashboardForm() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-slate-900">{carrier.displayName}</p>
+                          <p className="font-medium text-slate-900">
+                            {providerSellerDisplayName(carrier.providerKey) ??
+                              carrier.displayName}
+                          </p>
                           <Badge
                             className={
                               carrier.isConnected

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   CARRIER_REGISTRY,
   deriveFactBasedProfiles,
+  providerSellerDisplayName,
   type Carrier,
   type CoverageLevel,
   type DeliveryMethod,
@@ -104,9 +105,10 @@ export default function CarrierComparisonPage() {
     notFound();
   }
 
+  // Sort by providerKey — stable identity; masked labels must not reshuffle the table.
   const carriers = CARRIER_REGISTRY.filter(
     (carrier) => carrier.healthStatus !== "discontinued",
-  ).sort((a, b) => a.displayName.localeCompare(b.displayName, "ru"));
+  ).sort((a, b) => a.providerKey.localeCompare(b.providerKey));
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-12">
@@ -157,7 +159,8 @@ export default function CarrierComparisonPage() {
                     className="border-b border-slate-100 align-top"
                   >
                     <td className="px-3 py-3 font-medium text-slate-900">
-                      {carrier.displayName}
+                      {providerSellerDisplayName(carrier.providerKey) ??
+                        carrier.displayName}
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-1.5">
