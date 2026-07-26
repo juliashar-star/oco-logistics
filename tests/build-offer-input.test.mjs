@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { deriveOperatorRequestId } from "../apps/web/lib/shipments/operator-request-id.ts";
-import {
-  buildYandexOfferInput,
-} from "../apps/web/lib/shipments/build-yandex-offer-input.ts";
+import { buildOfferInput } from "../apps/web/lib/shipments/build-offer-input.ts";
+
+const PROVIDER_KEY = "yataxi";
 
 const COMPANY = {
   name: "Брэнд Тест",
@@ -34,8 +34,12 @@ function baseShipment(overrides = {}) {
   };
 }
 
+function build(args) {
+  return buildOfferInput({ providerKey: PROVIDER_KEY, ...args });
+}
+
 test("no_declared_value when declaredValue is null", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({ declaredValue: null }),
     company: COMPANY,
   });
@@ -43,7 +47,7 @@ test("no_declared_value when declaredValue is null", () => {
 });
 
 test("no_declared_value when declaredValue is 0", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({ declaredValue: 0 }),
     company: COMPANY,
   });
@@ -51,7 +55,7 @@ test("no_declared_value when declaredValue is 0", () => {
 });
 
 test("no_declared_value when declaredValue is negative", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({ declaredValue: -100 }),
     company: COMPANY,
   });
@@ -59,7 +63,7 @@ test("no_declared_value when declaredValue is negative", () => {
 });
 
 test("no_idempotency_key when idempotencyKey is null", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({ idempotencyKey: null }),
     company: COMPANY,
   });
@@ -67,7 +71,7 @@ test("no_idempotency_key when idempotencyKey is null", () => {
 });
 
 test("no_sender when company has no senderCity", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment(),
     company: { ...COMPANY, senderCity: null },
   });
@@ -75,7 +79,7 @@ test("no_sender when company has no senderCity", () => {
 });
 
 test("no_destination for PVZ without pvzCode", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({
       pickupType: "PVZ",
       pvzCode: "  ",
@@ -87,7 +91,7 @@ test("no_destination for PVZ without pvzCode", () => {
 });
 
 test("no_destination for COURIER without destAddress", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({
       pickupType: "COURIER",
       destAddress: null,
@@ -98,7 +102,7 @@ test("no_destination for COURIER without destAddress", () => {
 });
 
 test("UNITS: declaredValue 1500000 kopecks → unitPriceRub 15000 and assessedCostRub 15000", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({ declaredValue: 1_500_000 }),
     company: COMPANY,
   });
@@ -118,7 +122,7 @@ test("PVZ happy path: pointOutId set, no addressString, synthetic item Посы�
     destAddress: null,
     declaredValue: 250_00, // 250 ₽
   });
-  const result = buildYandexOfferInput({ shipment, company: COMPANY });
+  const result = build({ shipment, company: COMPANY });
   assert.equal(result.ok, true);
   if (!result.ok) return;
 
@@ -148,7 +152,7 @@ test("PVZ happy path: pointOutId set, no addressString, synthetic item Посы�
 });
 
 test("COURIER happy path: addressString set, no pointOutId", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment({
       pickupType: "COURIER",
       destAddress: "ул. Тверская, д. 1",
@@ -165,9 +169,20 @@ test("COURIER happy path: addressString set, no pointOutId", () => {
 });
 
 test("no_sender_phone when company.senderPhone blank", () => {
-  const result = buildYandexOfferInput({
+  const result = build({
     shipment: baseShipment(),
     company: { ...COMPANY, senderPhone: "  " },
   });
   assert.deepEqual(result, { ok: false, reason: "no_sender_phone" });
+});
+
+test("providerKey comes from the registry argument, not a hardcode", () => {
+  const result = buildOfferInput({
+    shipment: baseShipment(),
+    company: COMPANY,
+    providerKey: "other-carrier",
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.input.providerKey, "other-carrier");
 });

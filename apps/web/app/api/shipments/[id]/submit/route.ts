@@ -6,7 +6,7 @@ import type { CarrierOffer } from "@oco/core/carrier-adapter/types";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
-import { buildYandexOfferInput } from "@/lib/shipments/build-yandex-offer-input";
+import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { submitOrder } from "@/lib/shipments/submit-order";
 
@@ -193,7 +193,7 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      const built = buildYandexOfferInput({
+      const built = buildOfferInput({
         shipment: {
           companyId: decrypted.companyId,
           idempotencyKey: decrypted.idempotencyKey,
@@ -212,6 +212,7 @@ export const POST = withAuth<{ id: string }>(
           recipientPhone: decrypted.recipientPhone,
         },
         company,
+        providerKey: orderAdapter.providerKey,
       });
 
       if (!built.ok) {

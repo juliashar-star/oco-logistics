@@ -3,7 +3,7 @@ import type { CarrierCreateOrderInput } from "@oco/core/carrier-adapter/types";
 import { resolveSenderLocation } from "../sender-address";
 import { deriveOperatorRequestId } from "./operator-request-id";
 
-export type BuildYandexOfferShipment = {
+export type BuildOfferShipment = {
   companyId: string;
   idempotencyKey: string | null;
   declaredValue: number | null;
@@ -22,7 +22,7 @@ export type BuildYandexOfferShipment = {
   recipientPhone: string;
 };
 
-export type BuildYandexOfferCompany = {
+export type BuildOfferCompany = {
   name: string;
   inn: string | null;
   contactEmail: string;
@@ -44,14 +44,16 @@ export type BuildOfferInputResult =
     };
 
 /**
- * Pure mapper: decrypted Shipment fields + Company → Yandex CarrierCreateOrderInput.
- * No prisma, no fetch, no Yandex client.
+ * Pure mapper: decrypted Shipment fields + Company → CarrierCreateOrderInput.
+ * No prisma, no fetch, no carrier client.
+ * providerKey comes from the resolved order-adapter registry entry.
  */
-export function buildYandexOfferInput(args: {
-  shipment: BuildYandexOfferShipment;
-  company: BuildYandexOfferCompany;
+export function buildOfferInput(args: {
+  shipment: BuildOfferShipment;
+  company: BuildOfferCompany;
+  providerKey: string;
 }): BuildOfferInputResult {
-  const { shipment, company } = args;
+  const { shipment, company, providerKey } = args;
 
   // 1. DECLARED VALUE IS REQUIRED. Объявленная ценность is the SELLER'S legal
   // declaration about the SELLER'S goods and decides what they recover if the
@@ -125,8 +127,7 @@ export function buildYandexOfferInput(args: {
   ];
 
   const input: CarrierCreateOrderInput = {
-    // 8. providerKey fixed for this Yandex builder.
-    providerKey: "yataxi",
+    providerKey,
     clientNumber: deriveOperatorRequestId(
       shipment.companyId,
       shipment.idempotencyKey,

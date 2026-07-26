@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
-import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
+import { listOffersForOrderAdapters } from "@oco/core/carrier-adapter/list-offers-for-order-adapters";
+import {
+  DEFAULT_ORDER_ADAPTER,
+  ORDER_ADAPTERS,
+} from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
-import { buildYandexOfferInput } from "@/lib/shipments/build-yandex-offer-input";
+import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
 
@@ -115,7 +118,7 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    const built = buildYandexOfferInput({
+    const built = buildOfferInput({
       shipment: {
         companyId: decrypted.companyId,
         idempotencyKey: decrypted.idempotencyKey,
@@ -134,6 +137,7 @@ export const POST = withAuth<{ id: string }>(
         recipientPhone: decrypted.recipientPhone,
       },
       company,
+      providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
     });
 
     if (!built.ok) {
@@ -158,38 +162,48 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      const offersResult = await DEFAULT_ORDER_ADAPTER.getOffers(
+      // Tagging happens inside the service (adapterKey = registry entry key).
+      // Client DTO (toOffersResponse) stays without adapterKey.
+      const { offers: taggedOffers, adapters } = await listOffersForOrderAdapters(
         built.input,
         credsResult.credentials,
+        Object.values(ORDER_ADAPTERS),
       );
 
-      // Tag with the registry key before persist — adapters do not know it.
-      // Client DTO (toOffersResponse) stays without adapterKey.
-      const taggedOffers = offersResult.ok
-        ? offersResult.offers.map((offer) => ({
-            ...offer,
-            adapterKey: DEFAULT_ORDER_ADAPTER.key,
-          }))
-        : [];
+      if (
+        taggedOffers.length > 0 ||
+        adapters.some((entry) => entry.status === "ok")
+      ) {
+        // CarrierOffer.rawOffer is `unknown`; Prisma.InputJsonValue rejects it
+        // without a cast. Same pattern as persist-tariff-quotes (as InputJsonValue).
+        const quotedOffers = taggedOffers as unknown as Prisma.InputJsonValue;
+        await prisma.shipment.update({
+          where: { id: row.id },
+          data: { quotedOffers },
+        });
+        return NextResponse.json(
+          toOffersResponse({ ok: true, offers: taggedOffers }),
+        );
+      }
 
-      // CarrierOffer.rawOffer is `unknown`; Prisma.InputJsonValue rejects it
-      // without a cast. Same pattern as persist-tariff-quotes (as InputJsonValue).
-      const quotedOffers = taggedOffers as unknown as Prisma.InputJsonValue;
+      if (
+        adapters.length > 0 &&
+        adapters.every((entry) => entry.status === "no_delivery_options")
+      ) {
+        const quotedOffers = [] as unknown as Prisma.InputJsonValue;
+        await prisma.shipment.update({
+          where: { id: row.id },
+          data: { quotedOffers },
+        });
+        return NextResponse.json(
+          toOffersResponse({ ok: false, reason: "no_delivery_options" }),
+        );
+      }
 
-      await prisma.shipment.update({
-        where: { id: row.id },
-        data: { quotedOffers },
-      });
-
-      return NextResponse.json(
-        toOffersResponse(
-          offersResult.ok
-            ? { ok: true, offers: taggedOffers }
-            : offersResult,
-        ),
-      );
-    } catch (error) {
-      if (error instanceof CarrierAuthError) {
+      if (
+        adapters.length > 0 &&
+        adapters.every((entry) => entry.status === "auth_failed")
+      ) {
         return NextResponse.json(
           {
             error:
@@ -198,8 +212,18 @@ export const POST = withAuth<{ id: string }>(
           { status: 400 },
         );
       }
-      // Never forward error.message — getOffers interpolates the provider raw body.
-      console.error("[shipments/offers] getOffers failed", error);
+
+      // Never forward error.message to the client — getOffers interpolates the
+      // provider raw body. Service no longer rethrows; log statuses only.
+      console.error("[shipments/offers] no offers", adapters);
+      return NextResponse.json(
+        { error: "Не удалось получить тарифы. Попробуйте позже." },
+        { status: 500 },
+      );
+    } catch (error) {
+      // Decrypt / build-input / credentials / Prisma — service never rethrows.
+      // Error object is logged deliberately and never reaches the client.
+      console.error("[shipments/offers] request failed", error);
       return NextResponse.json(
         { error: "Не удалось получить тарифы. Попробуйте позже." },
         { status: 500 },
