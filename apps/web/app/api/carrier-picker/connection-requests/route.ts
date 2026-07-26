@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
-import { CARRIER_REGISTRY, sendCarrierConnectionRequestNotification } from "@oco/core";
+import {
+  CARRIER_REGISTRY,
+  providerSellerDisplayName,
+  sendCarrierConnectionRequestNotification,
+  sendCarrierIntegrationRequestSellerConfirmation,
+} from "@oco/core";
 import { withAuth } from "@/lib/auth/with-auth";
 import {
   isCarrierConnectionRequestBlocked,
   recordCarrierConnectionRequestAttempt,
 } from "@/lib/auth/rate-limit";
 import { fetchConnectedCarriers } from "@/lib/carrier-picker/connected-carriers";
+import { formatDateMoscow } from "@/lib/date/format-date-moscow";
 import { prisma } from "@/lib/db";
 
 export const POST = withAuth(async (request, user) => {
@@ -65,6 +71,18 @@ export const POST = withAuth(async (request, user) => {
       );
     } catch (error) {
       console.error("connection request notification failed", error);
+    }
+
+    try {
+      const sellerFacingName =
+        providerSellerDisplayName(providerKey) ?? carrier.displayName;
+      await sendCarrierIntegrationRequestSellerConfirmation(
+        user.email,
+        sellerFacingName,
+        formatDateMoscow(created.createdAt),
+      );
+    } catch (error) {
+      console.error("seller integration request confirmation email failed", error);
     }
 
     return NextResponse.json({

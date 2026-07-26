@@ -240,6 +240,145 @@ export async function sendCarrierConnectionRequestNotification(
   }
 }
 
+/**
+ * Seller-facing confirmation after an integration request is stored.
+ * carrierSellerName must already be resolved via providerSellerDisplayName (masked).
+ * requestDateLabel must already be formatted (e.g. formatDateMoscow).
+ */
+export function buildCarrierIntegrationRequestSellerConfirmationPlaintext(
+  carrierSellerName: string,
+  requestDateLabel: string,
+): string {
+  return `Здравствуйте!
+
+Мы получили вашу заявку на техническую интеграцию перевозчика ${carrierSellerName} от ${requestDateLabel}.
+
+Спасибо — такие заявки напрямую влияют на то, каких перевозчиков мы подключаем в первую очередь.
+
+Что будет дальше
+
+Мы оценим, что именно нужно доработать в ОСО для работы с этой службой. Возможность и сроки зависят от нескольких вещей: какие операции перевозчик открывает через свой программный интерфейс, на каких условиях он предоставляет к нему доступ, и от нашей текущей очереди задач. Как только по вашей заявке появится определённость, мы напишем вам отдельно.
+
+Что эта заявка не делает
+
+Кнопка «Запросить техническую интеграцию» — это сигнал команде ОСО о том, что вам нужна возможность работать с этой службой через ОСО. Заявка не заключает договор с перевозчиком и не подключает вас к нему.
+
+Договор и учётную запись вы оформляете самостоятельно, напрямую с перевозчиком. ОСО не является стороной этого договора и не оказывает услуги перевозки — мы даём единый интерфейс к тем службам, с которыми у вас уже есть договор.
+
+Это письмо отправлено автоматически. Если появятся вопросы — напишите нам на support@useoco.ru. Когда по вашей заявке появится определённость, мы сообщим вам отдельно.
+
+С уважением,
+команда ОСО`;
+}
+
+function buildCarrierIntegrationRequestSellerConfirmationHtml(
+  carrierSellerName: string,
+  requestDateLabel: string,
+): string {
+  const plaintext = buildCarrierIntegrationRequestSellerConfirmationPlaintext(
+    carrierSellerName,
+    requestDateLabel,
+  );
+  const bodyHtml = plaintext
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br />\n");
+
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700&display=swap" rel="stylesheet" />
+  <title>Заявка на техническую интеграцию перевозчика принята — OCO</title>
+</head>
+<body style="margin:0;padding:0;background:#eef4f3;font-family:'Onest',system-ui,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4f3;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background:#ffffff;border-radius:16px;border:1px solid #e3ecea;">
+          <tr>
+            <td style="padding:32px;text-align:left;font-size:15px;line-height:1.6;color:#4b5563;">
+              ${bodyHtml}
+            </td>
+          </tr>
+        </table>
+        <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">OCO Logistics</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendCarrierIntegrationRequestSellerConfirmation(
+  to: string,
+  carrierSellerName: string,
+  requestDateLabel: string,
+): Promise<void> {
+  const apiKey = process.env.UNISENDER_GO_API_KEY;
+  const fromEmail = process.env.UNISENDER_GO_FROM_EMAIL;
+  const fromName = process.env.UNISENDER_GO_FROM_NAME ?? "OCO Logistics";
+
+  if (!apiKey || !fromEmail) {
+    throw new Error(
+      "UNISENDER_GO_API_KEY и UNISENDER_GO_FROM_EMAIL должны быть заданы в .env",
+    );
+  }
+
+  const subject = "Заявка на техническую интеграцию перевозчика принята";
+  const plaintext = buildCarrierIntegrationRequestSellerConfirmationPlaintext(
+    carrierSellerName,
+    requestDateLabel,
+  );
+
+  const requestBody = {
+    message: {
+      recipients: [{ email: to }],
+      from_email: fromEmail,
+      from_name: fromName,
+      subject,
+      body: {
+        html: buildCarrierIntegrationRequestSellerConfirmationHtml(
+          carrierSellerName,
+          requestDateLabel,
+        ),
+        plaintext,
+      },
+      track_links: 0,
+      track_read: 0,
+    },
+  };
+
+  try {
+    const response = await fetch(UNISENDER_SEND_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-KEY": apiKey,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error("Unisender Go HTTP error:", response.status, body);
+      throw new Error(`Unisender Go HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as { status?: string; error?: string };
+    if (data.status === "error") {
+      console.error("Unisender Go API error:", data.error);
+      throw new Error("Unisender Go API error");
+    }
+  } catch (error) {
+    console.error("sendCarrierIntegrationRequestSellerConfirmation failed", error);
+    throw error;
+  }
+}
+
 export async function sendVerificationEmail(to: string, token: string): Promise<void> {
   const apiKey = process.env.UNISENDER_GO_API_KEY;
   const fromEmail = process.env.UNISENDER_GO_FROM_EMAIL;
