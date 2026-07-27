@@ -11,6 +11,7 @@ const EXPECTED_OFFER_KEYS = [
   "pickupIntervalFrom",
   "pickupIntervalTo",
   "priceRub",
+  "serviceTitle",
 ];
 
 const SAMPLE_OFFER = {
@@ -21,6 +22,7 @@ const SAMPLE_OFFER = {
   pickupIntervalFrom: "2026-07-13T06:00:00.000000Z",
   pickupIntervalTo: "2026-07-13T15:00:00.000000Z",
   priceRub: 374.54,
+  adapterKey: "yataxi:next_day",
   rawOffer: {
     marker: "RAW_OFFER_LEAK_MARKER_abc99",
     giant: "x".repeat(500),
@@ -29,11 +31,22 @@ const SAMPLE_OFFER = {
   },
 };
 
+/** Fake resolver — does not touch the real registry. */
+function fakeResolveServiceTitle(adapterKey) {
+  if (adapterKey === undefined) {
+    return "DEFAULT_SERVICE_TITLE";
+  }
+  return `TITLE_FOR:${adapterKey}`;
+}
+
 test("mapped offer key set is exactly the DTO fields (catches future spread of rawOffer)", () => {
-  const response = toOffersResponse({
-    ok: true,
-    offers: [SAMPLE_OFFER],
-  });
+  const response = toOffersResponse(
+    {
+      ok: true,
+      offers: [SAMPLE_OFFER],
+    },
+    fakeResolveServiceTitle,
+  );
 
   assert.equal(response.ok, true);
   assert.equal(response.status, "ok");
@@ -42,10 +55,13 @@ test("mapped offer key set is exactly the DTO fields (catches future spread of r
 });
 
 test("fat rawOffer never appears in serialized response", () => {
-  const response = toOffersResponse({
-    ok: true,
-    offers: [SAMPLE_OFFER],
-  });
+  const response = toOffersResponse(
+    {
+      ok: true,
+      offers: [SAMPLE_OFFER],
+    },
+    fakeResolveServiceTitle,
+  );
 
   const serialized = JSON.stringify(response);
   assert.equal(serialized.includes("RAW_OFFER_LEAK_MARKER_abc99"), false);
@@ -54,10 +70,13 @@ test("fat rawOffer never appears in serialized response", () => {
 });
 
 test("no_delivery_options -> ok true, status no_delivery_options, empty offers", () => {
-  const response = toOffersResponse({
-    ok: false,
-    reason: "no_delivery_options",
-  });
+  const response = toOffersResponse(
+    {
+      ok: false,
+      reason: "no_delivery_options",
+    },
+    fakeResolveServiceTitle,
+  );
   assert.deepEqual(response, {
     ok: true,
     status: "no_delivery_options",
@@ -66,10 +85,33 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
 });
 
 test("ok with empty offers -> ok true, status ok, empty offers", () => {
-  const response = toOffersResponse({ ok: true, offers: [] });
+  const response = toOffersResponse(
+    { ok: true, offers: [] },
+    fakeResolveServiceTitle,
+  );
   assert.deepEqual(response, {
     ok: true,
     status: "ok",
     offers: [],
   });
+});
+
+test("serviceTitle comes from the resolver for each offer, including undefined adapterKey", () => {
+  const withKey = { ...SAMPLE_OFFER, offerId: "a", adapterKey: "yataxi:next_day" };
+  const withoutKey = {
+    ...SAMPLE_OFFER,
+    offerId: "b",
+    adapterKey: undefined,
+  };
+  delete withoutKey.adapterKey;
+
+  const response = toOffersResponse(
+    { ok: true, offers: [withKey, withoutKey] },
+    fakeResolveServiceTitle,
+  );
+
+  assert.equal(response.offers[0].serviceTitle, "TITLE_FOR:yataxi:next_day");
+  assert.equal(response.offers[1].serviceTitle, "DEFAULT_SERVICE_TITLE");
+  assert.equal("adapterKey" in response.offers[0], false);
+  assert.equal("adapterKey" in response.offers[1], false);
 });

@@ -4,6 +4,7 @@ import { listOffersForOrderAdapters } from "@oco/core/carrier-adapter/list-offer
 import {
   DEFAULT_ORDER_ADAPTER,
   ORDER_ADAPTERS,
+  resolveOrderAdapter,
 } from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
@@ -12,6 +13,9 @@ import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
 
+function resolveOfferServiceTitle(adapterKey: string | undefined): string {
+  return resolveOrderAdapter(adapterKey).title;
+}
 function messageForBuildFailure(
   reason:
     | "no_declared_value"
@@ -164,7 +168,7 @@ export const POST = withAuth<{ id: string }>(
       }
 
       // Tagging happens inside the service (adapterKey = registry entry key).
-      // Client DTO (toOffersResponse) stays without adapterKey.
+      // Client DTO keeps adapterKey off the wire; serviceTitle is resolved here.
       const { offers: taggedOffers, adapters } = await listOffersForOrderAdapters(
         built.input,
         credsResult.credentials,
@@ -183,7 +187,10 @@ export const POST = withAuth<{ id: string }>(
           data: { quotedOffers },
         });
         return NextResponse.json(
-          toOffersResponse({ ok: true, offers: taggedOffers }),
+          toOffersResponse(
+            { ok: true, offers: taggedOffers },
+            resolveOfferServiceTitle,
+          ),
         );
       }
 
@@ -197,7 +204,10 @@ export const POST = withAuth<{ id: string }>(
           data: { quotedOffers },
         });
         return NextResponse.json(
-          toOffersResponse({ ok: false, reason: "no_delivery_options" }),
+          toOffersResponse(
+            { ok: false, reason: "no_delivery_options" },
+            resolveOfferServiceTitle,
+          ),
         );
       }
 

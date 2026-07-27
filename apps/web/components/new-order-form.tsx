@@ -12,6 +12,7 @@ import {
 } from "@/lib/date/format-offer-interval";
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
+import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
@@ -1175,6 +1176,9 @@ export function NewOrderForm() {
                       : "border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                 >
+                  {shouldShowOfferServiceTitle(yandexOffers) ? (
+                    <div className="text-xs text-slate-500">{offer.serviceTitle}</div>
+                  ) : null}
                   <div className="text-sm font-medium text-slate-900">
                     {formatOfferInterval(
                       offer.deliveryIntervalFrom,
