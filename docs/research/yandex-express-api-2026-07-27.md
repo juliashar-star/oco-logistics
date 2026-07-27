@@ -140,20 +140,29 @@ https://yandex.ru/support/delivery-profile/ru/api/express/openapi/IntegrationV2C
 - `status` — ClaimStatus
 - `pricing` (optional в схеме ответа) —
   - `pricing.offer.offer_id`
-  - `pricing.offer.price` — «Цена по предложению **без НДС**» (Money /
-    decimal string). На `TaxiOffer` поле `price` marked required в
-    сущности, но в примере ответа create/info встречается `price: null`
-  - `pricing.offer.price_with_vat` (optional)
+  - `pricing.offer.price` — DOCUMENTED (OpenAPI TaxiOffer): «Цена по
+    предложению **без НДС**» (Money / decimal string). MEASURED (prod,
+    27.07.2026): the opposite — `price` held the **gross** figure equal to
+    calculate `total_price_with_vat`, while the **net** figure equal to
+    calculate `total_price` sat in `price_raw`. Example: `price_raw` = 1164
+    = calculate `total_price`; `price` = `"1420.0800"` = calculate
+    `total_price_with_vat`. Field to compare against a quoted (net) price:
+    **`price_raw`**. Why it matters: comparing the gross `price` against a
+    net quote would reject every order as a price change.
+  - `pricing.offer.price_raw` — MEASURED present on prod; not described in
+    the documented TaxiOffer blurb above as the net field
+  - `pricing.offer.price_with_vat` (optional in schema; absent on the
+    measured prod response — gross lived in `price`)
   - `pricing.offer.valid_until`
   - `pricing.final_price`, `pricing.final_pricing_calc_id`, `currency`, …
 - `error_messages` — массив `{ code, message }` (`HumanErrorMessage`)
 
 **Успешная оценка (по claim-process + quickstart):** статус
-`ready_for_approval`; актуальная стоимость — в `pricing` (поле цены
-предложения: `pricing.offer.price`). Сравнение с
-`offers[].price.total_price` из calculate: docs говорят
-«предварительная» vs «актуальная», численного тождества не обещают —
-UNKNOWN.
+`ready_for_approval`; актуальная стоимость — в `pricing`. Для сверки с
+котировкой (net) — MEASURED: `pricing.offer.price_raw` ↔ calculate
+`total_price`. Docs’ qualitative «предварительная» vs «актуальная» stands;
+numerical identity of gross `price` with net `total_price` must not be
+assumed.
 
 **Провал оценки (claim-process):** статус `estimating_failed`; причина в
 `error_messages` ответа info. Можно править через claims/edit и оценка
@@ -163,6 +172,20 @@ UNKNOWN.
 
 Offer TTL после ready_for_approval: accept page — pricing.offer действителен
 ~10 минут; иначе accept → `failed`.
+
+### MEASURED (prod probe 27.07.2026, host `b2b.taxi.yandex.net`)
+
+Each line is measured fact, not documentation:
+
+- claims/create → HTTP 200, status `new`, and `available_cancel_state: "free"`
+  already on the create response itself.
+- Status path: `new` → `ready_for_approval` in ~1.17 s; no `estimating`
+  state observed between ~1 s polls.
+- cancel-info → `{"cancel_state":"free"}`; cancel → HTTP 200; final info
+  status `cancelled`.
+- Same Moscow courier route: production first-offer prices ~2.6× the tst
+  figures (prod `total_price` 1164 vs tst 448), with `surge_ratio` ≈ 1.56 —
+  tst figures must never be used to reason about real money.
 
 ---
 
