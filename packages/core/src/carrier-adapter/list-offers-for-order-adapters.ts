@@ -1,5 +1,6 @@
 import { CarrierAuthError } from "./errors";
 import type { OrderAdapter } from "./order-adapters";
+import { sortOffersForSeller } from "./sort-offers-for-seller";
 import type {
   CarrierCreateOrderInput,
   CarrierCredentials,
@@ -145,5 +146,5 @@ export async function listOffersForOrderAdapters(
     offers.push(...row.offers);
   }
 
-  return { offers, adapters: entries };
+  return { offers: sortOffersForSeller(offers), adapters: entries };
 }

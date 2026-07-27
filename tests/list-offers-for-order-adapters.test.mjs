@@ -92,6 +92,44 @@ test("all ok → offers tagged with each adapter key", async () => {
   ]);
 });
 
+test("merged offers from two adapters return soonest-deadline-first (not registry order)", async () => {
+  const nextDayCheap = {
+    ...makeOffer("next-day-cheap"),
+    deliveryIntervalTo: "2026-07-28T18:00:00Z",
+    priceRub: 200,
+  };
+  const sameDayExpensive = {
+    ...makeOffer("same-day-expensive"),
+    deliveryIntervalTo: "2026-07-27T16:00:00Z",
+    priceRub: 500,
+  };
+  const sameDayCheap = {
+    ...makeOffer("same-day-cheap"),
+    deliveryIntervalTo: "2026-07-27T20:00:00Z",
+    priceRub: 350,
+  };
+
+  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
+    fakeAdapter("yataxi:next_day", async () => ({
+      ok: true,
+      offers: [nextDayCheap],
+    })),
+    fakeAdapter("yataxi:express", async () => ({
+      ok: true,
+      offers: [sameDayExpensive, sameDayCheap],
+    })),
+  ]);
+
+  assert.deepEqual(
+    result.offers.map((o) => o.offerId),
+    ["same-day-expensive", "same-day-cheap", "next-day-cheap"],
+  );
+  assert.deepEqual(result.adapters, [
+    { key: "yataxi:next_day", status: "ok" },
+    { key: "yataxi:express", status: "ok" },
+  ]);
+});
+
 test("one no_delivery_options → that status, no offers from it", async () => {
   const result = await listOffersForOrderAdapters(INPUT, CREDS, [
     fakeAdapter("solo", async () => ({
