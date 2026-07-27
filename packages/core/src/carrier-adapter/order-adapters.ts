@@ -1,4 +1,5 @@
 import type { CarrierAdapter } from "./types";
+import { orderAdapterSellerTitle } from "./order-adapter-seller-titles";
 import { yandexAdapter } from "./yandex/adapter";
 import {
   confirmExpressOffer,
@@ -14,6 +15,9 @@ import {
  * (Yandex «в другой день» vs Express claims/*), while credentials are per
  * carrier, not per service. providerKey on the entry is what
  * getCarrierCredentials looks up.
+ *
+ * title comes from order-adapter-seller-titles (seller display metadata) so
+ * client code can resolve a label without importing this registry.
  */
 export type OrderAdapter = {
   key: string;
@@ -33,7 +37,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
   "yataxi:next_day": {
     key: "yataxi:next_day",
     providerKey: yandexAdapter.providerKey,
-    title: "Доставка на следующий день",
+    title: orderAdapterSellerTitle("yataxi:next_day"),
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
@@ -41,7 +45,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
   "yataxi:express": {
     key: "yataxi:express",
     providerKey: yandexAdapter.providerKey,
-    title: "Доставка в тот же день",
+    title: orderAdapterSellerTitle("yataxi:express"),
     getOffers: getExpressOffers,
     confirmOffer: confirmExpressOffer,
     // Cancelling an ACCEPTED order can be PAID, so exposing it to a seller

@@ -20,6 +20,11 @@
 
 ---
 
+- **2026-07 · order-adapter-seller-titles — client-safe title map; ORDER_ADAPTERS.title reads from it; shipment-list-labels must not import order-adapters.**
+Почему: shipments-page → shipment-list-labels → resolveOrderAdapter тянул
+order-adapters → express-client → node:crypto в браузерный бандл
+(UnhandledSchemeError). Title — display metadata, не адаптер.
+Отвергли: webpack alias/fallback для node:crypto; другой hash в express.
 - **2026-07 · sync status dispatch — by orderAdapterKey; STATUS_SYNC_ADAPTERS keyed "yataxi:next_day"; noAdapter for unknown; credentials still by providerKey.**
 Почему: next_day и express делят providerKey yataxi, но разные API
 (request/* vs claims/*); lookup по providerKey гонял express через request/info.

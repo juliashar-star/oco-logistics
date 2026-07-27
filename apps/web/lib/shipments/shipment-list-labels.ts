@@ -1,4 +1,4 @@
-import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
+import { orderAdapterSellerTitle } from "@oco/core/carrier-adapter/order-adapter-seller-titles";
 import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
 
 export type ShipmentListLabelRow = {
@@ -20,11 +20,12 @@ export function shipmentCarrierLabel(row: ShipmentListLabelRow): string {
 
 /**
  * ТАРИФ cell / CSV «Тариф».
- * Uses OrderAdapter.title via resolveOrderAdapter (null/unknown key → default entry).
+ * Titles from order-adapter-seller-titles (null/unknown key → default entry).
+ * Must not import order-adapters — that registry pulls Node builtins into the client.
  */
 export function shipmentTariffLabel(row: ShipmentListLabelRow): string {
   if (row.providerKey == null) {
     return "—";
   }
-  return resolveOrderAdapter(row.orderAdapterKey).title;
+  return orderAdapterSellerTitle(row.orderAdapterKey);
 }

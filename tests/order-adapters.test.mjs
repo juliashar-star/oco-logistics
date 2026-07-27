@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
+import { ORDER_ADAPTER_SELLER_TITLES } from "../packages/core/src/carrier-adapter/order-adapter-seller-titles.ts";
 import { confirmExpressOffer } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
@@ -9,6 +10,16 @@ test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon",
     assert.ok(
       key.startsWith(`${entry.providerKey}:`),
       `key ${JSON.stringify(key)} must start with ${JSON.stringify(entry.providerKey + ":")}`,
+    );
+  }
+});
+
+test("ORDER_ADAPTERS.title comes from ORDER_ADAPTER_SELLER_TITLES (no drift)", () => {
+  for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
+    assert.equal(
+      entry.title,
+      ORDER_ADAPTER_SELLER_TITLES[key],
+      `title for ${key} must match ORDER_ADAPTER_SELLER_TITLES`,
     );
   }
 });

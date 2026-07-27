@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveOrderAdapter } from "../packages/core/src/carrier-adapter/order-adapters.ts";
+import { orderAdapterSellerTitle } from "../packages/core/src/carrier-adapter/order-adapter-seller-titles.ts";
 import { PROVIDER_SELLER_DISPLAY_NAMES } from "../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
 import {
   shipmentCarrierLabel,
@@ -56,13 +56,13 @@ test("shipmentTariffLabel: providerKey null → em dash (legacy)", () => {
   );
 });
 
-test("shipmentTariffLabel: uses resolveOrderAdapter title; null key → default entry", () => {
+test("shipmentTariffLabel: uses orderAdapterSellerTitle; null key → default entry", () => {
   const label = shipmentTariffLabel({
     providerKey: "yataxi",
     orderAdapterKey: null,
     carrier: null,
   });
-  assert.equal(label, resolveOrderAdapter(null).title);
+  assert.equal(label, orderAdapterSellerTitle(null));
   assert.equal(label, "Доставка на следующий день");
 });
 
@@ -73,6 +73,6 @@ test("shipmentTariffLabel: explicit orderAdapterKey", () => {
       orderAdapterKey: "yataxi:next_day",
       carrier: null,
     }),
-    resolveOrderAdapter("yataxi:next_day").title,
+    orderAdapterSellerTitle("yataxi:next_day"),
   );
 });
