@@ -1,6 +1,9 @@
 import type { CarrierAdapter } from "./types";
 import { yandexAdapter } from "./yandex/adapter";
-import { getExpressOffers } from "./yandex/express-client";
+import {
+  confirmExpressOffer,
+  getExpressOffers,
+} from "./yandex/express-client";
 
 /**
  * Order-path capability only — not a full CarrierAdapter.
@@ -40,11 +43,9 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     providerKey: yandexAdapter.providerKey,
     title: "Доставка в тот же день",
     getOffers: getExpressOffers,
-    // Replaced in E3 (confirmOffer: create → bounded poll → accept).
-    confirmOffer: async () => {
-      throw new Error("Оформление этой услуги ещё не реализовано");
-    },
-    // Replaced in E3.
+    confirmOffer: confirmExpressOffer,
+    // Cancelling an ACCEPTED order can be PAID, so exposing it to a seller
+    // without warning is a product decision, not a mapping.
     cancelOrder: async () => {
       throw new Error("Оформление этой услуги ещё не реализовано");
     },

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
+import { confirmExpressOffer } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
   for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
@@ -19,7 +20,7 @@ test("yataxi:next_day has seller-facing service title", () => {
   );
 });
 
-test("ORDER_ADAPTERS holds next_day and express with distinct titles; express confirmOffer rejects", async () => {
+test("ORDER_ADAPTERS holds next_day and express with distinct titles; express confirm is wired, cancel stays stub", async () => {
   assert.ok(ORDER_ADAPTERS["yataxi:next_day"]);
   assert.ok(ORDER_ADAPTERS["yataxi:express"]);
   const nextTitle = ORDER_ADAPTERS["yataxi:next_day"].title;
@@ -27,11 +28,14 @@ test("ORDER_ADAPTERS holds next_day and express with distinct titles; express co
   assert.ok(nextTitle.length > 0);
   assert.ok(expressTitle.length > 0);
   assert.notEqual(nextTitle, expressTitle);
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:express"].confirmOffer,
+    confirmExpressOffer,
+  );
   await assert.rejects(
     () =>
-      ORDER_ADAPTERS["yataxi:express"].confirmOffer(
-        /** @type {never} */ ({ offerId: "offer-id" }),
-        /** @type {never} */ ({}),
+      ORDER_ADAPTERS["yataxi:express"].cancelOrder(
+        "claim-id",
         /** @type {never} */ ({}),
       ),
     (err) =>

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
+import { CarrierQuoteChangedError } from "@oco/core/carrier-adapter/errors";
 import type {
+  CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierOffer,
@@ -349,4 +351,356 @@ export async function getExpressOffers(
     .filter((offer): offer is CarrierOffer => offer !== null);
 
   return { ok: true, offers };
+}
+
+const ACCEPT_LANGUAGE_RU = { "Accept-Language": "ru" } as const;
+
+const CLAIMS_PATH = "/b2b/cargo/integration/v2/claims";
+
+export type ConfirmExpressOfferOptions = {
+  /** Delay between claims/info polls. Default ~1s (measured estimate ~1.2s). */
+  pollIntervalMs?: number;
+  /** Total wall-clock budget for polling. Default 15s. */
+  pollBudgetMs?: number;
+};
+
+type ClaimsInfoSnapshot = {
+  status: string;
+  version: number;
+  priceRaw: unknown;
+  errorMessages: unknown;
+  raw: unknown;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function readJsonBody(response: Response): Promise<unknown> {
+  const rawText = await response.text();
+  try {
+    return JSON.parse(rawText) as unknown;
+  } catch {
+    return rawText;
+  }
+}
+
+function readClaimVersion(raw: unknown, fallback: number): number {
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "version" in raw &&
+    typeof (raw as { version: unknown }).version === "number" &&
+    Number.isFinite((raw as { version: number }).version)
+  ) {
+    return (raw as { version: number }).version;
+  }
+  return fallback;
+}
+
+function parseAssessedPriceRaw(priceRaw: unknown): number | null {
+  if (typeof priceRaw === "number" && Number.isFinite(priceRaw)) {
+    return priceRaw;
+  }
+  if (typeof priceRaw === "string" && priceRaw.trim()) {
+    const value = Number(priceRaw.trim());
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function assessedNotHigherThanQuote(
+  assessedRub: number,
+  quotedRub: number,
+): boolean {
+  return Math.round(assessedRub * 100) <= Math.round(quotedRub * 100);
+}
+
+/** Statuses where accept has not taken effect — free cancel is still safe. */
+function isFreeCancelPreAcceptStatus(status: string): boolean {
+  return (
+    status === "new" ||
+    status === "estimating" ||
+    status === "estimating_failed" ||
+    status === "ready_for_approval"
+  );
+}
+
+async function cancelClaimFree(args: {
+  baseUrl: string;
+  creds: ReturnType<typeof assertYandexCredentials>;
+  claimId: string;
+  version: number;
+}): Promise<void> {
+  const { baseUrl, creds, claimId, version } = args;
+  const response = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/cancel?claim_id=${encodeURIComponent(claimId)}`,
+    { version, cancel_state: "free" },
+    ACCEPT_LANGUAGE_RU,
+  );
+  if (response.status !== 200) {
+    const rawText = await response.text();
+    throw new Error(
+      `Yandex Express claims/cancel failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+}
+
+/**
+ * Cancel the claim (free at this pre-accept stage), log cancel failures, then
+ * throw the original error — never swallow the first failure.
+ */
+async function cancelThenThrow(args: {
+  baseUrl: string;
+  creds: ReturnType<typeof assertYandexCredentials>;
+  claimId: string;
+  version: number;
+  error: Error;
+}): Promise<never> {
+  const { baseUrl, creds, claimId, version, error } = args;
+  try {
+    await cancelClaimFree({ baseUrl, creds, claimId, version });
+  } catch (cancelError) {
+    console.error("[confirmExpressOffer] claims/cancel failed", cancelError);
+  }
+  throw error;
+}
+
+async function fetchClaimsInfo(args: {
+  baseUrl: string;
+  creds: ReturnType<typeof assertYandexCredentials>;
+  claimId: string;
+  versionFallback: number;
+}): Promise<ClaimsInfoSnapshot> {
+  const { baseUrl, creds, claimId, versionFallback } = args;
+  const response = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/info?claim_id=${encodeURIComponent(claimId)}`,
+    {},
+    ACCEPT_LANGUAGE_RU,
+  );
+  const raw = await readJsonBody(response);
+  if (response.status !== 200) {
+    throw new Error(
+      `Yandex Express claims/info failed: HTTP ${response.status} ${JSON.stringify(raw)}`,
+    );
+  }
+  if (raw === null || typeof raw !== "object") {
+    throw new Error("Yandex Express claims/info malformed: non-object body");
+  }
+  const status =
+    "status" in raw && typeof (raw as { status: unknown }).status === "string"
+      ? (raw as { status: string }).status
+      : "";
+  if (!status) {
+    throw new Error("Yandex Express claims/info malformed: missing status");
+  }
+  const pricing =
+    "pricing" in raw &&
+    (raw as { pricing: unknown }).pricing !== null &&
+    typeof (raw as { pricing: unknown }).pricing === "object"
+      ? (raw as { pricing: Record<string, unknown> }).pricing
+      : undefined;
+  const offer =
+    pricing &&
+    "offer" in pricing &&
+    pricing.offer !== null &&
+    typeof pricing.offer === "object"
+      ? (pricing.offer as Record<string, unknown>)
+      : undefined;
+  return {
+    status,
+    version: readClaimVersion(raw, versionFallback),
+    priceRaw: offer?.price_raw,
+    errorMessages:
+      "error_messages" in raw
+        ? (raw as { error_messages: unknown }).error_messages
+        : undefined,
+    raw,
+  };
+}
+
+/**
+ * Express confirm: claims/create → bounded claims/info poll → claims/accept.
+ * Accept is the only call that starts performer lookup — every failure path
+ * cancels the claim first and never reaches accept.
+ *
+ * Optional 4th arg is for tests (short poll budget); production callers use
+ * the CarrierAdapter 3-arg shape.
+ */
+export async function confirmExpressOffer(
+  offer: CarrierOffer,
+  input: CarrierCreateOrderInput,
+  credentials: CarrierCredentials,
+  options?: ConfirmExpressOfferOptions,
+): Promise<CarrierConfirmResult> {
+  const pollIntervalMs = options?.pollIntervalMs ?? 1000;
+  const pollBudgetMs = options?.pollBudgetMs ?? 15_000;
+
+  const creds = assertYandexCredentials(credentials);
+  const baseUrl = resolveBaseUrl("YANDEX_EXPRESS_BASE_URL");
+  const requestId = deriveClaimsRequestId(input.clientNumber, offer.offerId);
+  const createBody = buildClaimsCreateBody(offer, input);
+
+  const createResponse = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/create?request_id=${encodeURIComponent(requestId)}`,
+    createBody,
+    ACCEPT_LANGUAGE_RU,
+  );
+  const createRaw = await readJsonBody(createResponse);
+  if (createResponse.status !== 200) {
+    throw new Error(
+      `Yandex Express claims/create failed: HTTP ${createResponse.status} ${JSON.stringify(createRaw)}`,
+    );
+  }
+  const claimId =
+    createRaw !== null &&
+    typeof createRaw === "object" &&
+    "id" in createRaw &&
+    typeof (createRaw as { id: unknown }).id === "string" &&
+    (createRaw as { id: string }).id.trim()
+      ? (createRaw as { id: string }).id.trim()
+      : "";
+  if (!claimId) {
+    throw new Error("Yandex Express claims/create failed: missing claim id");
+  }
+
+  let version = readClaimVersion(createRaw, 1);
+  const pollStartedAt = Date.now();
+  let info: ClaimsInfoSnapshot | undefined;
+
+  for (;;) {
+    const polled = await (async (): Promise<ClaimsInfoSnapshot> => {
+      try {
+        return await fetchClaimsInfo({
+          baseUrl,
+          creds,
+          claimId,
+          versionFallback: version,
+        });
+      } catch (error) {
+        // Non-200 / malformed info must not leave the created claim dangling.
+        return await cancelThenThrow({
+          baseUrl,
+          creds,
+          claimId,
+          version,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+      }
+    })();
+    info = polled;
+    version = polled.version;
+
+    if (polled.status === "new" || polled.status === "estimating") {
+      if (Date.now() - pollStartedAt >= pollBudgetMs) {
+        await cancelThenThrow({
+          baseUrl,
+          creds,
+          claimId,
+          version,
+          error: new Error(
+            "Yandex Express claims/info poll budget exhausted while still estimating",
+          ),
+        });
+      }
+      await sleep(pollIntervalMs);
+      continue;
+    }
+
+    if (polled.status === "estimating_failed") {
+      await cancelThenThrow({
+        baseUrl,
+        creds,
+        claimId,
+        version,
+        error: new Error(
+          `Yandex Express estimating_failed: ${JSON.stringify(polled.errorMessages)}`,
+        ),
+      });
+    }
+
+    if (polled.status === "ready_for_approval") {
+      break;
+    }
+
+    await cancelThenThrow({
+      baseUrl,
+      creds,
+      claimId,
+      version,
+      error: new Error(
+        `Yandex Express unexpected claim status before accept: ${polled.status}`,
+      ),
+    });
+  }
+
+  // MEASURED: compare pricing.offer.price_raw (net), NOT price (gross on prod).
+  const assessed = parseAssessedPriceRaw(info!.priceRaw);
+  if (assessed === null || !assessedNotHigherThanQuote(assessed, offer.priceRub)) {
+    await cancelThenThrow({
+      baseUrl,
+      creds,
+      claimId,
+      version,
+      error: new CarrierQuoteChangedError(
+        "Yandex Express assessed price_raw no longer matches the quoted price",
+      ),
+    });
+  }
+
+  const acceptResponse = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/accept?claim_id=${encodeURIComponent(claimId)}`,
+    { version },
+    ACCEPT_LANGUAGE_RU,
+  );
+  const acceptRaw = await readJsonBody(acceptResponse);
+  if (acceptResponse.status !== 200) {
+    // A non-200 accept may still have been processed; the bumped version would
+    // make a cancel with the pre-accept version fail with a conflict. Re-fetch
+    // status before deciding whether a free cancel is still safe.
+    const acceptFailureMessage = `Yandex Express claims/accept failed: HTTP ${acceptResponse.status} ${JSON.stringify(acceptRaw)}; claim id ${claimId}`;
+    let postAcceptInfo: ClaimsInfoSnapshot;
+    try {
+      postAcceptInfo = await fetchClaimsInfo({
+        baseUrl,
+        creds,
+        claimId,
+        versionFallback: version,
+      });
+    } catch {
+      // Do not cancel blind — accept may have taken effect.
+      throw new Error(
+        `${acceptFailureMessage}; could not re-fetch status after accept (claim may have been accepted)`,
+      );
+    }
+
+    if (isFreeCancelPreAcceptStatus(postAcceptInfo.status)) {
+      await cancelThenThrow({
+        baseUrl,
+        creds,
+        claimId,
+        version: postAcceptInfo.version,
+        error: new Error(acceptFailureMessage),
+      });
+    }
+
+    // Accepted / performer lookup / anything past — do not force a paid cancel.
+    throw new Error(
+      `${acceptFailureMessage}; claim may have been accepted (status ${postAcceptInfo.status}); not auto-cancelling`,
+    );
+  }
+
+  return { requestId: claimId, rawResponse: acceptRaw };
 }
