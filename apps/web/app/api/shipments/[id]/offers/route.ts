@@ -91,64 +91,6 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    const decrypted = decryptShipmentRecipientPii(row);
-
-    const company = await prisma.company.findFirst({
-      where: { id: user.companyId },
-      select: {
-        name: true,
-        inn: true,
-        contactEmail: true,
-        senderCity: true,
-        senderAddress: true,
-        senderPhone: true,
-      },
-    });
-
-    if (!company) {
-      // Session holds a companyId with no row — our inconsistency, not the
-      // seller's missing order.
-      console.error(
-        "[shipments/offers] company not found for authenticated session",
-        user.companyId,
-      );
-      return NextResponse.json(
-        { error: "Не удалось получить тарифы. Попробуйте позже." },
-        { status: 500 },
-      );
-    }
-
-    const built = buildOfferInput({
-      shipment: {
-        companyId: decrypted.companyId,
-        idempotencyKey: decrypted.idempotencyKey,
-        declaredValue: decrypted.declaredValue,
-        weightG: decrypted.weightG,
-        lengthCm: decrypted.lengthCm,
-        widthCm: decrypted.widthCm,
-        heightCm: decrypted.heightCm,
-        pickupType: decrypted.pickupType,
-        pvzCode: decrypted.pvzCode,
-        destCity: decrypted.destCity,
-        destAddress: decrypted.destAddress,
-        destApartment: decrypted.destApartment,
-        deliveryComment: decrypted.deliveryComment,
-        recipientName: decrypted.recipientName,
-        recipientPhone: decrypted.recipientPhone,
-      },
-      company,
-      providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
-    });
-
-    if (!built.ok) {
-      return NextResponse.json(
-        {
-          error: messageForBuildFailure(built.reason, decrypted.pickupType),
-        },
-        { status: 400 },
-      );
-    }
-
     try {
       const credsResult = await getCarrierCredentials(
         prisma,
@@ -158,6 +100,65 @@ export const POST = withAuth<{ id: string }>(
       if (!credsResult.ok) {
         return NextResponse.json(
           { error: "Яндекс Доставка не подключена" },
+          { status: 400 },
+        );
+      }
+
+      // Decrypt only after credentials succeed — missing carrier must not touch PII.
+      const decrypted = decryptShipmentRecipientPii(row);
+
+      const company = await prisma.company.findFirst({
+        where: { id: user.companyId },
+        select: {
+          name: true,
+          inn: true,
+          contactEmail: true,
+          senderCity: true,
+          senderAddress: true,
+          senderPhone: true,
+        },
+      });
+
+      if (!company) {
+        // Session holds a companyId with no row — our inconsistency, not the
+        // seller's missing order.
+        console.error(
+          "[shipments/offers] company not found for authenticated session",
+          user.companyId,
+        );
+        return NextResponse.json(
+          { error: "Не удалось получить тарифы. Попробуйте позже." },
+          { status: 500 },
+        );
+      }
+
+      const built = buildOfferInput({
+        shipment: {
+          companyId: decrypted.companyId,
+          idempotencyKey: decrypted.idempotencyKey,
+          declaredValue: decrypted.declaredValue,
+          weightG: decrypted.weightG,
+          lengthCm: decrypted.lengthCm,
+          widthCm: decrypted.widthCm,
+          heightCm: decrypted.heightCm,
+          pickupType: decrypted.pickupType,
+          pvzCode: decrypted.pvzCode,
+          destCity: decrypted.destCity,
+          destAddress: decrypted.destAddress,
+          destApartment: decrypted.destApartment,
+          deliveryComment: decrypted.deliveryComment,
+          recipientName: decrypted.recipientName,
+          recipientPhone: decrypted.recipientPhone,
+        },
+        company,
+        providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
+      });
+
+      if (!built.ok) {
+        return NextResponse.json(
+          {
+            error: messageForBuildFailure(built.reason, decrypted.pickupType),
+          },
           { status: 400 },
         );
       }
