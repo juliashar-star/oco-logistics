@@ -10,6 +10,7 @@ import type {
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
+import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
 import type { StatusSyncAdapter } from "@oco/core/carrier-adapter/status-sync-adapters";
 
 import { formatDateMoscow } from "../date/format-date-moscow";
@@ -18,6 +19,7 @@ import { getCarrierCredentials } from "./get-carrier-credentials";
 
 const TERMINAL_STATUSES: ShipmentStatus[] = ["DELIVERED", "RETURNED", "CANCELED"];
 const NOT_CONNECTED_LOG_MARKER = "[syncYandexShipmentStatuses] NOT_CONNECTED";
+const NO_ADAPTER_LOG_MARKER = "[syncYandexShipmentStatuses] NO_ADAPTER";
 const ORDER_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] ORDER_NOT_FOUND";
 const INFO_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] INFO_FAILED";
@@ -36,6 +38,7 @@ export type SyncYandexShipmentStatusesResult = {
   notFound: number;
   infoFailed: number;
   notConnected: number;
+  noAdapter: number;
 };
 
 export type SyncYandexShipmentStatusesDeps = {
@@ -45,6 +48,7 @@ export type SyncYandexShipmentStatusesDeps = {
 type ShipmentForSync = {
   id: string;
   providerKey: string;
+  orderAdapterKey: string | null;
   providerOrderId: string;
   status: ShipmentStatus;
   arrivedAtPvzAt: Date | null;
@@ -331,7 +335,14 @@ async function applyOrderInfo(
 }
 
 function emptyResult(): SyncYandexShipmentStatusesResult {
-  return { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0 };
+  return {
+    updated: 0,
+    events: 0,
+    notFound: 0,
+    infoFailed: 0,
+    notConnected: 0,
+    noAdapter: 0,
+  };
 }
 
 /**
@@ -339,28 +350,34 @@ function emptyResult(): SyncYandexShipmentStatusesResult {
  * Inject adapters so db tests need no network (submitOrder precedent). Faults from
  * getOrderHistory propagate — a broken token is an incident, not a skip. getOrderInfo
  * faults (except CarrierAuthError) are per-row. Missing credentials for one provider
- * skip that provider's rows without aborting the rest.
+ * skip that provider's rows without aborting the rest. Unknown orderAdapterKey
+ * (e.g. express before its status mapper lands) increments noAdapter per row.
  */
 export async function syncYandexShipmentStatuses(
   prisma: PrismaClient,
   companyId: string,
   deps: SyncYandexShipmentStatusesDeps,
 ): Promise<SyncYandexShipmentStatusesResult> {
-  const adapterKeys = Object.keys(deps.adapters);
-  if (adapterKeys.length === 0) {
+  const adapterEntries = Object.values(deps.adapters);
+  if (adapterEntries.length === 0) {
     return emptyResult();
   }
+
+  const providerKeys = [
+    ...new Set(adapterEntries.map((adapter) => adapter.providerKey)),
+  ];
 
   const rows = await prisma.shipment.findMany({
     where: {
       companyId,
-      providerKey: { in: adapterKeys },
+      providerKey: { in: providerKeys },
       providerOrderId: { not: null },
       status: { notIn: TERMINAL_STATUSES },
     },
     select: {
       id: true,
       providerKey: true,
+      orderAdapterKey: true,
       providerOrderId: true,
       status: true,
       arrivedAtPvzAt: true,
@@ -383,6 +400,7 @@ export async function syncYandexShipmentStatuses(
       {
         id: row.id,
         providerKey: row.providerKey,
+        orderAdapterKey: row.orderAdapterKey,
         providerOrderId: row.providerOrderId,
         status: row.status,
         arrivedAtPvzAt: row.arrivedAtPvzAt,
@@ -402,11 +420,12 @@ export async function syncYandexShipmentStatuses(
     return emptyResult();
   }
 
-  const byProvider = new Map<string, ShipmentForSync[]>();
+  const byOrderAdapter = new Map<string, ShipmentForSync[]>();
   for (const shipment of shipments) {
-    const list = byProvider.get(shipment.providerKey) ?? [];
+    const resolvedKey = shipment.orderAdapterKey ?? DEFAULT_ORDER_ADAPTER.key;
+    const list = byOrderAdapter.get(resolvedKey) ?? [];
     list.push(shipment);
-    byProvider.set(shipment.providerKey, list);
+    byOrderAdapter.set(resolvedKey, list);
   }
 
   const counters = {
@@ -415,29 +434,40 @@ export async function syncYandexShipmentStatuses(
     notFound: 0,
     infoFailed: 0,
     notConnected: 0,
+    noAdapter: 0,
   };
 
-  for (const [providerKey, providerShipments] of byProvider) {
-    const adapter = deps.adapters[providerKey];
+  for (const [orderAdapterKey, adapterShipments] of byOrderAdapter) {
+    const adapter = deps.adapters[orderAdapterKey];
     if (!adapter) {
+      counters.noAdapter += adapterShipments.length;
+      console.error(
+        NO_ADAPTER_LOG_MARKER,
+        JSON.stringify({
+          companyId,
+          orderAdapterKey,
+          count: adapterShipments.length,
+          shipmentIds: adapterShipments.map((shipment) => shipment.id),
+        }),
+      );
       continue;
     }
 
     const credsResult = await getCarrierCredentials(
       prisma,
       companyId,
-      providerKey,
+      adapter.providerKey,
     );
     if (!credsResult.ok) {
       console.error(
         NOT_CONNECTED_LOG_MARKER,
-        JSON.stringify({ companyId, providerKey }),
+        JSON.stringify({ companyId, providerKey: adapter.providerKey }),
       );
-      counters.notConnected += providerShipments.length;
+      counters.notConnected += adapterShipments.length;
       continue;
     }
 
-    for (const shipment of providerShipments) {
+    for (const shipment of adapterShipments) {
       const history = await adapter.getOrderHistory(
         shipment.providerOrderId,
         credsResult.credentials,
@@ -521,5 +551,6 @@ export async function syncYandexShipmentStatuses(
     notFound: counters.notFound,
     infoFailed: counters.infoFailed,
     notConnected: counters.notConnected,
+    noAdapter: counters.noAdapter,
   };
 }

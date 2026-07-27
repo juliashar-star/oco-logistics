@@ -14,6 +14,7 @@ export function describeSyncResult(data: unknown): string {
   const notFound = readCount(source.notFound);
   const infoFailed = readCount(source.infoFailed);
   const notConnected = readCount(source.notConnected);
+  const noAdapter = readCount(source.noAdapter);
 
   const parts: string[] = [];
 
@@ -22,6 +23,11 @@ export function describeSyncResult(data: unknown): string {
   }
   if (notConnected > 0) {
     parts.push(`Перевозчик не подключён — не обновлено заказов: ${notConnected}`);
+  }
+  if (noAdapter > 0) {
+    parts.push(
+      `Обновление статуса для этой услуги ещё не поддерживается — не обновлено заказов: ${noAdapter}`,
+    );
   }
   if (notFound > 0) {
     parts.push(`Не найдено у перевозчика — не обновлено заказов: ${notFound}`);

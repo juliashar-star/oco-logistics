@@ -13,6 +13,8 @@ const TEST_ENCRYPTION_KEY = `test-yandex-sync-${randomBytes(24).toString("hex")}
 assert.ok(TEST_ENCRYPTION_KEY.length >= 32);
 
 const PROVIDER_YANDEX = "yataxi";
+const ORDER_ADAPTER_NEXT_DAY = "yataxi:next_day";
+const ORDER_ADAPTER_EXPRESS = "yataxi:express";
 const CREDS = { platformStationId: "station-1", token: "test-token" };
 
 /** @type {import("@prisma/client").PrismaClient} */
@@ -48,7 +50,8 @@ const EMPTY_INFO = async () => ({ ok: true, info: {} });
 function adaptersWith(stubs) {
   return {
     adapters: {
-      yataxi: {
+      [ORDER_ADAPTER_NEXT_DAY]: {
+        orderAdapterKey: ORDER_ADAPTER_NEXT_DAY,
         providerKey: PROVIDER_YANDEX,
         getOrderHistory: stubs.getHistory,
         getOrderInfo: stubs.getInfo,
@@ -65,6 +68,7 @@ function adaptersWith(stubs) {
  *   status?: import("@prisma/client").ShipmentStatus,
  *   providerOrderId?: string | null,
  *   providerKey?: string | null,
+ *   orderAdapterKey?: string | null,
  *   trackNumber?: string | null,
  *   trackingUrl?: string | null,
  *   plannedDeliveryDate?: Date | null,
@@ -94,6 +98,9 @@ async function seedYandexShipment(companyName, email, extra = {}) {
       recipientPhone: "+79001234567",
       status: extra.status ?? "CREATED",
       providerKey: extra.providerKey === undefined ? PROVIDER_YANDEX : extra.providerKey,
+      ...(extra.orderAdapterKey !== undefined
+        ? { orderAdapterKey: extra.orderAdapterKey }
+        : {}),
       providerOrderId:
         extra.providerOrderId === undefined
           ? `req-${Date.now()}-${Math.random()}`
@@ -152,7 +159,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, notConnected: 0 });
+      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, notConnected: 0, noAdapter: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const events = await prisma.trackingEvent.findMany({
@@ -398,7 +405,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, notConnected: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, notConnected: 0, noAdapter: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const count = await prisma.trackingEvent.count({
@@ -434,7 +441,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0, noAdapter: 0 });
       assert.equal(getHistoryCalls, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "DELIVERED");
@@ -1023,6 +1030,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
           recipientPhone: "+79007654321",
           status: "CREATED",
           providerKey: "othercarrier",
+          orderAdapterKey: "othercarrier",
           providerOrderId: `req-other-${Date.now()}-${Math.random()}`,
           idempotencyKey: `idem-other-${Date.now()}-${Math.random()}`,
         },
@@ -1030,7 +1038,8 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
 
       const result = await syncYandexShipmentStatuses(prisma, company.id, {
         adapters: {
-          yataxi: {
+          [ORDER_ADAPTER_NEXT_DAY]: {
+            orderAdapterKey: ORDER_ADAPTER_NEXT_DAY,
             providerKey: PROVIDER_YANDEX,
             getOrderHistory: async () => ({
               ok: true,
@@ -1046,6 +1055,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
             mapStatus: mapYandexStatusToShipmentStatus,
           },
           othercarrier: {
+            orderAdapterKey: "othercarrier",
             providerKey: "othercarrier",
             getOrderHistory: async () => {
               throw new Error("othercarrier history must not be called");
@@ -1175,6 +1185,75 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
         1,
       );
+    });
+  });
+
+  test("(xxv) orderAdapterKey yataxi:express → noAdapter, history never called, row untouched", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Express Skip Co",
+        `sync-express-skip-${Date.now()}@example.com`,
+        { orderAdapterKey: ORDER_ADAPTER_EXPRESS },
+      );
+
+      const result = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async () => {
+            throw new Error("express getOrderHistory must not be called");
+          },
+          getInfo: async () => {
+            throw new Error("express getOrderInfo must not be called");
+          },
+        }),
+      );
+
+      assert.equal(result.noAdapter, 1);
+      assert.equal(result.updated, 0);
+      assert.equal(result.events, 0);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "CREATED");
+      assert.equal(row?.orderAdapterKey, ORDER_ADAPTER_EXPRESS);
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
+        0,
+      );
+    });
+  });
+
+  test("(xxvi) explicit orderAdapterKey yataxi:next_day syncs like null", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment } = await seedYandexShipment(
+        "Explicit Next Day Co",
+        `sync-explicit-nd-${Date.now()}@example.com`,
+        { orderAdapterKey: ORDER_ADAPTER_NEXT_DAY },
+      );
+
+      const result = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async () => ({
+            ok: true,
+            events: [
+              {
+                statusCode: "SORTING_CENTER_AT_START",
+                statusText: "В точке приема",
+                eventAt: "2026-07-17T12:00:00.000Z",
+              },
+            ],
+          }),
+          getInfo: EMPTY_INFO,
+        }),
+      );
+
+      assert.equal(result.updated, 1);
+      assert.equal(result.events, 1);
+      assert.equal(result.noAdapter, 0);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "IN_TRANSIT");
+      assert.equal(row?.orderAdapterKey, ORDER_ADAPTER_NEXT_DAY);
     });
   });
 });

@@ -1,12 +1,15 @@
 import type { ShipmentStatus } from "@oco/apiship";
 import type { CarrierAdapter } from "./types";
+import { DEFAULT_ORDER_ADAPTER } from "./order-adapters";
 import { yandexAdapter } from "./yandex/adapter";
 import { mapYandexStatusToShipmentStatus } from "./yandex/map-status";
 
 /**
  * Status-sync capability only — not a full CarrierAdapter.
- * Call sites that need history/info + status mapping resolve by providerKey
- * here instead of hardcoding a carrier module.
+ * Call sites that need history/info + status mapping resolve by
+ * orderAdapterKey here instead of hardcoding a carrier module.
+ * providerKey stays on the entry: credentials are per carrier, and several
+ * services can share one CarrierCredential row.
  *
  * mapStatus lives on the bundle (not CarrierAdapter): the adapter contract is
  * about API calls; status mapping is a pure per-carrier function the neutral
@@ -14,6 +17,7 @@ import { mapYandexStatusToShipmentStatus } from "./yandex/map-status";
  * bundle may pick and mix.
  */
 export type StatusSyncAdapter = {
+  orderAdapterKey: string;
   providerKey: string;
   getOrderHistory: CarrierAdapter["getOrderHistory"];
   getOrderInfo: CarrierAdapter["getOrderInfo"];
@@ -21,16 +25,11 @@ export type StatusSyncAdapter = {
 };
 
 export const STATUS_SYNC_ADAPTERS: Record<string, StatusSyncAdapter> = {
-  yataxi: {
-    providerKey: yandexAdapter.providerKey,
+  "yataxi:next_day": {
+    orderAdapterKey: DEFAULT_ORDER_ADAPTER.key,
+    providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
     getOrderHistory: yandexAdapter.getOrderHistory,
     getOrderInfo: yandexAdapter.getOrderInfo,
     mapStatus: mapYandexStatusToShipmentStatus,
   },
 };
-
-export function getStatusSyncAdapter(
-  providerKey: string,
-): StatusSyncAdapter | undefined {
-  return STATUS_SYNC_ADAPTERS[providerKey];
-}

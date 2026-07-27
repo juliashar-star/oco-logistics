@@ -20,6 +20,13 @@
 
 ---
 
+- **2026-07 · sync status dispatch — by orderAdapterKey; STATUS_SYNC_ADAPTERS keyed "yataxi:next_day"; noAdapter for unknown; credentials still by providerKey.**
+Почему: next_day и express делят providerKey yataxi, но разные API
+(request/* vs claims/*); lookup по providerKey гонял express через request/info.
+Null orderAdapterKey → DEFAULT_ORDER_ADAPTER.key (как submit/cancel). Express
+в реестре статуса пока нет → noAdapter + сообщение продавцу. getStatusSyncAdapter
+удалён (мёртвый lookup по старому ключу).
+Отвергли: express entry без маппера; читать orderAdapterKey сырым без default.
 - **2026-07 · calculateQuotes — CarrierQuotesResult; fault throws, no_delivery_options ok:false, tariff-level no_service просто отсутствует.**
 Почему: fetchQuote `!ok→null` + filter прятал 500/timeout как «нет тарифа»
 (3-й случай дефекта S0/O2.5). Теперь fetchQuote: code no_delivery_options →

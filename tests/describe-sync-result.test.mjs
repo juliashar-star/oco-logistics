@@ -50,6 +50,13 @@ test("infoFailed only → track/link wording", () => {
   );
 });
 
+test("noAdapter only → unsupported service wording", () => {
+  assert.equal(
+    describeSyncResult({ noAdapter: 2 }),
+    "Обновление статуса для этой услуги ещё не поддерживается — не обновлено заказов: 2.",
+  );
+});
+
 test("three counters at once → order and punctuation pinned", () => {
   assert.equal(
     describeSyncResult({
