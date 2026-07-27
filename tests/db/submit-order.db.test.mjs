@@ -189,8 +189,8 @@ describe("submitOrder", { concurrency: false }, () => {
       credentials: CREDS,
       providerKey: "test-provider",
       orderAdapterKey: "yataxi:next_day",
-      confirm: async (offerId, input, credentials) => {
-        assert.equal(offerId, OFFER.offerId);
+      confirm: async (offer, input, credentials) => {
+        assert.equal(offer.offerId, OFFER.offerId);
         assert.deepEqual(input, ORDER_INPUT);
         assert.deepEqual(credentials, CREDS);
         return { requestId: REQUEST_ID, rawResponse: { request_id: REQUEST_ID } };

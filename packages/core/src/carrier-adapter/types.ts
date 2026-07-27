@@ -273,9 +273,11 @@ export interface CarrierAdapter {
    * Confirm a previously fetched offer.
    * `input` is the SAME shape getOffers receives; two-phase carriers may need
    * it to create the order after the offer is chosen.
+   * The full `CarrierOffer` is passed (not only offerId) so families that need
+   * rawOffer / payload at confirm time can read it without a second lookup.
    */
   confirmOffer(
-    offerId: string,
+    offer: CarrierOffer,
     input: CarrierCreateOrderInput,
     credentials: CarrierCredentials,
   ): Promise<CarrierConfirmResult>;

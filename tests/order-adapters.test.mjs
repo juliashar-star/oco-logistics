@@ -30,7 +30,7 @@ test("ORDER_ADAPTERS holds next_day and express with distinct titles; express co
   await assert.rejects(
     () =>
       ORDER_ADAPTERS["yataxi:express"].confirmOffer(
-        "offer-id",
+        /** @type {never} */ ({ offerId: "offer-id" }),
         /** @type {never} */ ({}),
         /** @type {never} */ ({}),
       ),

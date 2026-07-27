@@ -602,14 +602,14 @@ export async function getOffers(
  * body stays { offer_id } only.
  */
 export async function confirmOffer(
-  offerId: string,
+  offer: CarrierOffer,
   _input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ): Promise<CarrierConfirmResult> {
   const creds = assertYandexCredentials(credentials);
 
   const response = await yandexPost(creds, "/api/b2b/platform/offers/confirm", {
-    offer_id: offerId,
+    offer_id: offer.offerId,
   });
   const rawText = await response.text();
   let raw: unknown;

@@ -32,10 +32,12 @@ export async function yandexPost(
   creds: YandexCredentials,
   path: string,
   body: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<Response> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: {
+      ...extraHeaders,
       Authorization: `Bearer ${creds.token}`,
       "Content-Type": "application/json",
     },
@@ -54,10 +56,12 @@ export async function yandexGet(
   baseUrl: string,
   creds: YandexCredentials,
   pathWithQuery: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<Response> {
   const response = await fetch(`${baseUrl}${pathWithQuery}`, {
     method: "GET",
     headers: {
+      ...extraHeaders,
       Authorization: `Bearer ${creds.token}`,
     },
   });

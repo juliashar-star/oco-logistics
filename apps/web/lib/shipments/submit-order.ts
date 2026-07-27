@@ -16,7 +16,7 @@ import { deriveOperatorRequestId } from "./operator-request-id";
 
 /** Injected confirm — production passes Yandex `confirmOffer`; tests stub it. */
 export type ConfirmOfferFn = (
-  offerId: string,
+  offer: CarrierOffer,
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
 ) => Promise<CarrierConfirmResult>;
@@ -94,7 +94,7 @@ export async function submitOrder(
 
   try {
     try {
-      const confirmed = await confirm(offer.offerId, input, credentials);
+      const confirmed = await confirm(offer, input, credentials);
       requestId = confirmed.requestId;
     } catch (error) {
       if (error instanceof CarrierOfferExpiredError) {
