@@ -1,5 +1,6 @@
 import type { CarrierAdapter } from "./types";
 import { yandexAdapter } from "./yandex/adapter";
+import { getExpressOffers } from "./yandex/express-client";
 
 /**
  * Order-path capability only — not a full CarrierAdapter.
@@ -34,11 +35,25 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
   },
+  "yataxi:express": {
+    key: "yataxi:express",
+    providerKey: yandexAdapter.providerKey,
+    title: "Доставка в тот же день",
+    getOffers: getExpressOffers,
+    // Replaced in E3 (confirmOffer: create → bounded poll → accept).
+    confirmOffer: async () => {
+      throw new Error("Оформление этой услуги ещё не реализовано");
+    },
+    // Replaced in E3.
+    cancelOrder: async () => {
+      throw new Error("Оформление этой услуги ещё не реализовано");
+    },
+  },
 };
 
 /**
- * Temporary scaffolding: the only registered order path until a service
- * selector exists. Grep anchor for that future slice.
+ * Fallback for absent/unknown orderAdapterKey (pre-adapterKey quotes, bad keys).
+ * Grep anchor when a real service selector lands.
  */
 export const DEFAULT_ORDER_ADAPTER = ORDER_ADAPTERS["yataxi:next_day"];
 

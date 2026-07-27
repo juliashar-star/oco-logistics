@@ -1141,9 +1141,9 @@ export function NewOrderForm() {
 
       {yandexOffers.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Ориентировочный день доставки</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Ориентировочный срок доставки</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Выберите желаемый день. Точный срок перевозчик уточнит после приёма заказа.
+            Выберите удобный день или время. Точный срок перевозчик уточнит после приёма заказа.
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {pickupType === "COURIER"
