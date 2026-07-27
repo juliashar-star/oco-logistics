@@ -6,6 +6,11 @@ import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
 import type { OfferDto } from "@/lib/shipments/offer-dto";
+import {
+  formatMoscowClockTime,
+  formatOfferInterval,
+} from "@/lib/date/format-offer-interval";
+import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
@@ -93,18 +98,6 @@ function quoteRowKey(quote: Quote): string {
 function recipientPhoneForSnapshot(phone: string): string {
   const result = normalizeRecipientPhone(phone);
   return result.ok ? result.value : phone.trim();
-}
-
-function formatOfferDeliveryDay(isoFrom: string): string {
-  const parsed = new Date(isoFrom);
-  if (Number.isNaN(parsed.getTime())) {
-    return isoFrom;
-  }
-  return new Intl.DateTimeFormat("ru-RU", {
-    weekday: "short",
-    day: "numeric",
-    month: "long",
-  }).format(parsed);
 }
 
 export function NewOrderForm() {
@@ -752,7 +745,11 @@ export function NewOrderForm() {
       setYandexSubmitResult({
         shipmentId: draftShipmentId,
         requestId,
-        deliveryDayLabel: formatOfferDeliveryDay(selectedOffer.deliveryIntervalFrom),
+        deliveryDayLabel: formatOfferInterval(
+          selectedOffer.deliveryIntervalFrom,
+          selectedOffer.deliveryIntervalTo,
+          new Date(),
+        ),
         priceRub: selectedOffer.priceRub,
       });
     } catch {
@@ -1152,9 +1149,21 @@ export function NewOrderForm() {
               ? "Курьер свяжется с получателем для согласования времени доставки."
               : "Получатель получит уведомление, когда заказ прибудет в пункт выдачи."}
           </p>
+          {(() => {
+            const earliestExpiry = pickEarliestOfferExpiry(yandexOffers);
+            if (!earliestExpiry) {
+              return null;
+            }
+            return (
+              <p className="mt-2 text-sm text-slate-500">
+                Варианты действительны до {formatMoscowClockTime(earliestExpiry)}
+              </p>
+            );
+          })()}
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {yandexOffers.map((offer) => {
               const isSelected = selectedOfferId === offer.offerId;
+              const now = new Date();
               return (
                 <button
                   key={offer.offerId}
@@ -1167,7 +1176,19 @@ export function NewOrderForm() {
                   }`}
                 >
                   <div className="text-sm font-medium text-slate-900">
-                    {formatOfferDeliveryDay(offer.deliveryIntervalFrom)}
+                    {formatOfferInterval(
+                      offer.deliveryIntervalFrom,
+                      offer.deliveryIntervalTo,
+                      now,
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Забор:{" "}
+                    {formatOfferInterval(
+                      offer.pickupIntervalFrom,
+                      offer.pickupIntervalTo,
+                      now,
+                    )}
                   </div>
                   <div className="mt-1 text-base font-semibold text-slate-900">
                     {offer.priceRub.toLocaleString("ru-RU")} ₽
