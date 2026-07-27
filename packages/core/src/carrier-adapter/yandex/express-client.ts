@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type {
   CarrierCreateOrderInput,
   CarrierCredentials,
@@ -56,6 +58,116 @@ export function convertNeutralItemToExpressMeasures(item: {
     width: item.widthCm / 100,
     height: item.heightCm / 100,
     weight: item.weightG / 1000,
+  };
+}
+
+/**
+ * Deterministic claims/create `request_id` from clientNumber + offerId.
+ *
+ * WHY derived (not a fresh uuid): Yandex returns the OLD claim for a reused
+ * `request_id` regardless of body, so a per-shipment key would hand the seller
+ * the wrong claim after a re-quote — while deterministic derivation also means
+ * a retry after a crash returns the same claim instead of dispatching a second
+ * courier. Same hashing approach as deriveOperatorRequestId (sha256 + colon
+ * separator + hex slice); length stays within the documented 1–128 limit.
+ */
+export function deriveClaimsRequestId(
+  clientNumber: string,
+  offerId: string,
+): string {
+  const digest = createHash("sha256")
+    .update(`${clientNumber}:${offerId}`)
+    .digest("hex");
+  return `oco-${digest.slice(0, 32)}`;
+}
+
+/** Money string for CargoItem.cost_value — pattern ^[0-9]+(\.[0-9]{1,2})?$ */
+function formatExpressCostValue(unitPriceRub: number): string {
+  if (!Number.isFinite(unitPriceRub) || unitPriceRub < 0) {
+    throw new Error(
+      `Yandex Express claims/create unusable unitPriceRub: ${String(unitPriceRub)}`,
+    );
+  }
+  return unitPriceRub.toFixed(2);
+}
+
+/**
+ * Pure claims/create body from a chosen offer + the same input getOffers saw.
+ * Fields follow docs/research/yandex-express-api-2026-07-27.md §claims/create —
+ * required CargoItem / route_points, plus size/weight and source email that the
+ * schema leaves optional but the text requires in practice.
+ */
+export function buildClaimsCreateBody(
+  offer: CarrierOffer,
+  input: CarrierCreateOrderInput,
+): Record<string, unknown> {
+  const senderEmail = input.sender.email?.trim();
+  // Reject, do not omit or send undefined: docs text marks email required for
+  // source points even though the OpenAPI schema does not. Silent omission would
+  // only surface as a remote 400 after PII was already on the wire.
+  if (!senderEmail) {
+    throw new Error(
+      "Yandex Express claims/create requires sender email on the source contact",
+    );
+  }
+
+  const sourcePointId = 1;
+  const destinationPointId = 2;
+
+  const items = input.items.map((item: CarrierOrderItem) => {
+    const measures = convertNeutralItemToExpressMeasures(item);
+    return {
+      title: item.name,
+      cost_value: formatExpressCostValue(item.unitPriceRub),
+      cost_currency: "RUB",
+      quantity: item.quantity,
+      size: {
+        length: measures.length,
+        width: measures.width,
+        height: measures.height,
+      },
+      weight: measures.weight,
+      pickup_point: sourcePointId,
+      dropoff_point: destinationPointId,
+    };
+  });
+
+  return {
+    items,
+    route_points: [
+      {
+        point_id: sourcePointId,
+        visit_order: 1,
+        type: "source",
+        address: {
+          fullname: composeExpressRouteFullname(
+            input.sender.city,
+            input.sender.addressString,
+          ),
+        },
+        contact: {
+          name: input.sender.contactName,
+          phone: input.sender.phone,
+          email: senderEmail,
+        },
+      },
+      {
+        point_id: destinationPointId,
+        visit_order: 2,
+        type: "destination",
+        address: {
+          fullname: composeExpressRouteFullname(
+            input.recipient.city,
+            input.recipient.addressString,
+          ),
+        },
+        contact: {
+          name: input.recipient.contactName,
+          phone: input.recipient.phone,
+        },
+      },
+    ],
+    offer_payload: offer.offerId,
   };
 }
 
