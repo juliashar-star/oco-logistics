@@ -5,6 +5,7 @@ import {
   DEFAULT_ORDER_ADAPTER,
   resolveOrderAdapter,
 } from "../../packages/core/src/carrier-adapter/order-adapters.ts";
+import { CarrierQuoteChangedError } from "../../packages/core/src/carrier-adapter/errors.ts";
 import {
   YandexAuthError,
   YandexOfferExpiredError,
@@ -280,6 +281,36 @@ describe("submitOrder", { concurrency: false }, () => {
       ok: false,
       stage: "confirm",
       reason: "offer_expired",
+    });
+
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "DRAFT");
+    assert.equal(row.submittingAt, null);
+  });
+
+  test("(iii-b) CarrierQuoteChangedError → DRAFT, submittingAt cleared, reason quote_changed", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Quote Changed Co",
+      `submit-quote-changed-${Date.now()}@example.com`,
+    );
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: OFFER,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "yataxi",
+      orderAdapterKey: "yataxi:next_day",
+      confirm: async () => {
+        throw new CarrierQuoteChangedError("assessed price no longer matches quote");
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      stage: "confirm",
+      reason: "quote_changed",
     });
 
     const row = await assertNotSubmitting(prisma, shipment.id);

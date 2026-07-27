@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import {
   CarrierAuthError,
   CarrierOfferExpiredError,
+  CarrierQuoteChangedError,
 } from "@oco/core/carrier-adapter/errors";
 import type {
   CarrierConfirmResult,
@@ -41,7 +42,7 @@ export type SubmitOrderResult =
   | {
       ok: false;
       stage: "confirm";
-      reason: "offer_expired" | "auth" | "unknown";
+      reason: "quote_changed" | "offer_expired" | "auth" | "unknown";
     }
   | { ok: false; stage: "write-after-confirm"; requestId: string };
 
@@ -97,6 +98,13 @@ export async function submitOrder(
       const confirmed = await confirm(offer, input, credentials);
       requestId = confirmed.requestId;
     } catch (error) {
+      if (error instanceof CarrierQuoteChangedError) {
+        await prisma.shipment.updateMany({
+          where: { id: shipmentId, companyId },
+          data: { status: "DRAFT", submittingAt: null },
+        });
+        return { ok: false, stage: "confirm", reason: "quote_changed" };
+      }
       if (error instanceof CarrierOfferExpiredError) {
         await prisma.shipment.updateMany({
           where: { id: shipmentId, companyId },

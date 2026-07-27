@@ -253,6 +253,16 @@ export const POST = withAuth<{ id: string }>(
       }
 
       if (result.stage === "confirm") {
+        if (result.reason === "quote_changed") {
+          // submitOrder already returned the row to DRAFT — re-quoting works.
+          return NextResponse.json(
+            {
+              error:
+                "Цена у перевозчика изменилась. Запросите тарифы заново.",
+            },
+            { status: 409 },
+          );
+        }
         if (result.reason === "offer_expired") {
           // submitOrder already returned the row to DRAFT — re-quoting works.
           return NextResponse.json(
