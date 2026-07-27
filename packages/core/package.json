@@ -19,6 +19,7 @@
     "./carrier-adapter/provider-seller-display-names": "./src/carrier-adapter/provider-seller-display-names.ts",
     "./carrier-adapter/yandex/parse-price": "./src/carrier-adapter/yandex/parse-price.ts",
     "./carrier-adapter/yandex/map-status": "./src/carrier-adapter/yandex/map-status.ts",
+    "./carrier-adapter/yandex/transport": "./src/carrier-adapter/yandex/transport.ts",
     "./carrier-adapter/yandex/client": "./src/carrier-adapter/yandex/client.ts"
   },
   "dependencies": {

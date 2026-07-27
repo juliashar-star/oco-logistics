@@ -17,15 +17,17 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
-import { CarrierAuthError, CarrierOfferExpiredError } from "../errors";
+import { CarrierOfferExpiredError } from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
+import {
+  YandexAuthError,
+  assertYandexCredentials as assertYandexCredentialsTransport,
+  resolveBaseUrl,
+  yandexGet as yandexGetTransport,
+  yandexPost as yandexPostTransport,
+} from "./transport";
 
-export class YandexAuthError extends CarrierAuthError {
-  constructor(message: string) {
-    super(message);
-    this.name = "YandexAuthError";
-  }
-}
+export { YandexAuthError };
 
 /** Expired or otherwise invalid offer_id on offers/confirm (provider code offer_was_not_found). */
 export class YandexOfferExpiredError extends CarrierOfferExpiredError {
@@ -38,20 +40,7 @@ export class YandexOfferExpiredError extends CarrierOfferExpiredError {
 type YandexCredentials = { platformStationId: string; token: string };
 
 function assertYandexCredentials(creds: CarrierCredentials): YandexCredentials {
-  const platformStationId = creds.platformStationId;
-  const token = creds.token;
-  if (!platformStationId || !token) {
-    throw new Error("YANDEX_CREDENTIALS_INVALID: platformStationId and token are required");
-  }
-  return { platformStationId, token };
-}
-
-function getBaseUrl(): string {
-  const baseUrl = process.env.YANDEX_DELIVERY_BASE_URL?.trim();
-  if (!baseUrl) {
-    throw new Error("YANDEX_DELIVERY_BASE_URL is not configured");
-  }
-  return baseUrl.replace(/\/$/, "");
+  return assertYandexCredentialsTransport(creds);
 }
 
 async function yandexPost(
@@ -59,20 +48,12 @@ async function yandexPost(
   path: string,
   body: unknown,
 ): Promise<Response> {
-  const response = await fetch(`${getBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${creds.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    throw new YandexAuthError(`Yandex Delivery auth failed: HTTP ${response.status}`);
-  }
-
-  return response;
+  return yandexPostTransport(
+    resolveBaseUrl("YANDEX_DELIVERY_BASE_URL"),
+    creds,
+    path,
+    body,
+  );
 }
 
 /** GET counterpart to yandexPost — same auth throw on 401/403. Not reshaped from POST. */
@@ -80,18 +61,11 @@ async function yandexGet(
   creds: YandexCredentials,
   pathWithQuery: string,
 ): Promise<Response> {
-  const response = await fetch(`${getBaseUrl()}${pathWithQuery}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${creds.token}`,
-    },
-  });
-
-  if (response.status === 401 || response.status === 403) {
-    throw new YandexAuthError(`Yandex Delivery auth failed: HTTP ${response.status}`);
-  }
-
-  return response;
+  return yandexGetTransport(
+    resolveBaseUrl("YANDEX_DELIVERY_BASE_URL"),
+    creds,
+    pathWithQuery,
+  );
 }
 
 type PricingCalculatorResponse = {
