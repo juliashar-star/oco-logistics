@@ -68,6 +68,7 @@ function adaptersWith(stubs) {
  *   trackNumber?: string | null,
  *   trackingUrl?: string | null,
  *   plannedDeliveryDate?: Date | null,
+ *   plannedDeliveryDateTo?: Date | null,
  * }} [extra]
  */
 async function seedYandexShipment(companyName, email, extra = {}) {
@@ -102,6 +103,9 @@ async function seedYandexShipment(companyName, email, extra = {}) {
       ...(extra.trackingUrl !== undefined ? { trackingUrl: extra.trackingUrl } : {}),
       ...(extra.plannedDeliveryDate !== undefined
         ? { plannedDeliveryDate: extra.plannedDeliveryDate }
+        : {}),
+      ...(extra.plannedDeliveryDateTo !== undefined
+        ? { plannedDeliveryDateTo: extra.plannedDeliveryDateTo }
         : {}),
     },
   });
@@ -512,6 +516,10 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         row?.plannedDeliveryDate?.toISOString(),
         new Date("2026-07-27T06:00:00+0000").toISOString(),
       );
+      assert.equal(
+        row?.plannedDeliveryDateTo?.toISOString(),
+        new Date("2026-07-27T15:00:00+0000").toISOString(),
+      );
     });
   });
 
@@ -638,6 +646,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         row?.plannedDeliveryDate?.toISOString(),
         new Date("2026-07-28T06:00:00+0000").toISOString(),
       );
+      assert.equal(row?.plannedDeliveryDateTo, null);
       const oco = await prisma.trackingEvent.findFirst({
         where: {
           shipmentId: shipment.id,
@@ -694,6 +703,98 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       assert.equal(ocoCount, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.plannedDeliveryDate?.toISOString(), heldDate.toISOString());
+      assert.equal(row?.plannedDeliveryDateTo, null);
+    });
+  });
+
+  test("(xv-b) FROM unchanged, TO moves → plannedDeliveryDateTo updated, no OCO event", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const heldFrom = new Date("2026-07-27T06:00:00.000Z");
+      const heldTo = new Date("2026-07-27T15:00:00.000Z");
+      const { company, shipment } = await seedYandexShipment(
+        "To Move Co",
+        `sync-to-move-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: heldFrom,
+          plannedDeliveryDateTo: heldTo,
+        },
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            plannedDeliveryFrom: "2026-07-27T06:00:00.000Z",
+            plannedDeliveryTo: "2026-07-27T18:00:00+0000",
+          },
+        }),
+      }));
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.plannedDeliveryDate?.toISOString(), heldFrom.toISOString());
+      assert.equal(
+        row?.plannedDeliveryDateTo?.toISOString(),
+        new Date("2026-07-27T18:00:00+0000").toISOString(),
+      );
+      const ocoCount = await prisma.trackingEvent.count({
+        where: {
+          shipmentId: shipment.id,
+          statusCode: "OCO_DELIVERY_DATE_CHANGED",
+        },
+      });
+      assert.equal(ocoCount, 0);
+    });
+  });
+
+  test("(xv-c) absent plannedDeliveryTo → held TO unchanged", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const heldFrom = new Date("2026-07-27T06:00:00.000Z");
+      const heldTo = new Date("2026-07-27T15:00:00.000Z");
+      const { company, shipment } = await seedYandexShipment(
+        "To Absent Co",
+        `sync-to-absent-${Date.now()}@example.com`,
+        {
+          trackNumber: "10014440",
+          trackingUrl: "https://example.test/track/1",
+          plannedDeliveryDate: heldFrom,
+          plannedDeliveryDateTo: heldTo,
+        },
+      );
+
+      await syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
+        getHistory: async () => ({
+          ok: true,
+          events: [
+            {
+              statusCode: "CREATED",
+              statusText: "Принят",
+              eventAt: "2026-07-17T10:00:00.000Z",
+            },
+          ],
+        }),
+        getInfo: async () => ({
+          ok: true,
+          info: {
+            plannedDeliveryFrom: "2026-07-27T06:00:00.000Z",
+          },
+        }),
+      }));
+
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.plannedDeliveryDate?.toISOString(), heldFrom.toISOString());
+      assert.equal(row?.plannedDeliveryDateTo?.toISOString(), heldTo.toISOString());
     });
   });
 
@@ -726,6 +827,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       assert.equal(row?.trackNumber, null);
       assert.equal(row?.trackingUrl, null);
       assert.equal(row?.plannedDeliveryDate, null);
+      assert.equal(row?.plannedDeliveryDateTo, null);
     });
   });
 
@@ -892,6 +994,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         row?.plannedDeliveryDate?.toISOString(),
         new Date("2026-07-27T06:00:00+0000").toISOString(),
       );
+      assert.equal(row?.plannedDeliveryDateTo, null);
       const ocoCount = await prisma.trackingEvent.count({
         where: {
           shipmentId: shipment.id,

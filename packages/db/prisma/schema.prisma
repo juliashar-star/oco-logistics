@@ -132,6 +132,8 @@ model Shipment {
   plannedCost          Int?
   plannedDeliveryDays  Int?
   plannedDeliveryDate  DateTime?
+  // Carrier's interval END; null when the carrier gave no upper bound, or on paths that never had one.
+  plannedDeliveryDateTo DateTime?
 
   actualCost           Int?
   pickedUpAt           DateTime?

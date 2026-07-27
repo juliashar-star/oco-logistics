@@ -10,6 +10,7 @@ import type {
   CarrierOffer,
 } from "@oco/core/carrier-adapter/types";
 
+import { parseOptionalIsoDate } from "../date/parse-optional-iso-date";
 import { captureForSubmit } from "./capture-for-submit";
 import { deriveOperatorRequestId } from "./operator-request-id";
 
@@ -124,6 +125,7 @@ export async function submitOrder(
           status: "CREATED",
           providerOrderId: requestId,
           plannedDeliveryDate: new Date(offer.deliveryIntervalFrom),
+          plannedDeliveryDateTo: parseOptionalIsoDate(offer.deliveryIntervalTo),
           providerKey,
           orderAdapterKey,
           selectedOfferId: offer.offerId,

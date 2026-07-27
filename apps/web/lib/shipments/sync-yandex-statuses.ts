@@ -13,6 +13,7 @@ import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import type { StatusSyncAdapter } from "@oco/core/carrier-adapter/status-sync-adapters";
 
 import { formatDateMoscow } from "../date/format-date-moscow";
+import { parseOptionalIsoDate } from "../date/parse-optional-iso-date";
 import { getCarrierCredentials } from "./get-carrier-credentials";
 
 const TERMINAL_STATUSES: ShipmentStatus[] = ["DELIVERED", "RETURNED", "CANCELED"];
@@ -54,6 +55,7 @@ type ShipmentForSync = {
   trackNumber: string | null;
   trackingUrl: string | null;
   plannedDeliveryDate: Date | null;
+  plannedDeliveryDateTo: Date | null;
 };
 
 function isBlank(value: string | null | undefined): boolean {
@@ -276,6 +278,10 @@ async function applyOrderInfo(
       ? parseEventAt(info.plannedDeliveryFrom)
       : null;
 
+  const parsedTo = parseOptionalIsoDate(
+    typeof info.plannedDeliveryTo === "string" ? info.plannedDeliveryTo : "",
+  );
+
   if (parsedFrom != null) {
     const held = shipment.plannedDeliveryDate;
     if (held == null) {
@@ -301,6 +307,17 @@ async function applyOrderInfo(
       });
       counters.events += 1;
     }
+  }
+
+  // TO end is independent of the FROM comparison — a moved END must not
+  // wait for a moved START (and must not raise OCO_DELIVERY_DATE_CHANGED).
+  // An absent optional field is not a retraction — same as a missing FROM.
+  const heldTo = shipment.plannedDeliveryDateTo;
+  if (
+    parsedTo != null &&
+    (heldTo == null || heldTo.getTime() !== parsedTo.getTime())
+  ) {
+    shipmentUpdates.plannedDeliveryDateTo = parsedTo;
   }
 
   if (Object.keys(shipmentUpdates).length === 0) {
@@ -354,6 +371,7 @@ export async function syncYandexShipmentStatuses(
       trackNumber: true,
       trackingUrl: true,
       plannedDeliveryDate: true,
+      plannedDeliveryDateTo: true,
     },
   });
 
@@ -375,6 +393,7 @@ export async function syncYandexShipmentStatuses(
         trackNumber: row.trackNumber,
         trackingUrl: row.trackingUrl,
         plannedDeliveryDate: row.plannedDeliveryDate,
+        plannedDeliveryDateTo: row.plannedDeliveryDateTo,
       },
     ];
   });

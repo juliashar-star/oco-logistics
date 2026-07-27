@@ -210,6 +210,11 @@ describe("submitOrder", { concurrency: false }, () => {
       row.plannedDeliveryDate.toISOString(),
       new Date(OFFER.deliveryIntervalFrom).toISOString(),
     );
+    assert.ok(row.plannedDeliveryDateTo instanceof Date);
+    assert.equal(
+      row.plannedDeliveryDateTo.toISOString(),
+      new Date(OFFER.deliveryIntervalTo).toISOString(),
+    );
     assert.ok(row.selectedOfferExpiresAt instanceof Date);
     assert.equal(
       row.selectedOfferExpiresAt.toISOString(),
@@ -217,6 +222,39 @@ describe("submitOrder", { concurrency: false }, () => {
     );
     assert.equal(row.plannedCost, 27328);
     assert.notEqual(row.plannedCost, 273);
+  });
+
+  test("(ii-b) empty deliveryIntervalTo → plannedDeliveryDateTo stays null", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Empty To Co",
+      `submit-empty-to-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "yandex-request-empty-to-1";
+    const offerNoTo = { ...OFFER, deliveryIntervalTo: "" };
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: offerNoTo,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:next_day",
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+      }),
+    });
+
+    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    assert.ok(row.plannedDeliveryDate instanceof Date);
+    assert.equal(
+      row.plannedDeliveryDate.toISOString(),
+      new Date(OFFER.deliveryIntervalFrom).toISOString(),
+    );
+    assert.equal(row.plannedDeliveryDateTo, null);
   });
 
   test("(iii) YandexOfferExpiredError → DRAFT, submittingAt cleared", async () => {
