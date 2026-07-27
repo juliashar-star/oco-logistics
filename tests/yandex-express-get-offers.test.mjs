@@ -155,7 +155,7 @@ test("getExpressOffers request body matches offers/calculate expected shape", as
   });
 });
 
-test("getExpressOffers maps five offers using gross total_price_with_vat", async () => {
+test("getExpressOffers maps five offers using net total_price", async () => {
   await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
     const rawOffers = Array.from({ length: 5 }, (_, i) => makeRawExpressOffer(i));
     const mock = installFetchMock(() => jsonResponse(200, { offers: rawOffers }));
@@ -181,9 +181,11 @@ test("getExpressOffers maps five offers using gross total_price_with_vat", async
         "2026-07-27T07:34:49.856609+00:00",
       );
       assert.equal(result.offers[0].pickupIntervalTo, "2026-07-27T08:10:00+00:00");
-      assert.equal(result.offers[0].priceRub, 488);
+      // Fixture keeps total_price ≠ total_price_with_vat — wrong field would fail here.
+      assert.notEqual(rawOffers[0].price.total_price, rawOffers[0].price.total_price_with_vat);
+      assert.equal(result.offers[0].priceRub, 400);
       assert.deepEqual(result.offers[0].rawOffer, rawOffers[0]);
-      assert.equal(result.offers[4].priceRub, 488 + 4 * 12.2);
+      assert.equal(result.offers[4].priceRub, 400 + 4 * 10);
       assert.equal(
         result.offers[4].offerId,
         "offer-payload-redis/v1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/5",
@@ -305,16 +307,16 @@ test("getExpressOffers skips an offer without payload and keeps the valid one", 
   });
 });
 
-test("getExpressOffers throws when offer price has no total_price_with_vat", async () => {
+test("getExpressOffers throws when offer price has no total_price", async () => {
   await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
     const broken = makeRawExpressOffer(0);
-    delete broken.price.total_price_with_vat;
+    delete broken.price.total_price;
     const mock = installFetchMock(() => jsonResponse(200, { offers: [broken] }));
 
     try {
       await assert.rejects(
         () => getExpressOffers(baseInput(), VALID_CREDS),
-        /Yandex Express offer missing price.total_price_with_vat/,
+        /Yandex Express offer missing price.total_price/,
       );
     } finally {
       mock.restore();

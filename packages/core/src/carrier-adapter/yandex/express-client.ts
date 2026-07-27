@@ -65,23 +65,22 @@ type ExpressOfferPrice = {
 };
 
 /**
- * Express reports a net total_price and a gross total_price_with_vat (VAT 22% from
- * 01.01.2026); request/* reports a single unlabelled pricing_total with no VAT field
- * anywhere in the payload or the docs, so which of the two is comparable is UNRESOLVED.
- * Gross is chosen deliberately — showing the net price beside a possibly-gross one would
- * make Express look cheaper than it bills. Must be settled before any of this reaches a
- * seller's screen.
+ * Yandex quotes tariff prices NET of VAT (stated in the cabinet's Express tariff page),
+ * and the other family's pricing_total is net too, so the net total_price is the
+ * comparable figure.
+ * If OCO ever shows prices WITH VAT, that belongs at the display layer applied to every
+ * carrier uniformly, never inside one adapter.
  */
 function selectExpressOfferPriceRub(price: ExpressOfferPrice): number {
-  const raw = price.total_price_with_vat;
+  const raw = price.total_price;
   if (typeof raw !== "string" || !raw.trim()) {
-    throw new Error("Yandex Express offer missing price.total_price_with_vat");
+    throw new Error("Yandex Express offer missing price.total_price");
   }
   // Bare numeric string (e.g. "547.78") — parseRublePrice requires a "… RUB" suffix.
   const value = Number(raw.trim());
   if (!Number.isFinite(value)) {
     throw new Error(
-      `Yandex Express offer unusable total_price_with_vat: "${raw}"`,
+      `Yandex Express offer unusable total_price: "${raw}"`,
     );
   }
   return value;
