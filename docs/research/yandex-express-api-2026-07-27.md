@@ -27,7 +27,18 @@ other-day research note, где tst-хост установлен пробами
 | 2 | Создайте заявку | `claims/create` | создаёте заявку на выбранный вариант по адресу |
 | 3 | Узнайте результат оценки | `claims/info` | если заявка выполнима — в ответ придёт **актуальная** стоимость; иначе — причины |
 | 4 | Подтвердите заявку | `claims/accept` | «После этого **запускается поиск исполнителя**» |
-| 5 | Отслеживайте статусы | claims info / track | опрос статусов |
+| 5 | Отслеживайте статусы | см. примечание ниже | «Вы отправляете запрос по одной или нескольким заявкам и получаете по ним информацию.» |
+
+**Шаг 5 — DOCUMENTED (quickstart → overview anchors).** Quickstart не
+называет один метод; ссылается на два раздела overview:
+https://yandex.ru/support/delivery-profile/ru/api/express/overview.md
+- `{#track-order}` «Отслеживание заявки» — **live-данные курьера**, не
+  история статусов: `claims/performer-position`, `claims/points-eta`,
+  `claims/tracking-links` (плюс соседний `driver-voiceforwarding`, не
+  `claims/*`).
+- `{#claims-info}` «Информация по заявкам» — `claims/search`,
+  `claims/bulk_info`, и **`claims/journal`** (история изменений).
+Текущий статус одной заявки — также `claims/info` (шаг 3 / poll).
 
 **Что диспатчит курьера.** По quickstart и странице accept: поиск
 исполнителя начинается на шаге 4 (`claims/accept`). Create явно:
@@ -138,6 +149,16 @@ https://yandex.ru/support/delivery-profile/ru/api/express/openapi/IntegrationV2C
 **Ответ 200** — большой объект заявки. Ключевые поля для оценки:
 
 - `status` — ClaimStatus
+- Timestamps (DOCUMENTED, OpenAPI ClaimsInfo; earlier note missed these) —
+  - `created_ts` — REQUIRED `string<date-time>`: «Дата и время создания
+    заявки»
+  - `updated_ts` — REQUIRED `string<date-time>`: «Дата и время последнего
+    обновления заявки»
+  - `last_status_change_ts` — optional `string<date-time>`: «Дата-время
+    последнего изменения статуса»
+  Together with `status`, this gives an honest timestamp for the **current**
+  status without calling `claims/journal`. It is **not** a sequence of past
+  changes.
 - `pricing` (optional в схеме ответа) —
   - `pricing.offer.offer_id`
   - `pricing.offer.price` — DOCUMENTED (OpenAPI TaxiOffer): «Цена по
@@ -365,6 +386,85 @@ OpenAPI ClaimStatus enum (accept/create/info) **без** `pay_waiting`:
 `ready_for_return_confirmation`, `returned`, `returned_finish`, `failed`,
 `cancelled`, `cancelled_with_payment`, `cancelled_by_taxi`,
 `cancelled_with_items_on_hands`.
+
+### claims/journal — история изменений (DOCUMENTED)
+
+Источник:
+https://yandex.ru/support/delivery-profile/ru/api/express/openapi/IntegrationV2ClaimsJournal.md
+(+ overview §6 «Информация по заявкам»)
+
+**Путь (POST):**
+`b2b.taxi.yandex.net/b2b/cargo/integration/v2/claims/journal`
+
+DOCUMENTED intro: «Возвращает историю изменения заявки.» / «Метод
+возвращает историю изменения заявки. Вы можете узнать об изменении
+статусов и цены заказа. Для терминальных статусов возвращается поле
+resolution, возможные значения success, failed.»
+
+**Это ACCOUNT-WIDE лента с cursor-пагинацией, НЕ per-`claim_id` lookup.**
+DOCUMENTED request:
+- Body: `{ "cursor": "…" }` — `cursor` optional string; «Строка с
+  идентификатором последнего изменения. Если cursor не передан, то будут
+  выданы все изменения с некоторым лимитом.»
+- Query: `_limit` optional integer, default `1000`, min `1`, max `1000`.
+- Schema does **not** take `claim_id` as query or body. Each event carries
+  its own `claim_id`. How to filter to one claim client-side — DOCUMENTED
+  as the event field only; server-side per-claim filter — UNKNOWN.
+
+**Ответ 200 (DOCUMENTED):** required `cursor` + required `events` array.
+Event shape (entity `Event`):
+
+| Field | DOCUMENTED |
+|---|---|
+| `change_type` | REQUIRED; `status_changed` \| `price_changed` |
+| `updated_ts` | REQUIRED `string<date-time>` — «Время события в формате ISO 8601» |
+| `claim_id` | REQUIRED |
+| `operation_id` | REQUIRED integer (int64) |
+| `revision` | REQUIRED integer (int64) — «Версия изменения заявки» |
+| `new_status` | optional ClaimStatus |
+| `new_price` | optional string |
+| `new_currency` | optional string |
+| `resolution` | optional; `success` \| `failed` (terminal) |
+| `client_id` | optional |
+| `current_point_id` | optional |
+
+Not measured against a live token in this note.
+
+---
+
+## 6b. Поверхность claims/* (полный список)
+
+Источник DOCUMENTED:
+https://yandex.ru/support/delivery-profile/ru/api/express/overview.md
+Host prefix: `b2b.taxi.yandex.net/b2b/cargo/integration/v2/`.
+
+Seventeen `claims/*` methods on the overview (complete surface). The five
+marked **USED** are the ones this note’s product path already documents
+(create → info → accept; cancel-info → cancel). The rest are listed so the
+next slice does not rediscover them.
+
+| | Method | Path |
+|---|---|---|
+| USED | POST | `…/claims/create` |
+| USED | POST | `…/claims/info` |
+| USED | POST | `…/claims/accept` |
+| USED | POST | `…/claims/cancel-info` |
+| USED | POST | `…/claims/cancel` |
+| | GET | `…/claims/performer-position` |
+| | POST | `…/claims/points-eta` |
+| | GET | `…/claims/tracking-links` |
+| | POST | `…/claims/confirmation_code` |
+| | POST | `…/claims/proof-of-delivery/info` |
+| | POST | `…/claims/edit` |
+| | POST | `…/claims/apply-changes/request` |
+| | POST | `…/claims/apply-changes/result` |
+| | POST | `…/claims/return` |
+| | POST | `…/claims/search` |
+| | POST | `…/claims/bulk_info` |
+| | POST | `…/claims/journal` |
+
+Non-`claims/*` on the same overview (not expanded here): `offers/calculate`,
+`check-price`, `tariffs`, `driver-voiceforwarding`, `delivery-methods`.
 
 ---
 
