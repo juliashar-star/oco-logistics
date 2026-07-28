@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { encryptCarrierCredentials } from "../../apps/web/lib/carrier-credentials.ts";
 import { syncYandexShipmentStatuses } from "../../apps/web/lib/shipments/sync-yandex-statuses.ts";
+import { STATUS_SYNC_ADAPTERS } from "../../packages/core/src/carrier-adapter/status-sync-adapters.ts";
 import { YandexAuthError } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
 import { mapYandexStatusToShipmentStatus } from "../../packages/core/src/carrier-adapter/yandex/map-status.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
@@ -1218,6 +1219,54 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       assert.equal(
         await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
         0,
+      );
+    });
+  });
+
+  test("(xxvii) STATUS_SYNC_ADAPTERS has yataxi:express → syncs instead of noAdapter", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const registered = STATUS_SYNC_ADAPTERS[ORDER_ADAPTER_EXPRESS];
+      assert.ok(
+        registered,
+        "yataxi:express must be registered in STATUS_SYNC_ADAPTERS",
+      );
+
+      const { company, shipment } = await seedYandexShipment(
+        "Express Sync Co",
+        `sync-express-wired-${Date.now()}@example.com`,
+        { orderAdapterKey: ORDER_ADAPTER_EXPRESS },
+      );
+
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        adapters: {
+          [ORDER_ADAPTER_EXPRESS]: {
+            orderAdapterKey: registered.orderAdapterKey,
+            providerKey: registered.providerKey,
+            mapStatus: registered.mapStatus,
+            getOrderHistory: async () => ({
+              ok: true,
+              events: [
+                {
+                  statusCode: "pickuped",
+                  statusText: "Посылка у курьера",
+                  eventAt: "2026-07-17T12:00:00.000Z",
+                },
+              ],
+            }),
+            getOrderInfo: async () => ({ ok: true, info: {} }),
+          },
+        },
+      });
+
+      assert.equal(result.noAdapter, 0);
+      assert.equal(result.updated, 1);
+      assert.equal(result.events, 1);
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "IN_TRANSIT");
+      assert.equal(row?.orderAdapterKey, ORDER_ADAPTER_EXPRESS);
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: shipment.id } }),
+        1,
       );
     });
   });

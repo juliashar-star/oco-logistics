@@ -7,8 +7,11 @@ import type {
   CarrierCredentials,
   CarrierOffer,
   CarrierOffersResult,
+  CarrierOrderHistoryResult,
+  CarrierOrderInfoResult,
   CarrierOrderItem,
 } from "@oco/core/carrier-adapter/types";
+import { claimStatusTextRu } from "./map-claim-status";
 import {
   assertYandexCredentials,
   resolveBaseUrl,
@@ -703,4 +706,85 @@ export async function confirmExpressOffer(
   }
 
   return { requestId: claimId, rawResponse: acceptRaw };
+}
+
+/**
+ * Express status snapshot → one CarrierTrackingEvent via claims/info.
+ *
+ * claims/journal is account-wide (cursor feed), not per-claim_id — so sync
+ * polls claims/info for the current status + last_status_change_ts.
+ * Do NOT attach the raw info body: it echoes recipient PII.
+ *
+ * Non-200 or missing status → { ok: false, reason: "order_not_found" }
+ * (same shape as request/history when the provider does not know the id).
+ * 401/403 still throw via yandexPost (CarrierAuthError).
+ */
+export async function getExpressOrderHistory(
+  claimId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierOrderHistoryResult> {
+  const creds = assertYandexCredentials(credentials);
+  const baseUrl = resolveBaseUrl("YANDEX_EXPRESS_BASE_URL");
+  const response = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/info?claim_id=${encodeURIComponent(claimId)}`,
+    {},
+    ACCEPT_LANGUAGE_RU,
+  );
+  const raw = await readJsonBody(response);
+
+  if (response.status !== 200) {
+    return { ok: false, reason: "order_not_found" };
+  }
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  const body = raw as Record<string, unknown>;
+  const status =
+    typeof body.status === "string" ? body.status.trim() : "";
+  if (!status) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  const lastStatusChangeTs =
+    typeof body.last_status_change_ts === "string"
+      ? body.last_status_change_ts.trim()
+      : "";
+  const updatedTs =
+    typeof body.updated_ts === "string" ? body.updated_ts.trim() : "";
+  const eventAt = lastStatusChangeTs || updatedTs;
+  if (!eventAt) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  // TrackingEvent.statusText is non-nullable. Prefer our Russian label; when
+  // the code is unknown to claimStatusTextRu, fall back to the status code
+  // itself (honest, always available) — not "" and not Yandex product wording.
+  const label = claimStatusTextRu(status);
+
+  return {
+    ok: true,
+    events: [
+      {
+        statusCode: status,
+        statusText: label ?? status,
+        eventAt,
+      },
+    ],
+  };
+}
+
+/**
+ * No HTTP. claims/info is already consumed by getExpressOrderHistory; a claim
+ * has no track number; a tracking link would come from claims/tracking-links
+ * (later slice). Returning not-ok would increment infoFailed on every sync and
+ * report a failure that did not happen.
+ */
+export async function getExpressOrderInfo(
+  _claimId: string,
+  _credentials: CarrierCredentials,
+): Promise<CarrierOrderInfoResult> {
+  return { ok: true, info: {} };
 }

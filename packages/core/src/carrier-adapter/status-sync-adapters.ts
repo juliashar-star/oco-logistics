@@ -1,7 +1,12 @@
 import type { ShipmentStatus } from "@oco/apiship";
 import type { CarrierAdapter } from "./types";
-import { DEFAULT_ORDER_ADAPTER } from "./order-adapters";
+import { DEFAULT_ORDER_ADAPTER, ORDER_ADAPTERS } from "./order-adapters";
 import { yandexAdapter } from "./yandex/adapter";
+import {
+  getExpressOrderHistory,
+  getExpressOrderInfo,
+} from "./yandex/express-client";
+import { mapClaimStatusToShipmentStatus } from "./yandex/map-claim-status";
 import { mapYandexStatusToShipmentStatus } from "./yandex/map-status";
 
 /**
@@ -31,5 +36,12 @@ export const STATUS_SYNC_ADAPTERS: Record<string, StatusSyncAdapter> = {
     getOrderHistory: yandexAdapter.getOrderHistory,
     getOrderInfo: yandexAdapter.getOrderInfo,
     mapStatus: mapYandexStatusToShipmentStatus,
+  },
+  "yataxi:express": {
+    orderAdapterKey: ORDER_ADAPTERS["yataxi:express"].key,
+    providerKey: ORDER_ADAPTERS["yataxi:express"].providerKey,
+    getOrderHistory: getExpressOrderHistory,
+    getOrderInfo: getExpressOrderInfo,
+    mapStatus: mapClaimStatusToShipmentStatus,
   },
 };
