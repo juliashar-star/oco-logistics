@@ -10,6 +10,7 @@ import {
   shipmentTariffLabel,
 } from "@/lib/shipments/shipment-list-labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
+import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -136,6 +137,9 @@ export function ShipmentsPage() {
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [anonymizing, setAnonymizing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTrack(trackInput), 400);
@@ -160,6 +164,8 @@ export function ShipmentsPage() {
     setEventsLoading(false);
     setEventsError(null);
     setConfirmOpen(false);
+    setDeleteConfirmOpen(false);
+    setDeleteError(null);
   };
 
   const openDrawer = (shipment: ShipmentRow) => {
@@ -284,6 +290,33 @@ export function ShipmentsPage() {
     } finally {
       setAnonymizing(false);
       setConfirmOpen(false);
+    }
+  }
+
+  async function handleDeleteDraft() {
+    if (!selectedShipment) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/shipments/${selectedShipment.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setDeleteError(
+          "Не удалось удалить черновик. Обновите страницу или попробуйте позже.",
+        );
+        return;
+      }
+      closeDrawer();
+      router.refresh();
+      await loadShipments();
+    } catch {
+      setDeleteError(
+        "Не удалось удалить черновик. Обновите страницу или попробуйте позже.",
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -640,7 +673,59 @@ export function ShipmentsPage() {
                 )}
               </div>
 
-              {!selectedShipment.isAnonymized && (
+              {shipmentFooterAction(selectedShipment) === "delete" && (
+                <div className="mt-8 border-t border-slate-200 pt-6">
+                  {deleteError && (
+                    <p
+                      className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800"
+                      role="alert"
+                    >
+                      {deleteError}
+                    </p>
+                  )}
+                  {!deleteConfirmOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setDeleteConfirmOpen(true);
+                      }}
+                      className="text-sm text-slate-500 hover:text-slate-700"
+                    >
+                      Удалить черновик
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">
+                        Черновик и всё, что к нему привязано, будут удалены. Это
+                        действие необратимо.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteConfirmOpen(false);
+                            setDeleteError(null);
+                          }}
+                          disabled={deleting}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteDraft()}
+                          disabled={deleting}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {deleting ? "Удаляем..." : "Удалить"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {shipmentFooterAction(selectedShipment) === "anonymize" && (
                 <div className="mt-8 border-t border-slate-200 pt-6">
                   {!confirmOpen ? (
                     <button
@@ -653,7 +738,8 @@ export function ShipmentsPage() {
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-slate-600">
-                        Данные получателя будут заменены на «УДАЛЕНО». Это действие необратимо.
+                        Данные получателя будут заменены на «УДАЛЕНО». Это
+                        действие необратимо.
                       </p>
                       <div className="flex gap-2">
                         <button
