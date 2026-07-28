@@ -11,6 +11,7 @@ const EXPECTED_POINT_KEYS = [
   "city",
   "latitude",
   "longitude",
+  "kind",
 ];
 
 test("mapped point key set is exactly the DTO fields (catches future spread of rawPoint)", () => {
@@ -25,6 +26,7 @@ test("mapped point key set is exactly the DTO fields (catches future spread of r
         city: "Москва",
         latitude: 55.75,
         longitude: 37.62,
+        kind: "pickup_point",
         rawPoint: { huge: "payload", nested: { a: 1 } },
       },
     ],
@@ -32,6 +34,7 @@ test("mapped point key set is exactly the DTO fields (catches future spread of r
   });
 
   assert.deepEqual(Object.keys(response.points[0]), EXPECTED_POINT_KEYS);
+  assert.equal(response.points[0].kind, "pickup_point");
 });
 
 test("fat rawPoint and code never appear in serialized response", () => {
@@ -49,6 +52,7 @@ test("fat rawPoint and code never appear in serialized response", () => {
         city: "Казань",
         latitude: 55.8,
         longitude: 49.1,
+        kind: "postamat",
         rawPoint: {
           marker: LEAK_MARKER,
           giant: "x".repeat(500),
@@ -70,6 +74,7 @@ test("fat rawPoint and code never appear in serialized response", () => {
   assert.equal(serialized.includes(CODE_MARKER), false);
   assert.equal(serialized.includes("rawPoint"), false);
   assert.equal(serialized.includes('"code"'), false);
+  assert.equal(response.points[0].kind, "postamat");
 });
 
 test("failed carrier passes only providerKey and status", () => {

@@ -19,6 +19,7 @@ import type {
 } from "@oco/core/carrier-adapter/types";
 import { CarrierOfferExpiredError } from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
+import { mapYandexPickupPointTypeToKind } from "./map-pickup-point-kind";
 import {
   YandexAuthError,
   assertYandexCredentials as assertYandexCredentialsTransport,
@@ -100,6 +101,9 @@ function mapPickupPoint(point: YandexPickupPoint): CarrierPickupPoint {
     city: point.address.locality,
     latitude: point.position.latitude,
     longitude: point.position.longitude,
+    kind: mapYandexPickupPointTypeToKind(
+      typeof point.type === "string" ? point.type : "",
+    ),
     rawPoint: point,
   };
 }

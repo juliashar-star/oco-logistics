@@ -120,6 +120,7 @@ test("happy path maps two pickup_point entries correctly", async () => {
       assert.equal(result.points[0].latitude, 56.75);
       assert.equal(result.points[0].longitude, 37.61);
       assert.equal(result.points[0].providerKey, "yataxi");
+      assert.equal(result.points[0].kind, "pickup_point");
       assert.equal(result.points[1].id, "2");
     } finally {
       mock.restore();
@@ -170,6 +171,7 @@ test("terminal entries are kept with pickup_point entries in provider order", as
       assert.equal(result.points[0].id, "1");
       assert.equal(result.points[1].id, "terminal-1");
       assert.equal(result.points[1].name, "Постамат Яндекс Маркет");
+      assert.equal(result.points[1].kind, "postamat");
     } finally {
       mock.restore();
     }

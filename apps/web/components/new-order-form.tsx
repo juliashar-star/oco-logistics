@@ -12,6 +12,7 @@ import {
 } from "@/lib/date/format-offer-interval";
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
+import { formatPickupPointOptionLabel } from "@/lib/shipments/format-pickup-point-option-label";
 import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
@@ -869,7 +870,7 @@ export function NewOrderForm() {
                 </option>
                 {points.map((point) => (
                   <option key={point.id} value={point.id}>
-                    {point.name} — {point.address}
+                    {formatPickupPointOptionLabel(point)}
                   </option>
                 ))}
               </select>

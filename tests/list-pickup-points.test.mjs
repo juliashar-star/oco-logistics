@@ -22,6 +22,7 @@ function makePoints(providerKey, pointOverrides) {
     city: partial.city ?? "City",
     latitude: partial.latitude ?? 55.75,
     longitude: partial.longitude ?? 37.62,
+    kind: partial.kind ?? "pickup_point",
   }));
 }
 

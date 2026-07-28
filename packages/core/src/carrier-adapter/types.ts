@@ -41,6 +41,18 @@ export type CarrierListPointsInput = {
   // wired yet; pretending limit/offset paginate silently truncates)
 };
 
+/**
+ * Neutral venue kind for a pickup point.
+ * Deliberately not the carrier's own vocabulary (Yandex says `terminal` for a
+ * постамат) — every carrier names both kinds differently; same reasoning as
+ * the service titles.
+ */
+export type CarrierPickupPointKind =
+  | "pickup_point"
+  | "postamat"
+  | "warehouse"
+  | "unknown";
+
 export type CarrierPickupPoint = {
   id: string; // was number in APIShip's PickupPoint — Yandex uses UUIDs
   providerKey: string; // kept: needed when the orchestrator aggregates
@@ -52,6 +64,7 @@ export type CarrierPickupPoint = {
   /** Geographic position — every carrier's pickup points have one. */
   latitude: number;
   longitude: number;
+  kind: CarrierPickupPointKind;
   /** Full raw provider response for this point (data asset; schedule,
    *  services, instructions etc. we don't model yet). */
   rawPoint?: unknown;

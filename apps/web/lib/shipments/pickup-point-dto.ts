@@ -2,6 +2,7 @@ import type {
   CarrierPointsStatus,
   ListPickupPointsForCompanyResult,
 } from "./list-pickup-points";
+import type { CarrierPickupPointKind } from "@oco/core/carrier-adapter/types";
 
 export type PickupPointDto = {
   id: string;
@@ -11,6 +12,7 @@ export type PickupPointDto = {
   city: string;
   latitude: number;
   longitude: number;
+  kind: CarrierPickupPointKind;
 };
 
 export type CarrierDto = {
@@ -45,6 +47,7 @@ export function toPickupPointsResponse(
       city: point.city,
       latitude: point.latitude,
       longitude: point.longitude,
+      kind: point.kind,
     })),
     carriers: result.carriers.map((carrier) => {
       if (carrier.resolvedLocation) {
