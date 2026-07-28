@@ -20,6 +20,12 @@
 
 ---
 
+- **2026-07 · delete DRAFT shipment — FK Cascade on TrackingEvent/TariffQuote→Shipment; single guarded deleteMany (companyId+DRAFT+providerOrderId null); same 404 for not-yours/not-there/not-deletable.**
+Почему: array `$transaction` that deletes children first would commit child
+deletes even when the guarded parent delete matches zero rows ( чужой id ).
+Cascade keeps children tied to the parent row. Opaque 404 — не светить
+существование чужого shipment id. providerOrderId null — ремень на будущее.
+Отвергли: findUnique-then-403 (как anonymize); ручное удаление детей до родителя.
 - **2026-07 · order-adapter-seller-titles — client-safe title map; ORDER_ADAPTERS.title reads from it; shipment-list-labels must not import order-adapters.**
 Почему: shipments-page → shipment-list-labels → resolveOrderAdapter тянул
 order-adapters → express-client → node:crypto в браузерный бандл

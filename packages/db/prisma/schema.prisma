@@ -187,7 +187,7 @@ model TariffQuote {
   companyId        String?
   company          Company? @relation(fields: [companyId], references: [id])
   shipmentId       String?
-  shipment         Shipment? @relation(fields: [shipmentId], references: [id])
+  shipment         Shipment? @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   carrierId        String
   carrier          Carrier   @relation(fields: [carrierId], references: [id])
   serviceCode      String
@@ -206,7 +206,7 @@ model TariffQuote {
 model TrackingEvent {
   id          String   @id @default(cuid())
   shipmentId  String
-  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   statusCode  String
   statusText  String
   location    String?
