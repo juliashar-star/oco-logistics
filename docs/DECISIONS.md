@@ -1550,3 +1550,13 @@ ROADMAP 31), и это обнажило противоречие: `apps/web/lib/
 персональные данные в APIShip не уходят вообще (`/calculator` — город, вес, габариты,
 ценность), поэтому поручение на обработку может не потребоваться; до чистки легаси-путь
 продолжает их отправлять у компаний, подключившихся до 23.07.2026.
+
+## 2026-07-29 · generateLabels optional on CarrierAdapter; 409 → CarrierLabelsNotReadyError
+
+Yandex other-day `POST /request/generate-labels` returns raw PDF bytes (not a URL).
+Wired as **optional** `CarrierAdapter.generateLabels` — Express claims/* has no label
+method, so a required method would force a lie. ORDER_ADAPTERS untouched.
+
+HTTP 409 (fabricated id and not-yet-ready order are **identical** on tst) maps to
+`CarrierLabelsNotReadyError`; the provider «try again later» text is for logs only,
+never the seller UI. A 200 without `%PDF` magic is rejected.

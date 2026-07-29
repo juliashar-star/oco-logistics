@@ -8,6 +8,7 @@ import {
   getOrderHistory,
   getOrderInfo,
   cancelOrder,
+  generateLabels,
 } from "./client";
 
 // Файл существует ради проверки контракта компилятором; createOrder у Яндекса — это request/create, заявки по нему не подтверждаются, живой путь заказа = getOffers → confirmOffer.
@@ -21,4 +22,5 @@ export const yandexAdapter = {
   getOrderHistory,
   getOrderInfo,
   cancelOrder,
+  generateLabels,
 } satisfies CarrierAdapter;

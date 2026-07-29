@@ -6,6 +6,7 @@ import type {
   CarrierCredentials,
   CarrierDeliveryQuote,
   CarrierCreateOrderResult,
+  CarrierLabelDocument,
   CarrierListPointsInput,
   CarrierListPointsResult,
   CarrierOffer,
@@ -17,7 +18,10 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
-import { CarrierOfferExpiredError } from "../errors";
+import {
+  CarrierLabelsNotReadyError,
+  CarrierOfferExpiredError,
+} from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
 import { mapYandexPickupPointTypeToKind } from "./map-pickup-point-kind";
 import {
@@ -36,6 +40,21 @@ export class YandexOfferExpiredError extends CarrierOfferExpiredError {
     super(message);
     this.name = "YandexOfferExpiredError";
   }
+}
+
+/** %PDF magic — a 200 that is not a PDF must not be handed to callers as a label. */
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46] as const;
+
+function bodyStartsWithPdfMagic(bytes: Uint8Array): boolean {
+  if (bytes.length < PDF_MAGIC.length) {
+    return false;
+  }
+  return (
+    bytes[0] === PDF_MAGIC[0] &&
+    bytes[1] === PDF_MAGIC[1] &&
+    bytes[2] === PDF_MAGIC[2] &&
+    bytes[3] === PDF_MAGIC[3]
+  );
 }
 
 type YandexCredentials = { platformStationId: string; token: string };
@@ -947,6 +966,75 @@ export async function cancelOrder(
   }
 
   return { ok: true, result };
+}
+
+/**
+ * POST /request/generate-labels — shipping-label PDF bytes for request_id(s).
+ *
+ * MANY request_ids produce ONE merged PDF, not one document per id, because
+ * the provider's `generate_type` defaults to `one`. We DO NOT send
+ * `generate_type` and therefore depend on that default — do not start
+ * sending it; we have not measured it.
+ *
+ * Measured (tst 2026-07-29): 200 application/pdf beginning %PDF-1.4 for both
+ * CREATED and CANCELED orders; nonexistent id → HTTP 409 with
+ * {message, code:"409"} — same shape as a not-yet-ready order (no 404).
+ * providerOrderIds are Yandex request_id values (= Shipment.providerOrderId).
+ *
+ * 401/403 → YandexAuthError from transport (not remapped here).
+ * 409 → CarrierLabelsNotReadyError (raw message in Error.message for logs only).
+ * Other non-200 → Error like cancelOrder / getOffers.
+ * 200 without %PDF magic → Error (do not return a broken artefact).
+ */
+export async function generateLabels(
+  providerOrderIds: string[],
+  credentials: CarrierCredentials,
+): Promise<CarrierLabelDocument> {
+  // Empty array would come back as the same 409 «not ready, try again later»,
+  // which is false — there is nothing to wait for.
+  if (providerOrderIds.length === 0) {
+    throw new Error(
+      "Yandex Delivery generate labels failed: providerOrderIds must not be empty",
+    );
+  }
+
+  const creds = assertYandexCredentials(credentials);
+
+  const response = await yandexPost(
+    creds,
+    "/api/b2b/platform/request/generate-labels",
+    { request_ids: providerOrderIds },
+  );
+  const bytes = new Uint8Array(await response.arrayBuffer());
+
+  if (response.status === 409) {
+    // Decode only on error paths; cap so a large HTML 500/409 body cannot flood logs.
+    const rawText = new TextDecoder().decode(bytes).slice(0, 400);
+    throw new CarrierLabelsNotReadyError(
+      `Yandex Delivery generate labels failed: HTTP 409 ${rawText}`,
+    );
+  }
+
+  if (response.status !== 200) {
+    const rawText = new TextDecoder().decode(bytes).slice(0, 400);
+    throw new Error(
+      `Yandex Delivery generate labels failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  if (!bodyStartsWithPdfMagic(bytes)) {
+    throw new Error(
+      "Yandex Delivery generate labels failed: response is not a PDF",
+    );
+  }
+
+  const contentTypeHeader = response.headers.get("content-type");
+  const contentType =
+    contentTypeHeader && contentTypeHeader.length > 0
+      ? contentTypeHeader
+      : "application/pdf";
+
+  return { bytes, contentType };
 }
 
 /**

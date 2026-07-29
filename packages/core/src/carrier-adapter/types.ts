@@ -264,6 +264,15 @@ export type CarrierCancelOrderResult =
   | { ok: true; result: CarrierCancelResult }
   | { ok: false; reason: "order_not_found" };
 
+/**
+ * A shipping label / ярлык as raw bytes (Yandex other-day generate-labels
+ * returns application/pdf). Not a URL — the provider streams the document.
+ */
+export type CarrierLabelDocument = {
+  bytes: Uint8Array;
+  contentType: string;
+};
+
 export interface CarrierAdapter {
   providerKey: string;
   calculateQuotes(
@@ -310,6 +319,16 @@ export interface CarrierAdapter {
     providerOrderId: string,
     credentials: CarrierCredentials,
   ): Promise<CarrierCancelOrderResult>;
+  /**
+   * Optional: fetch shipping-label PDF bytes for provider order id(s).
+   * Absent on families with no label method (e.g. Yandex Express claims/*).
+   * `providerOrderIds` are the carrier's own ids (Yandex: request_id =
+   * Shipment.providerOrderId).
+   */
+  generateLabels?(
+    providerOrderIds: string[],
+    credentials: CarrierCredentials,
+  ): Promise<CarrierLabelDocument>;
 }
 
 export type {
