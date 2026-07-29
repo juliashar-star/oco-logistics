@@ -4,16 +4,7 @@ import {
   CarrierAuthError,
   CarrierLabelsNotReadyError,
 } from "@oco/core/carrier-adapter/errors";
-
-/**
- * Allow-list (not deny-list): a status added later must default to refusing,
- * not to serving a PDF. Only these three are known-safe for a printed label.
- *
- * CANCELED is refused on purpose: measured 29.07, the carrier DOES return a
- * PDF for a cancelled order — so this refusal is ours and deliberate. A
- * printed label on a cancelled order ends as a parcel nobody collects.
- */
-const LABEL_ALLOWED_STATUSES = new Set(["CREATED", "IN_TRANSIT", "AT_PVZ"]);
+import { isLabelAllowedStatus } from "@oco/core/carrier-adapter/order-adapter-label-support";
 
 export type ShipmentLabelRow = {
   id: string;
@@ -55,6 +46,9 @@ export type GetShipmentLabelResult =
  * Deps are required (no defaults to prisma / real adapters / network) so unit
  * tests need neither DB nor carrier. loadShipment MUST take both id and
  * companyId — scoping cannot be forgotten by a future caller.
+ *
+ * Status allow-list lives in order-adapter-label-support (shared with the
+ * list cell) — do not redeclare it here.
  */
 export async function getShipmentLabel(
   input: { shipmentId: string; companyId: string },
@@ -69,7 +63,7 @@ export async function getShipmentLabel(
     return { ok: false, reason: "no_carrier_order" };
   }
 
-  if (!LABEL_ALLOWED_STATUSES.has(row.status)) {
+  if (!isLabelAllowedStatus(row.status)) {
     return { ok: false, reason: "not_allowed_for_status" };
   }
 

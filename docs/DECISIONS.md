@@ -1572,3 +1572,14 @@ on next_day only; Express → `unsupported_service`. Allow-list CREATED/IN_TRANS
 measured 29.07) — printed label on cancelled order → uncollected parcel. `not_ready`
 carries no provider text. Filename from shipment id; `Cache-Control: no-store` (PDF has PII).
 Отвергли: lookup by providerKey; deny-list; serving CANCELED; anonymize-style fetch-then-compare.
+
+## 2026-07-29 · ЭТИКЕТКА cell via shipmentLabelCell; client-safe label support map
+
+List cell no longer keys off labelUrl alone (APIShip-only). Decision in
+`shipmentLabelCell` (shipment-list-labels): legacy http(s) URL + allow-list →
+external link; providerKey set (proxy for carrier order) + supportsLabel +
+allow-list → `/api/shipments/<id>/label`; Express → muted «не требуется» (not «—»).
+Allow-list + `orderAdapterSupportsLabel` live in client-safe
+`order-adapter-label-support` (shared with getShipmentLabel); must not import
+order-adapters. Drift test: every ORDER_ADAPTERS key ↔ support map.
+Отвергли: sending providerOrderId to the browser; duplicating allow-list in two files.

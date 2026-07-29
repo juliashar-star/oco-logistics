@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 import {
   shipmentCarrierLabel,
+  shipmentLabelCell,
   shipmentTariffLabel,
 } from "@/lib/shipments/shipment-list-labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
-import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -99,6 +99,39 @@ function formatDateTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function renderLabelCell(shipment: ShipmentRow) {
+  const label = shipmentLabelCell(shipment);
+  if (label.kind === "external") {
+    return (
+      <a
+        href={label.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        className="inline-flex rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        PDF
+      </a>
+    );
+  }
+  if (label.kind === "download") {
+    return (
+      <a
+        href={label.href}
+        download
+        onClick={(event) => event.stopPropagation()}
+        className="inline-flex rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        PDF
+      </a>
+    );
+  }
+  if (label.kind === "not_required") {
+    return <span className="text-sm text-slate-500">не требуется</span>;
+  }
+  return "—";
 }
 
 function ShipmentsSkeleton() {
@@ -494,21 +527,7 @@ export function ShipmentsPage() {
                         )}
                       </TableCell>
                       <TableCell>{formatPrice(shipment.plannedCost)}</TableCell>
-                      <TableCell>
-                        {isHttpOrHttpsUrl(shipment.labelUrl) ? (
-                          <a
-                            href={shipment.labelUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(event) => event.stopPropagation()}
-                            className="inline-flex rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            PDF
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
+                      <TableCell>{renderLabelCell(shipment)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
