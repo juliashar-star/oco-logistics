@@ -54,3 +54,14 @@ test("ORDER_ADAPTERS holds next_day and express with distinct titles; express co
       err.message === "Оформление этой услуги ещё не реализовано",
   );
 });
+
+test("next_day exposes generateLabels; express does not (labels resolve by orderAdapterKey)", () => {
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:next_day"].generateLabels,
+    "function",
+  );
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:express"].generateLabels,
+    "undefined",
+  );
+});

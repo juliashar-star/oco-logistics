@@ -1560,3 +1560,15 @@ method, so a required method would force a lie. ORDER_ADAPTERS untouched.
 HTTP 409 (fabricated id and not-yet-ready order are **identical** on tst) maps to
 `CarrierLabelsNotReadyError`; the provider «try again later» text is for logs only,
 never the seller UI. A 200 without `%PDF` magic is rejected.
+
+## 2026-07-29 · GET label route + getShipmentLabel; optional generateLabels on OrderAdapter
+
+Seller downloads one shipment's PDF via `GET /api/shipments/[id]/label`. Decisions
+live in `getShipmentLabel` (injectable deps, same shape as listPickupPointsForCompany);
+route only scopes + maps reasons. Resolve by `resolveOrderAdapter(orderAdapterKey)` —
+never `providerKey` (next_day/express both `yataxi`). Optional `OrderAdapter.generateLabels`
+on next_day only; Express → `unsupported_service`. Allow-list CREATED/IN_TRANSIT/AT_PVZ
+(new statuses default refuse). CANCELED refused deliberately (carrier would serve PDF;
+measured 29.07) — printed label on cancelled order → uncollected parcel. `not_ready`
+carries no provider text. Filename from shipment id; `Cache-Control: no-store` (PDF has PII).
+Отвергли: lookup by providerKey; deny-list; serving CANCELED; anonymize-style fetch-then-compare.

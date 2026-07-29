@@ -31,6 +31,12 @@ export type OrderAdapter = {
   getOffers: CarrierAdapter["getOffers"];
   confirmOffer: CarrierAdapter["confirmOffer"];
   cancelOrder: CarrierAdapter["cancelOrder"];
+  /**
+   * Optional: shipping-label PDF. Absent on families with no label method
+   * (e.g. Express claims/*). Looked up by orderAdapterKey — never by
+   * providerKey alone (next_day and express share "yataxi").
+   */
+  generateLabels?: CarrierAdapter["generateLabels"];
 };
 
 export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
@@ -41,6 +47,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
+    generateLabels: yandexAdapter.generateLabels,
   },
   "yataxi:express": {
     key: "yataxi:express",
@@ -53,6 +60,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     cancelOrder: async () => {
       throw new Error("Оформление этой услуги ещё не реализовано");
     },
+    // No generateLabels — Express claims/* has no label endpoint.
   },
 };
 
