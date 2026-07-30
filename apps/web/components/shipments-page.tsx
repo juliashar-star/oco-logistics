@@ -11,6 +11,7 @@ import {
   shipmentTariffLabel,
 } from "@/lib/shipments/shipment-list-labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
+import { handoverActCandidates } from "@/lib/shipments/handover-act-candidates";
 import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -164,6 +165,10 @@ export function ShipmentsPage() {
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [actPanelOpen, setActPanelOpen] = useState(false);
+  const [actSelectedIds, setActSelectedIds] = useState<Set<string>>(() => new Set());
+  const [actDownloading, setActDownloading] = useState(false);
+  const [actError, setActError] = useState<string | null>(null);
   const [selectedShipment, setSelectedShipment] = useState<ShipmentRow | null>(null);
   const [events, setEvents] = useState<TrackingEventRow[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -380,6 +385,98 @@ export function ShipmentsPage() {
     }
   };
 
+  const actCandidates = handoverActCandidates(shipments);
+  const actSelectedCount = actCandidates.filter((c) =>
+    actSelectedIds.has(c.row.id),
+  ).length;
+
+  useEffect(() => {
+    if (!actPanelOpen) return;
+    // Re-seed when the loaded page changes while the panel is open (filter,
+    // track search, status sync). Preserving manual unchecks across a list
+    // the seller just replaced would leave new CREATED rows unchecked and
+    // contradict the pre-checked design — they changed what they are looking
+    // at, so the panel reflects sensible defaults for that page.
+    setActSelectedIds(
+      new Set(
+        handoverActCandidates(shipments)
+          .filter((c) => c.initiallyChecked)
+          .map((c) => c.row.id),
+      ),
+    );
+  }, [actPanelOpen, shipments]);
+
+  function openActPanel() {
+    setActError(null);
+    setActPanelOpen(true);
+  }
+
+  function toggleActPanel() {
+    if (actPanelOpen) {
+      setActPanelOpen(false);
+      return;
+    }
+    openActPanel();
+  }
+
+  function toggleActSelection(id: string) {
+    setActSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const handleDownloadHandoverAct = async () => {
+    const shipmentIds = actCandidates
+      .filter((c) => actSelectedIds.has(c.row.id))
+      .map((c) => c.row.id);
+    if (shipmentIds.length === 0) return;
+
+    setActDownloading(true);
+    setActError(null);
+
+    try {
+      const response = await fetch("/api/shipments/handover-act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipmentIds }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setActError(
+          typeof data.error === "string"
+            ? data.error
+            : "Не удалось получить акт. Попробуйте позже.",
+        );
+        return;
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? "handover-act.pdf";
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setActError("Не удалось получить акт. Попробуйте позже.");
+    } finally {
+      setActDownloading(false);
+    }
+  };
+
   return (
     <>
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -426,8 +523,90 @@ export function ShipmentsPage() {
             >
               {syncing ? "Обновляем..." : "Обновить статусы"}
             </button>
+            <button
+              type="button"
+              onClick={toggleActPanel}
+              aria-expanded={actPanelOpen}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-text-2 hover:bg-surface-2"
+            >
+              Акт приёма-передачи
+            </button>
           </div>
         </div>
+
+        {actPanelOpen && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            {actCandidates.length === 0 ? (
+              <p className="text-sm text-slate-600">
+                На этой странице нет отправлений со статусом «Создано» или «В
+                пути». Отфильтруйте список по «Создано», если нужно увидеть
+                больше.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {actCandidates.map(({ row }) => {
+                  const checked = actSelectedIds.has(row.id);
+                  const inTransit = row.status === "IN_TRANSIT";
+                  return (
+                    <li key={row.id}>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-900 hover:bg-slate-100">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleActSelection(row.id)}
+                          className="mt-1"
+                        />
+                        <span className="min-w-0 flex-1">
+                          {row.trackNumber ? (
+                            <span className="font-mono font-medium">
+                              {row.trackNumber}
+                            </span>
+                          ) : (
+                            <span className="font-medium">
+                              {formatDateTime(row.createdAt)}
+                              {row.destCity ? ` · ${row.destCity}` : ""}
+                            </span>
+                          )}
+                          <span className="mt-0.5 block text-slate-600">
+                            {row.recipientName}
+                          </span>
+                          {inTransit && (
+                            <span className="mt-0.5 block text-xs text-amber-700">
+                              уже в пути
+                            </span>
+                          )}
+                        </span>
+                        <Badge className={STATUS_BADGE_CLASS[row.status]}>
+                          {STATUS_LABELS[row.status]}
+                        </Badge>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <p className="mt-3 text-sm text-slate-600">
+              Выбрано отправлений: {actSelectedCount}. Показаны отправления с
+              текущей страницы списка
+              {actCandidates.length > 0
+                ? " — отфильтруйте по «Создано», если нужны ещё"
+                : ""}
+              .
+            </p>
+
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => void handleDownloadHandoverAct()}
+                disabled={actSelectedCount === 0 || actDownloading}
+                className="rounded-lg border border-border bg-white px-4 py-2 text-sm text-text-2 hover:bg-surface-2 disabled:opacity-60"
+              >
+                {actDownloading ? "Скачиваем..." : "Скачать акт"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {syncNotice && (
           <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
@@ -444,6 +623,12 @@ export function ShipmentsPage() {
         {exportError && (
           <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
             {exportError}
+          </p>
+        )}
+
+        {actError && (
+          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+            {actError}
           </p>
         )}
 

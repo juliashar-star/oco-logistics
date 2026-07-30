@@ -1709,3 +1709,20 @@ sign. CANCELED refused even though Yandex serves acts for cancelled orders
 offending `shipmentIds` (before credentials). Route → 400 with count + those
 ids only.
 Отвергли: reusing the label allow-list; silent drop of bad rows; AT_PVZ on the act.
+
+## 2026-07-30 · handover-act UI — expanding panel, not a modal
+
+Third header button «Акт приёма-передачи» toggles a panel under the toolbar
+(no modal: repo has no reusable dialog, and a selection list does not need
+focus-trap / Escape / scroll-lock). Candidates come from the loaded page only
+(`limit` 50) via pure `handoverActCandidates` — CREATED pre-checked, IN_TRANSIT
+unchecked with «уже в пути»; server remains the authority on refuse rules.
+A candidate also requires a carrier order: `providerKey != null`, the same
+proxy `shipmentLabelCell` already uses (both columns written together in
+submit-order.ts; legacy APIShip rows have neither). One row without a carrier
+order makes the server refuse the whole act (`no_carrier_order`), so the panel
+must not offer what will be rejected — without adding a second DTO field.
+Download reuses the CSV blob → `<a download>` path with POST body; errors use
+the same red inline banner as sync/export.
+Отвергли: new modal component; client-side re-check of status/cap/mix; hardcoded filename;
+widening the list DTO with providerOrderId.
