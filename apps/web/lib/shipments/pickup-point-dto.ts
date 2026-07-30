@@ -13,6 +13,7 @@ export type PickupPointDto = {
   latitude: number;
   longitude: number;
   kind: CarrierPickupPointKind;
+  isDarkStore: boolean;
 };
 
 export type CarrierDto = {
@@ -48,6 +49,7 @@ export function toPickupPointsResponse(
       latitude: point.latitude,
       longitude: point.longitude,
       kind: point.kind,
+      isDarkStore: point.isDarkStore,
     })),
     carriers: result.carriers.map((carrier) => {
       if (carrier.resolvedLocation) {

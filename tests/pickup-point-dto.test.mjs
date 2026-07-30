@@ -12,6 +12,7 @@ const EXPECTED_POINT_KEYS = [
   "latitude",
   "longitude",
   "kind",
+  "isDarkStore",
 ];
 
 test("mapped point key set is exactly the DTO fields (catches future spread of rawPoint)", () => {
@@ -39,6 +40,7 @@ test("mapped point key set is exactly the DTO fields (catches future spread of r
 
   assert.deepEqual(Object.keys(response.points[0]), EXPECTED_POINT_KEYS);
   assert.equal(response.points[0].kind, "pickup_point");
+  assert.equal(response.points[0].isDarkStore, false);
 });
 
 test("fat rawPoint and code never appear in serialized response", () => {

@@ -46,3 +46,75 @@ test("unknown keeps name — address (no prefix)", () => {
     "Точка — Адрес",
   );
 });
+
+test("non-darkstore postamat is byte-identical to today's kind-only label", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Постамат Яндекс Маркет",
+      address: "ул. Арбат, 10",
+      isDarkStore: false,
+    }),
+    "Постамат — Постамат Яндекс Маркет — ул. Арбат, 10",
+  );
+});
+
+test("non-darkstore pickup_point stays unprefixed (byte-identical)", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+      isDarkStore: false,
+    }),
+    "Пункт на Тверской — ул. Тверская, 1",
+  );
+});
+
+test("darkstore postamat: mark on kind word at start", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Лучше чем МП",
+      address: "Москва, 2-й Карачаровский проезд 1",
+      isDarkStore: true,
+    }),
+    "Постамат (даркстор) — Лучше чем МП — Москва, 2-й Карачаровский проезд 1",
+  );
+});
+
+test("darkstore warehouse: Склад (даркстор) — …", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "warehouse",
+      name: "Склад Яндекс",
+      address: "ул. Складская, 5",
+      isDarkStore: true,
+    }),
+    "Склад (даркстор) — Склад Яндекс — ул. Складская, 5",
+  );
+});
+
+test("darkstore pickup_point: Пункт выдачи (даркстор) — …", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+      isDarkStore: true,
+    }),
+    "Пункт выдачи (даркстор) — Пункт на Тверской — ул. Тверская, 1",
+  );
+});
+
+test("darkstore unknown: bare Даркстор — …", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "unknown",
+      name: "Точка",
+      address: "Адрес",
+      isDarkStore: true,
+    }),
+    "Даркстор — Точка — Адрес",
+  );
+});

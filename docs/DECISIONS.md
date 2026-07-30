@@ -1602,3 +1602,14 @@ Yandex list quality fields (`is_dark_store`, `deactivation_date`, `dayoffs`,
 our PVZ is buyer destination; tst 19/809 true would discard most points.
 Отвергли: filtering by dropoff; Date math/formatting in this slice; removing the
 unchecked list cast (separate cleanup).
+
+## 2026-07-30 · darkstore mark on PVZ option label; isDarkStore crosses DTO only
+
+Seller sees «(даркстор)» attached to the kind word at the START of the option
+label (not trailing — `<select>` truncates long options by width, so a trailing
+mark vanishes first). Kind prefix unchanged as a venue kind; darkstore is a
+mark beside it. pickup_point gains «Пункт выдачи» only when marked.
+DTO gains only `isDarkStore` — dayOffs / deactivationDate / schedule / rawPoint
+stay server-side. No filter/hide/sort: Yandex docs say only «Признак даркстора»;
+whether a buyer may collect is unproven, so we mark the fact and claim nothing.
+Отвергли: trailing mark; replacing kind with «Даркстор»; filtering darkstores out.
