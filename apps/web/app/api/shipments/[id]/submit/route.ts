@@ -236,7 +236,13 @@ export const POST = withAuth<{ id: string }>(
       });
 
       if (result.ok) {
-        return NextResponse.json({ ok: true, requestId: result.requestId });
+        return NextResponse.json({
+          ok: true,
+          requestId: result.requestId,
+          status: result.status,
+          providerKey: result.providerKey,
+          orderAdapterKey: result.orderAdapterKey,
+        });
       }
 
       if (result.stage === "capture") {

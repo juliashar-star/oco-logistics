@@ -1583,3 +1583,11 @@ Allow-list + `orderAdapterSupportsLabel` live in client-safe
 `order-adapter-label-support` (shared with getShipmentLabel); must not import
 order-adapters. Drift test: every ORDER_ADAPTERS key ↔ support map.
 Отвергли: sending providerOrderId to the browser; duplicating allow-list in two files.
+
+## 2026-07-30 · direct-path success banner label — submitOrder/route return status+providerKey+orderAdapterKey; form calls shipmentLabelCell; download-only, no «не требуется».
+
+Почему: createResult-баннер с labelUrl на DIRECT-пути недостижим; строка уже
+CREATED при ответе, этикетка доступна сразу. Одна pure-функция со списком —
+не второй решатель. «не требуется» в баннере успеха не нужно (в отличие от
+колонки таблицы). providerOrderId в JSON не отдаём — браузеру не нужен.
+Отвергли: переписывать мёртвый createResult-баннер; дублировать решение этикетки.

@@ -198,7 +198,13 @@ describe("submitOrder", { concurrency: false }, () => {
       },
     });
 
-    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:next_day",
+    });
 
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
@@ -247,7 +253,13 @@ describe("submitOrder", { concurrency: false }, () => {
       }),
     });
 
-    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:next_day",
+    });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
     assert.ok(row.plannedDeliveryDate instanceof Date);
@@ -502,7 +514,13 @@ describe("submitOrder", { concurrency: false }, () => {
       }),
     });
 
-    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: "yataxi",
+      orderAdapterKey: adapterKey,
+    });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
     assert.equal(row.orderAdapterKey, adapterKey);
@@ -534,7 +552,13 @@ describe("submitOrder", { concurrency: false }, () => {
       }),
     });
 
-    assert.deepEqual(result, { ok: true, requestId: REQUEST_ID });
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: adapter.providerKey,
+      orderAdapterKey: adapter.key,
+    });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
     assert.equal(row.orderAdapterKey, DEFAULT_ORDER_ADAPTER.key);

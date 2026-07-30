@@ -16,6 +16,8 @@ import { formatPickupPointOptionLabel } from "@/lib/shipments/format-pickup-poin
 import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
+import { parseSubmitSuccessLabelFields } from "@/lib/shipments/parse-submit-success-label-fields";
+import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 
 type RankTag = "fast" | "cheap" | "optimal";
@@ -47,6 +49,9 @@ type YandexSubmitResult = {
   requestId: string;
   deliveryDayLabel: string;
   priceRub: number;
+  status: string;
+  providerKey: string | null;
+  orderAdapterKey: string | null;
 };
 
 /** Yandex pickup-points list row (browser DTO). */
@@ -743,6 +748,7 @@ export function NewOrderForm() {
 
       const requestId =
         typeof data.requestId === "string" ? data.requestId : "";
+      const labelFields = parseSubmitSuccessLabelFields(data);
       setIdempotencyKey(crypto.randomUUID());
       setYandexSubmitResult({
         shipmentId: draftShipmentId,
@@ -753,6 +759,7 @@ export function NewOrderForm() {
           new Date(),
         ),
         priceRub: selectedOffer.priceRub,
+        ...labelFields,
       });
     } catch {
       setError("Не удалось связаться с сервером");
@@ -1215,6 +1222,29 @@ export function NewOrderForm() {
                     {yandexSubmitResult.priceRub.toLocaleString("ru-RU")} ₽
                   </strong>
                 </p>
+                {(() => {
+                  const label = shipmentLabelCell({
+                    id: yandexSubmitResult.shipmentId,
+                    status: yandexSubmitResult.status,
+                    labelUrl: null,
+                    providerKey: yandexSubmitResult.providerKey,
+                    orderAdapterKey: yandexSubmitResult.orderAdapterKey,
+                  });
+                  if (label.kind !== "download") {
+                    return null;
+                  }
+                  return (
+                    <p>
+                      <a
+                        href={label.href}
+                        download
+                        className="font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-950"
+                      >
+                        Скачать этикетку (PDF)
+                      </a>
+                    </p>
+                  );
+                })()}
                 <Link
                   href="/shipments"
                   className="inline-flex font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-950"

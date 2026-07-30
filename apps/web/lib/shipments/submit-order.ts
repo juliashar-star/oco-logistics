@@ -37,7 +37,13 @@ export type SubmitOrderArgs = {
 };
 
 export type SubmitOrderResult =
-  | { ok: true; requestId: string }
+  | {
+      ok: true;
+      requestId: string;
+      status: "CREATED";
+      providerKey: string;
+      orderAdapterKey: string;
+    }
   | { ok: false; stage: "capture"; reason: "not_found" | "not_draft" }
   | {
       ok: false;
@@ -144,7 +150,13 @@ export async function submitOrder(
           plannedCost: Math.round(offer.priceRub * 100),
         },
       });
-      return { ok: true, requestId };
+      return {
+        ok: true,
+        requestId,
+        status: "CREATED",
+        providerKey,
+        orderAdapterKey,
+      };
     } catch {
       try {
         await prisma.shipment.updateMany({
