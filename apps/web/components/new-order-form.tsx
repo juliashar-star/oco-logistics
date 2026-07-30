@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
@@ -13,6 +13,10 @@ import {
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import { formatPickupPointOptionLabel } from "@/lib/shipments/format-pickup-point-option-label";
+import {
+  pickupPointFilterStatusLine,
+  visiblePickupPointOptions,
+} from "@/lib/shipments/visible-pickup-point-options";
 import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
@@ -132,6 +136,28 @@ export function NewOrderForm() {
   const [points, setPoints] = useState<YandexPickupPoint[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
+  const [pointsFilterQuery, setPointsFilterQuery] = useState("");
+  const labeledPoints = useMemo(
+    () =>
+      points.map((point) => ({
+        point,
+        label: formatPickupPointOptionLabel(point),
+      })),
+    [points],
+  );
+  const visiblePickup = useMemo(
+    () =>
+      visiblePickupPointOptions(labeledPoints, pointsFilterQuery, pointOutId),
+    [labeledPoints, pointsFilterQuery, pointOutId],
+  );
+  const pointsFilterStatus = pickupPointFilterStatusLine(
+    visiblePickup,
+    pointsFilterQuery,
+    points.length,
+  );
+  const selectedPointLabel = pointOutId
+    ? labeledPoints.find(({ point }) => point.id === pointOutId)?.label
+    : undefined;
   const [senderConfigured, setSenderConfigured] = useState(true);
   const [senderCity, setSenderCity] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -279,6 +305,7 @@ export function NewOrderForm() {
     if (!trimmed) {
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError("");
       return;
     }
@@ -286,6 +313,7 @@ export function NewOrderForm() {
     if (trimmed.length < MIN_CITY_LENGTH_FOR_PVZ) {
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError("Введите полное название города (минимум 3 символа)");
       return;
     }
@@ -306,6 +334,7 @@ export function NewOrderForm() {
       if (!response.ok) {
         setPoints([]);
         setPointOutId("");
+        setPointsFilterQuery("");
         setPointsError(
           typeof data.error === "string"
             ? data.error
@@ -317,6 +346,7 @@ export function NewOrderForm() {
       const nextPoints = data.points ?? [];
       setPoints(nextPoints);
       setPointOutId("");
+      setPointsFilterQuery("");
       if (nextPoints.length === 0) {
         setPointsError(describeEmptyPickupPoints(data.carriers));
       }
@@ -326,6 +356,7 @@ export function NewOrderForm() {
       }
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError("Не удалось загрузить список ПВЗ");
     } finally {
       if (requestId === pointsRequestId.current) {
@@ -339,6 +370,7 @@ export function NewOrderForm() {
       pointsRequestId.current += 1;
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError("");
       setPointsLoading(false);
       return;
@@ -349,6 +381,7 @@ export function NewOrderForm() {
       pointsRequestId.current += 1;
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError(DEST_CITY_PICK_REQUIRED);
       setPointsLoading(false);
       return;
@@ -358,6 +391,7 @@ export function NewOrderForm() {
     if (trimmed.length < MIN_CITY_LENGTH_FOR_PVZ) {
       setPoints([]);
       setPointOutId("");
+      setPointsFilterQuery("");
       setPointsError("");
       return;
     }
@@ -860,9 +894,35 @@ export function NewOrderForm() {
             <p className="mb-2 text-xs text-slate-500">
               Список пунктов выдачи загружается по городу назначения.
             </p>
+            <div className="mb-2">
+              <label
+                htmlFor="pickup-point-filter"
+                className="mb-1 block text-sm font-medium text-slate-700"
+              >
+                Фильтр по адресу или названию
+              </label>
+              <input
+                id="pickup-point-filter"
+                type="text"
+                value={pointsFilterQuery}
+                onChange={(e) => setPointsFilterQuery(e.target.value)}
+                disabled={pointsLoading || points.length === 0}
+                placeholder="Несколько слов — все должны совпасть, порядок не важен"
+                autoComplete="off"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-50"
+              />
+              {pointsFilterStatus && (
+                <p className="mt-1 text-xs text-slate-500">{pointsFilterStatus}</p>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
+              {/* size = 1 + rendered options, capped at 3: empty stays single-line;
+                  one match → two rows; two+ → three and never grows. The third row
+                  budget includes «Выберите пункт выдачи», which cannot be dropped —
+                  it is how a seller clears a choice. */}
               <select
                 required
+                size={Math.min(1 + visiblePickup.options.length, 3)}
                 value={pointOutId}
                 onChange={(e) => setPointOutId(e.target.value)}
                 disabled={pointsLoading || points.length === 0}
@@ -875,9 +935,9 @@ export function NewOrderForm() {
                       ? "Сначала загрузите список ПВЗ"
                       : "Выберите пункт выдачи"}
                 </option>
-                {points.map((point) => (
+                {visiblePickup.options.map(({ point, label }) => (
                   <option key={point.id} value={point.id}>
-                    {formatPickupPointOptionLabel(point)}
+                    {label}
                   </option>
                 ))}
               </select>
@@ -900,6 +960,10 @@ export function NewOrderForm() {
                 {pointsLoading ? "Загрузка..." : "Загрузить ПВЗ"}
               </button>
             </div>
+            {/* Reserved slot: confirmation only when selected; min-height keeps the block from jumping. */}
+            <p className="mt-2 min-h-5 text-xs leading-5 text-slate-500 break-words">
+              {selectedPointLabel ? `Выбрано: ${selectedPointLabel}` : null}
+            </p>
             {pointsError && (
               <p className="mt-2 text-sm text-red-700" role="alert">
                 {pointsError}

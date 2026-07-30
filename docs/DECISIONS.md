@@ -1613,3 +1613,54 @@ DTO gains only `isDarkStore` — dayOffs / deactivationDate / schedule / rawPoin
 stay server-side. No filter/hide/sort: Yandex docs say only «Признак даркстора»;
 whether a buyer may collect is unproven, so we mark the fact and claim nothing.
 Отвергли: trailing mark; replacing kind with «Даркстор»; filtering darkstores out.
+
+## 2026-07-30 · PVZ text filter (S3): client-side list over the visible label
+
+The seller picks a pickup point from a list with a client-side text filter, as
+the 2026-07-14 ADR decided («из СПИСКА точек с текстовым фильтром») but never
+built. Production Moscow returns 3586 points in a plain select with no cap.
+
+The filter is CLIENT-side. Not taste: Yandex's pickup-points/list has NO
+text-search parameter, so a server-side filter would still fetch the whole list
+and would do it on every keystroke — no lighter wire, and the carrier hammered
+instead. The response is ~229 KiB for 809 points on tst, fetched once per city.
+
+The matcher is a PURE exported function taking an ALREADY-FORMATTED label,
+because the same choice will later be made by a buyer in a checkout widget, and
+it matches the string the user actually sees (formatPickupPointOptionLabel).
+Tokens split on whitespace; every token must match; order irrelevant;
+case-insensitive; «ё» folded to «е».
+
+The visibility decision is a SEPARATE pure function, because the property that
+matters — a chosen point never disappears when the filter excludes it — was
+otherwise untested logic inline in a useMemo. The pin is load-bearing, not a
+convenience: the `<select>` carries `required`, so if the selected id is absent
+from the options the DOM value becomes empty and the browser SILENTLY BLOCKS
+submission — the seller would hold a point in state, see «Выбрано: …», and be
+unable to create the order. The excluded selection is pinned LAST so matches
+occupy the visible rows; the «Выбрано: …» line below the list confirms the held
+choice, so the pin does not need to be near the top.
+
+The two functions were split so «did it match» is decided once. The status line
+reports MATCHES, never rendered rows: the first draft reported rendered rows,
+and with a pinned non-match it read «Показано 2 из 809» when one point matched —
+the founder read that as a second hit and asked what the unrelated street had to
+do with her query.
+
+The control is a VISIBLE LIST (`size`), not a dropdown. Height is
+`size = min(1 + rendered options, 3)`: an empty list stays a single-line control,
+one option gives two rows, two or more gives three and never grows. The row
+budget includes «Выберите пункт выдачи», which cannot be dropped — it is how a
+seller clears a choice. A filter whose results stay hidden inside a collapsed
+control is half a filter.
+
+A «Выбрано: …» line beneath the list, because a listbox shows the options but
+barely shows the CHOICE — its highlight reads as hover and fades to grey on
+blur. It is also the only place the full label is readable, since the option row
+is cut by the control's width.
+
+Отвергли: filtering on the server; matching raw fields instead of the visible
+label; keeping the dropdown; leaving the visibility rule inside the component;
+reporting rendered rows instead of matches; pinning the selection first; a fixed
+tall list; an unconditional `size` that leaves an empty box before a city is
+entered.
