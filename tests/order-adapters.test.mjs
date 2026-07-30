@@ -65,3 +65,14 @@ test("next_day exposes generateLabels; express does not (labels resolve by order
     "undefined",
   );
 });
+
+test("next_day exposes getHandoverAct; express does not (act resolves by orderAdapterKey)", () => {
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:next_day"].getHandoverAct,
+    "function",
+  );
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:express"].getHandoverAct,
+    "undefined",
+  );
+});

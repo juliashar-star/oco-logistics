@@ -1664,3 +1664,48 @@ label; keeping the dropdown; leaving the visibility rule inside the component;
 reporting rendered rows instead of matches; pinning the selection first; a fixed
 tall list; an unconditional `size` that leaves an empty box before a city is
 entered.
+
+## 2026-07-30 · getHandoverAct optional on CarrierAdapter / OrderAdapter; POST handover-act
+
+Yandex other-day `POST /request/get-handover-act` returns raw PDF bytes (measured
+tst 2026-07-30: `%PDF-1.7`; does not write order state; CANCELED still gets an
+act; empty body `{}` silently returns an act over everything not yet shipped —
+so we refuse empty `providerOrderIds` BEFORE the call). Wired as **optional**
+`CarrierAdapter.getHandoverAct` / `OrderAdapter.getHandoverAct` on
+`yataxi:next_day` only — Express claims/* has no act. No general «document»
+abstraction: CDEK print forms are asynchronous with a readiness event; widen
+once when both shapes are visible.
+
+Seller downloads via `POST /api/shipments/handover-act` with `{ shipmentIds }`.
+Decisions in `getShipmentsHandoverAct` (injectable deps, same shape as
+getShipmentLabel); loader takes ids **and** companyId. Any missing/foreign id or
+blank `providerOrderId` → hard refuse (do not silently drop rows from a signed
+act). Resolve by `orderAdapterKey`, never `providerKey`. Only explicit
+`request_ids` — never `new_requests` / `editable_format`. Filename
+`handover-act.pdf` (no PII); `Cache-Control: no-store`.
+Отвергли: UI/selection this slice; marking «was on an act»; empty-body / new_requests;
+lookup by providerKey; serving a Word (`editable_format`) response.
+
+## 2026-07-30 · handover-act filename dated; selection cap 100
+
+Attachment is `handover-act-YYYY-MM-DD.pdf` from the Moscow calendar day
+(`handoverActFilename` pure) — signed acts must stay findable months later;
+a constant name becomes `handover-act (1).pdf` in Downloads. Cap
+`HANDOVER_ACT_SELECTION_LIMIT = 100` in the service (not the route): Yandex
+documents no limit of its own; ours is protective against accidental select-all
+and an unreviewable signed multi-page act. Refusal carries selected + limit for
+the seller message.
+Отвергли: constant filename; capping only in the route; relying on carrier size.
+
+## 2026-07-30 · handover-act status gate (CREATED + IN_TRANSIT only)
+
+`getShipmentsHandoverAct` refuses any status outside its **own** allow-list
+`HANDOVER_ACT_ALLOWED_STATUSES` = {CREATED, IN_TRANSIT}. Not
+`isLabelAllowedStatus`: label asks «may a sticker be printed», act asks «is
+this being handed over right now». IN_TRANSIT kept deliberately — lagging sync
+can leave a parcel in the seller's hands; they must still put it on the act they
+sign. CANCELED refused even though Yandex serves acts for cancelled orders
+(measured): the act is signed. Refusal `not_allowed_for_status` names every
+offending `shipmentIds` (before credentials). Route → 400 with count + those
+ids only.
+Отвергли: reusing the label allow-list; silent drop of bad rows; AT_PVZ on the act.

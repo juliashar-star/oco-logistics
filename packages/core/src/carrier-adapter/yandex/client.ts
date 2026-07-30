@@ -1049,6 +1049,64 @@ export async function generateLabels(
 }
 
 /**
+ * POST /request/get-handover-act — акт приёма-передачи PDF for request_id(s).
+ *
+ * Measured (tst 2026-07-30): 200 application/pdf beginning %PDF-1.7; does NOT
+ * write order state (request/info status unchanged after generate); CANCELED
+ * orders still get an act. An EMPTY body `{}` also returns 200 with a document
+ * covering everything not yet shipped — the documented «at least one criterion»
+ * rule is NOT enforced — so we REJECT an empty providerOrderIds array BEFORE
+ * the call. Never send `new_requests` (sandbox returned thousands of orders).
+ * Never send `editable_format` (Word; magic check would reject).
+ *
+ * providerOrderIds are Yandex request_id values (= Shipment.providerOrderId).
+ * 401/403 → YandexAuthError from transport. Other non-200 → Error.
+ * 200 without %PDF magic → Error.
+ */
+export async function getHandoverAct(
+  providerOrderIds: string[],
+  credentials: CarrierCredentials,
+): Promise<CarrierLabelDocument> {
+  // Empty array / empty body would silently yield an act over every not-yet-
+  // shipped order on the account — a plausible wrong document the seller signs.
+  if (providerOrderIds.length === 0) {
+    throw new Error(
+      "Yandex Delivery get handover act failed: providerOrderIds must not be empty",
+    );
+  }
+
+  const creds = assertYandexCredentials(credentials);
+
+  const response = await yandexPost(
+    creds,
+    "/api/b2b/platform/request/get-handover-act",
+    { request_ids: providerOrderIds },
+  );
+  const bytes = new Uint8Array(await response.arrayBuffer());
+
+  if (response.status !== 200) {
+    const rawText = new TextDecoder().decode(bytes).slice(0, 400);
+    throw new Error(
+      `Yandex Delivery get handover act failed: HTTP ${response.status} ${rawText}`,
+    );
+  }
+
+  if (!bodyStartsWithPdfMagic(bytes)) {
+    throw new Error(
+      "Yandex Delivery get handover act failed: response is not a PDF",
+    );
+  }
+
+  const contentTypeHeader = response.headers.get("content-type");
+  const contentType =
+    contentTypeHeader && contentTypeHeader.length > 0
+      ? contentTypeHeader
+      : "application/pdf";
+
+  return { bytes, contentType };
+}
+
+/**
  * ⚠️ DO NOT WIRE THIS INTO ANY ROUTE YET — INCOMPLETE.
  *
  * This uses POST /request/create, which returns a request_id but

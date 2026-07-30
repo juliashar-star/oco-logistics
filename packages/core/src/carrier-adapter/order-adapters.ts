@@ -37,6 +37,11 @@ export type OrderAdapter = {
    * providerKey alone (next_day and express share "yataxi").
    */
   generateLabels?: CarrierAdapter["generateLabels"];
+  /**
+   * Optional: акт приёма-передачи PDF. Other-day only today; Express has none.
+   * Looked up by orderAdapterKey — never by providerKey alone.
+   */
+  getHandoverAct?: CarrierAdapter["getHandoverAct"];
 };
 
 export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
@@ -48,6 +53,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
     generateLabels: yandexAdapter.generateLabels,
+    getHandoverAct: yandexAdapter.getHandoverAct,
   },
   "yataxi:express": {
     key: "yataxi:express",
@@ -60,7 +66,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     cancelOrder: async () => {
       throw new Error("Оформление этой услуги ещё не реализовано");
     },
-    // No generateLabels — Express claims/* has no label endpoint.
+    // No generateLabels / getHandoverAct — Express claims/* has neither.
   },
 };
 

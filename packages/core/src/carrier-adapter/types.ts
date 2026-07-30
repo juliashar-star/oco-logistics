@@ -361,6 +361,18 @@ export interface CarrierAdapter {
     providerOrderIds: string[],
     credentials: CarrierCredentials,
   ): Promise<CarrierLabelDocument>;
+  /**
+   * Optional: акт приёма-передачи PDF for provider order id(s).
+   * Yandex other-day only today (`POST /request/get-handover-act`).
+   * Absent on Express claims/*. Do NOT invent a general «document» abstraction
+   * here: CDEK print forms are asynchronous with a readiness event, so the
+   * contract widens once later when both shapes are visible.
+   * `providerOrderIds` = carrier request_id (= Shipment.providerOrderId).
+   */
+  getHandoverAct?(
+    providerOrderIds: string[],
+    credentials: CarrierCredentials,
+  ): Promise<CarrierLabelDocument>;
 }
 
 export type {
