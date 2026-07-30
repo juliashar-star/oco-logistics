@@ -485,27 +485,44 @@ export function ShipmentsPage() {
           Все заказы вашей компании — статус, трек-номер и этикетка.
         </p>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <select
-            value={status}
-            onChange={(event) =>
-              setStatus(event.target.value as ShipmentStatus | "")
-            }
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value || "all"} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <Input
-            type="search"
-            placeholder="Поиск по трек-номеру"
-            value={trackInput}
-            onChange={(event) => setTrackInput(event.target.value)}
-            className="sm:max-w-xs"
-          />
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div>
+            <label
+              htmlFor="shipments-status-filter"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
+              Статус
+            </label>
+            <select
+              id="shipments-status-filter"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as ShipmentStatus | "")
+              }
+              className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:max-w-xs sm:flex-1">
+            <label
+              htmlFor="shipments-track-search"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
+              Поиск по трек-номеру
+            </label>
+            <Input
+              id="shipments-track-search"
+              type="search"
+              placeholder="часть номера"
+              value={trackInput}
+              onChange={(event) => setTrackInput(event.target.value)}
+            />
+          </div>
           <div className="flex gap-2 sm:ml-auto">
             <button
               type="button"
