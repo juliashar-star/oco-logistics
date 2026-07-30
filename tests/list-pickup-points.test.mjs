@@ -23,6 +23,10 @@ function makePoints(providerKey, pointOverrides) {
     latitude: partial.latitude ?? 55.75,
     longitude: partial.longitude ?? 37.62,
     kind: partial.kind ?? "pickup_point",
+    isDarkStore: partial.isDarkStore ?? false,
+    deactivationDate: partial.deactivationDate ?? null,
+    dayOffs: partial.dayOffs ?? [],
+    schedule: partial.schedule ?? null,
   }));
 }
 

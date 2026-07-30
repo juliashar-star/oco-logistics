@@ -24,6 +24,7 @@ import {
 } from "../errors";
 import { parseRublePrice } from "@oco/core/carrier-adapter/yandex/parse-price";
 import { mapYandexPickupPointTypeToKind } from "./map-pickup-point-kind";
+import { mapYandexPickupPointQuality } from "./map-pickup-point-quality";
 import {
   YandexAuthError,
   assertYandexCredentials as assertYandexCredentialsTransport,
@@ -108,9 +109,15 @@ type YandexPickupPoint = {
   type: string;
   position: { latitude: number; longitude: number };
   address: { locality: string; full_address: string };
+  /** Optional on the wire — read via mapYandexPickupPointQuality, never required. */
+  is_dark_store?: unknown;
+  deactivation_date?: unknown;
+  dayoffs?: unknown;
+  schedule?: unknown;
 };
 
 function mapPickupPoint(point: YandexPickupPoint): CarrierPickupPoint {
+  const quality = mapYandexPickupPointQuality(point);
   return {
     id: point.id,
     providerKey: "yataxi",
@@ -123,6 +130,10 @@ function mapPickupPoint(point: YandexPickupPoint): CarrierPickupPoint {
     kind: mapYandexPickupPointTypeToKind(
       typeof point.type === "string" ? point.type : "",
     ),
+    isDarkStore: quality.isDarkStore,
+    deactivationDate: quality.deactivationDate,
+    dayOffs: quality.dayOffs,
+    schedule: quality.schedule,
     rawPoint: point,
   };
 }

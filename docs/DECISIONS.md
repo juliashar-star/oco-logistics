@@ -1591,3 +1591,14 @@ CREATED при ответе, этикетка доступна сразу. Од�
 не второй решатель. «не требуется» в баннере успеха не нужно (в отличие от
 колонки таблицы). providerOrderId в JSON не отдаём — браузеру не нужен.
 Отвергли: переписывать мёртвый createResult-баннер; дублировать решение этикетки.
+
+## 2026-07-30 · pickup-point quality fields on CarrierPickupPoint; available_for_dropoff excluded
+
+Yandex list quality fields (`is_dark_store`, `deactivation_date`, `dayoffs`,
+`schedule`) parsed defensively into neutral `CarrierPickupPoint` via
+`map-pickup-point-quality`. No filtering, no DTO/UI. `dayoffs`: prefer wire
+`date_utc` string (docs wrongly type it as int); fall back to numeric `date`.
+`available_for_dropoff` NOT modelled — docs: sender drop-off for legal entities;
+our PVZ is buyer destination; tst 19/809 true would discard most points.
+Отвергли: filtering by dropoff; Date math/formatting in this slice; removing the
+unchecked list cast (separate cleanup).

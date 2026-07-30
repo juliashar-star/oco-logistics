@@ -53,6 +53,22 @@ export type CarrierPickupPointKind =
   | "warehouse"
   | "unknown";
 
+/** One opening window inside a neutral pickup-point schedule. */
+export type CarrierPickupPointScheduleEntry = {
+  weekdays: number[];
+  from: { hours: number; minutes: number };
+  to: { hours: number; minutes: number };
+};
+
+/**
+ * Opening hours as carried from the provider — UTC offset in hours and
+ * weekday windows. No Date math / formatting here; callers interpret.
+ */
+export type CarrierPickupPointSchedule = {
+  utcOffsetHours: number;
+  entries: CarrierPickupPointScheduleEntry[];
+};
+
 export type CarrierPickupPoint = {
   id: string; // was number in APIShip's PickupPoint — Yandex uses UUIDs
   providerKey: string; // kept: needed when the orchestrator aggregates
@@ -65,8 +81,24 @@ export type CarrierPickupPoint = {
   latitude: number;
   longitude: number;
   kind: CarrierPickupPointKind;
-  /** Full raw provider response for this point (data asset; schedule,
-   *  services, instructions etc. we don't model yet). */
+  /** Provider dark-store flag (default false when absent/unreadable). */
+  isDarkStore: boolean;
+  /**
+   * Closing / deactivation day as the provider sent it (string), or null.
+   * Not normalised — format is not guaranteed (never observed non-null on tst).
+   * Do not assume `new Date(...)` parses it portably.
+   */
+  deactivationDate: string | null;
+  /**
+   * Days the point is closed — date strings as the provider sent them
+   * (prefer `date_utc`; else numeric `date` when plausible). Empty when none.
+   * Not normalised — wire has used `+0000` offsets that are not ECMAScript's
+   * simplified ISO form; do not assume `new Date(...)` parses them portably.
+   */
+  dayOffs: string[];
+  /** Opening schedule, or null when the provider sent nothing usable. */
+  schedule: CarrierPickupPointSchedule | null;
+  /** Full raw provider response for this point (opaque data asset). */
   rawPoint?: unknown;
 };
 
