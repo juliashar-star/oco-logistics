@@ -18,10 +18,10 @@ test("postamat prefixes Постамат", () => {
   assert.equal(
     formatPickupPointOptionLabel({
       kind: "postamat",
-      name: "Постамат Яндекс Маркет",
+      name: "Лучше чем МП",
       address: "ул. Арбат, 10",
     }),
-    "Постамат — Постамат Яндекс Маркет — ул. Арбат, 10",
+    "Постамат — Лучше чем МП — ул. Арбат, 10",
   );
 });
 
@@ -29,10 +29,10 @@ test("warehouse prefixes Склад", () => {
   assert.equal(
     formatPickupPointOptionLabel({
       kind: "warehouse",
-      name: "Склад Север",
+      name: "Северный хаб",
       address: "промзона 3",
     }),
-    "Склад — Склад Север — промзона 3",
+    "Склад — Северный хаб — промзона 3",
   );
 });
 
@@ -47,15 +47,14 @@ test("unknown keeps name — address (no prefix)", () => {
   );
 });
 
-test("non-darkstore postamat is byte-identical to today's kind-only label", () => {
+test("postamat name already starts with Постамат → no prefix added", () => {
   assert.equal(
     formatPickupPointOptionLabel({
       kind: "postamat",
       name: "Постамат Яндекс Маркет",
       address: "ул. Арбат, 10",
-      isDarkStore: false,
     }),
-    "Постамат — Постамат Яндекс Маркет — ул. Арбат, 10",
+    "Постамат Яндекс Маркет — ул. Арбат, 10",
   );
 });
 
@@ -91,7 +90,7 @@ test("darkstore warehouse: Склад (даркстор) — …", () => {
       address: "ул. Складская, 5",
       isDarkStore: true,
     }),
-    "Склад (даркстор) — Склад Яндекс — ул. Складская, 5",
+    "(даркстор) Склад Яндекс — ул. Складская, 5",
   );
 });
 
@@ -116,5 +115,108 @@ test("darkstore unknown: bare Даркстор — …", () => {
       isDarkStore: true,
     }),
     "Даркстор — Точка — Адрес",
+  );
+});
+
+test("postamat name lowercase Постамат → no prefix added", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "постамат Яндекс Маркет",
+      address: "ул. Арбат, 10",
+    }),
+    "постамат Яндекс Маркет — ул. Арбат, 10",
+  );
+});
+
+test("postamat name with leading whitespace before Постамат → no prefix added", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: " Постамат Яндекс Маркет",
+      address: "ул. Арбат, 10",
+    }),
+    "Постамат Яндекс Маркет — ул. Арбат, 10",
+  );
+});
+
+test("postamat name contains постамата later → prefix IS added", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Пункт у постамата",
+      address: "ул. Ленина, 2",
+    }),
+    "Постамат — Пункт у постамата — ул. Ленина, 2",
+  );
+});
+
+test("warehouse name already starts with Склад → no prefix added", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "warehouse",
+      name: "Склад Север",
+      address: "промзона 3",
+    }),
+    "Склад Север — промзона 3",
+  );
+});
+
+test("warehouse name contains склад later → prefix IS added", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "warehouse",
+      name: "Точка у склада",
+      address: "промзона 3",
+    }),
+    "Склад — Точка у склада — промзона 3",
+  );
+});
+
+test("darkstore pickup_point name already starts with ПВЗ → mark alone leading", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "ПВЗ на Тверской",
+      address: "ул. Тверская, 1",
+      isDarkStore: true,
+    }),
+    "(даркстор) ПВЗ на Тверской — ул. Тверская, 1",
+  );
+});
+
+test("pickup_point name contains ПВЗ later + darkstore → ПВЗ prefix kept", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт рядом с ПВЗ",
+      address: "ул. Тверская, 1",
+      isDarkStore: true,
+    }),
+    "ПВЗ (даркстор) — Пункт рядом с ПВЗ — ул. Тверская, 1",
+  );
+});
+
+test("darkstore postamat with suppressed prefix: mark alone leading", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Постамат Яндекс Маркет",
+      address: "ул. Арбат, 10",
+      isDarkStore: true,
+    }),
+    "(даркстор) Постамат Яндекс Маркет — ул. Арбат, 10",
+  );
+});
+
+test("darkstore postamat without suppressed prefix: kind word + mark", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Лучше чем МП",
+      address: "ул. Арбат, 10",
+      isDarkStore: true,
+    }),
+    "Постамат (даркстор) — Лучше чем МП — ул. Арбат, 10",
   );
 });
