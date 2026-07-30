@@ -95,7 +95,7 @@ test("darkstore warehouse: Склад (даркстор) — …", () => {
   );
 });
 
-test("darkstore pickup_point: Пункт выдачи (даркстор) — …", () => {
+test("darkstore pickup_point: ПВЗ (даркстор) — …", () => {
   assert.equal(
     formatPickupPointOptionLabel({
       kind: "pickup_point",
@@ -103,7 +103,7 @@ test("darkstore pickup_point: Пункт выдачи (даркстор) — …
       address: "ул. Тверская, 1",
       isDarkStore: true,
     }),
-    "Пункт выдачи (даркстор) — Пункт на Тверской — ул. Тверская, 1",
+    "ПВЗ (даркстор) — Пункт на Тверской — ул. Тверская, 1",
   );
 });
 

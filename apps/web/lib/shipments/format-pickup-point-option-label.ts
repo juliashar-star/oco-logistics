@@ -13,9 +13,10 @@ import type { CarrierPickupPointKind } from "@oco/core/carrier-adapter/types";
  * The mark leads, attached to the kind word — never trails. A plain <select>
  * truncates long options by control width; a trailing mark is the first thing
  * lost, exactly on long addresses. Leading survives; beside the real kind it
- * cannot be misread as a third venue kind. pickup_point gets «Пункт выдачи»
- * only when marked (the mark needs a word to qualify); non-darkstore
- * pickup_point stays unprefixed.
+ * cannot be misread as a third venue kind. OCO's own copy uses the short
+ * trio «Постамат» / «Склад» / «ПВЗ»; carrier point names are left untouched.
+ * pickup_point gets «ПВЗ» only when marked (the mark needs a word to qualify);
+ * non-darkstore pickup_point stays unprefixed.
  */
 export function formatPickupPointOptionLabel(point: {
   kind: CarrierPickupPointKind;
@@ -33,7 +34,7 @@ export function formatPickupPointOptionLabel(point: {
     return dark ? `Склад (даркстор) — ${base}` : `Склад — ${base}`;
   }
   if (dark && point.kind === "pickup_point") {
-    return `Пункт выдачи (даркстор) — ${base}`;
+    return `ПВЗ (даркстор) — ${base}`;
   }
   if (dark) {
     // unknown (or any other non-prefixed kind): bare word — no real kind to qualify.
