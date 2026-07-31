@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { ShipmentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
+import { confirmWarningMessage } from "@/lib/shipments/confirm-warning-message";
 import { STATUS_LABELS, formatReturnReason } from "@/lib/shipments/labels";
 import {
   shipmentCarrierLabel,
@@ -13,6 +14,7 @@ import {
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { handoverActCandidates } from "@/lib/shipments/handover-act-candidates";
 import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
+import type { ShipmentListItemDto } from "@/lib/shipments/shipment-list-dto";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -25,23 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type ShipmentRow = {
-  id: string;
-  createdAt: string;
-  status: ShipmentStatus;
-  trackNumber: string | null;
-  trackingUrl: string | null;
-  labelUrl: string | null;
-  recipientName: string;
-  destCity: string;
-  plannedCost: number | null;
-  plannedDeliveryDays: number | null;
-  returnReason: string | null;
-  isAnonymized: boolean;
-  providerKey: string | null;
-  orderAdapterKey: string | null;
-  carrier: { name: string } | null;
-};
+type ShipmentRow = ShipmentListItemDto;
 
 type TrackingEventRow = {
   statusCode: string;
@@ -839,6 +825,16 @@ export function ShipmentsPage() {
                   </div>
                 )}
               </dl>
+
+              {selectedShipment.confirmWarnings.length > 0 ? (
+                <ul className="mt-5 list-disc space-y-1 rounded-lg bg-amber-50 px-4 py-3 pl-8 text-sm text-amber-900/90">
+                  {selectedShipment.confirmWarnings.map((code, index) => (
+                    <li key={`${code}-${index}`}>
+                      {confirmWarningMessage(code)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               <div className="mt-8">
                 <h4 className="text-sm font-semibold text-slate-900">История статусов</h4>

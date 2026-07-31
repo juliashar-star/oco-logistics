@@ -3,6 +3,7 @@ import type { Prisma, ShipmentStatus } from "@prisma/client";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
+import { toShipmentListItem } from "@/lib/shipments/shipment-list-dto";
 
 const SHIPMENT_STATUSES = new Set<ShipmentStatus>([
   "DRAFT",
@@ -35,6 +36,7 @@ const shipmentSelect = {
   isAnonymized: true,
   providerKey: true,
   orderAdapterKey: true,
+  confirmWarnings: true,
   carrier: { select: { name: true } },
 } satisfies Prisma.ShipmentSelect;
 
@@ -79,7 +81,9 @@ export const GET = withAuth(async (request, user) => {
     ]);
 
     return NextResponse.json({
-      shipments: shipments.map(decryptShipmentRecipientPii),
+      shipments: shipments.map((row) =>
+        toShipmentListItem(decryptShipmentRecipientPii(row)),
+      ),
       total,
     });
   } catch {
