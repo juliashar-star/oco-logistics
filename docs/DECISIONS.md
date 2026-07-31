@@ -20,6 +20,19 @@
 
 ---
 
+- **2026-07-31 · yataxi:next_day seller title — «Доставка по России», not «Доставка на следующий день».**
+Почему: название услуги не должно обещать скорость, которую услуга даёт не
+всегда. Проба sandbox 31.07.2026 (offers/create, 1 кг 30×20×10, объявленная
+1000 ₽): Москва pickup 01.08 → delivery 02.08 (next-day true); Санкт-Петербург
+pickup 01.08 → delivery 03.08 (два дня). Дальние города на sandbox не
+котировались. В оффере нет поля с именем услуги/скоростью — только интервалы,
+цена и `delivery_interval.policy` (last-mile, не обещание). Реальная дата уже
+на карточке оффера; title говорит ЧТО это за услуга. Контраст с двумя
+Express-заголовками точен — те city-only same-day, эта по стране. Title всегда
+из `ORDER_ADAPTER_SELLER_TITLES` по `orderAdapterKey` на render; в БД строки
+с старым текстом нет (`serviceCode` — код тарифа APIShip, не title).
+Отвергли: оставлять speed claim в title; «Доставка по России, от 1 дня»
+(снова вводит обещание).
 - **2026-07 · delete DRAFT shipment — FK Cascade on TrackingEvent/TariffQuote→Shipment; single guarded deleteMany (companyId+DRAFT+providerOrderId null); same 404 for not-yours/not-there/not-deletable.**
 Почему: array `$transaction` that deletes children first would commit child
 deletes even when the guarded parent delete matches zero rows ( чужой id ).

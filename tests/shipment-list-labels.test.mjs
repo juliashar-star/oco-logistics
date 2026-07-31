@@ -72,7 +72,7 @@ test("shipmentTariffLabel: uses orderAdapterSellerTitle; null key → default en
     carrier: null,
   });
   assert.equal(label, orderAdapterSellerTitle(null));
-  assert.equal(label, "Доставка на следующий день");
+  assert.equal(label, "Доставка по России");
 });
 
 test("shipmentTariffLabel: explicit orderAdapterKey", () => {

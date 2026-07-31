@@ -9,7 +9,7 @@ test("shouldShowOfferServiceTitle: empty list → false", () => {
 
 test("shouldShowOfferServiceTitle: one offer → false", () => {
   assert.equal(
-    shouldShowOfferServiceTitle([{ serviceTitle: "Доставка на следующий день" }]),
+    shouldShowOfferServiceTitle([{ serviceTitle: "Доставка по России" }]),
     false,
   );
 });
@@ -17,9 +17,9 @@ test("shouldShowOfferServiceTitle: one offer → false", () => {
 test("shouldShowOfferServiceTitle: many offers, same title → false", () => {
   assert.equal(
     shouldShowOfferServiceTitle([
-      { serviceTitle: "Доставка на следующий день" },
-      { serviceTitle: "Доставка на следующий день" },
-      { serviceTitle: "Доставка на следующий день" },
+      { serviceTitle: "Доставка по России" },
+      { serviceTitle: "Доставка по России" },
+      { serviceTitle: "Доставка по России" },
     ]),
     false,
   );
@@ -28,7 +28,7 @@ test("shouldShowOfferServiceTitle: many offers, same title → false", () => {
 test("shouldShowOfferServiceTitle: two distinct non-empty titles → true", () => {
   assert.equal(
     shouldShowOfferServiceTitle([
-      { serviceTitle: "Доставка на следующий день" },
+      { serviceTitle: "Доставка по России" },
       { serviceTitle: "Экспресс" },
     ]),
     true,
@@ -48,7 +48,7 @@ test("shouldShowOfferServiceTitle: blank titles do not count toward distinct", (
     shouldShowOfferServiceTitle([
       { serviceTitle: "Экспресс" },
       { serviceTitle: "" },
-      { serviceTitle: "Доставка на следующий день" },
+      { serviceTitle: "Доставка по России" },
     ]),
     true,
   );

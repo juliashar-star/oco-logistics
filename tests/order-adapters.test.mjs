@@ -27,7 +27,7 @@ test("ORDER_ADAPTERS.title comes from ORDER_ADAPTER_SELLER_TITLES (no drift)", (
 test("yataxi:next_day has seller-facing service title", () => {
   assert.equal(
     ORDER_ADAPTERS["yataxi:next_day"].title,
-    "Доставка на следующий день",
+    "Доставка по России",
   );
 });
 

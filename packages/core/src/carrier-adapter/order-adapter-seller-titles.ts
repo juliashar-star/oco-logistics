@@ -4,7 +4,9 @@
  * ORDER_ADAPTERS.title reads from here so the registry and the UI cannot drift.
  */
 export const ORDER_ADAPTER_SELLER_TITLES: Readonly<Record<string, string>> = {
-  "yataxi:next_day": "Доставка на следующий день",
+  // Name the service, not a speed: sandbox 31.07 showed Moscow next-day but
+  // Saint Petersburg two days; the offer card already shows the real dates.
+  "yataxi:next_day": "Доставка по России",
   "yataxi:express": "Доставка в тот же день",
   // Service for light same-day parcels — not Yandex's product word «Курьер».
   "yataxi:courier": "Доставка лёгких посылок в тот же день",
