@@ -44,6 +44,15 @@ enum ShipmentStatus {
   PROBLEM
 }
 
+// Neutral codes from CarrierConfirmResult.warnings — never provider message text.
+enum CarrierConfirmWarning {
+  REQUIREMENT_UNMET
+  PARCEL_MAY_NOT_FIT
+  ADDRESS_NOT_FOUND
+  ADDRESS_COORDINATE_MISMATCH
+  UNKNOWN
+}
+
 model Company {
   id            String     @id @default(cuid())
   name          String
@@ -169,6 +178,8 @@ model Shipment {
   // Score's input. PD-free — a Yandex offer carries only
   // offer_id/expires_at/intervals/pricing/station_id.
   quotedOffers           Json?
+  // Neutral confirm warnings (codes only). Banner is one-shot; these outlive it.
+  confirmWarnings        CarrierConfirmWarning[] @default([])
 
   status          ShipmentStatus  @default(DRAFT)
   legalBasisConfirmed Boolean     @default(false)

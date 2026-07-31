@@ -6,6 +6,7 @@ import {
 } from "@oco/core/carrier-adapter/errors";
 import type {
   CarrierConfirmResult,
+  CarrierConfirmWarning,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierOffer,
@@ -43,6 +44,7 @@ export type SubmitOrderResult =
       status: "CREATED";
       providerKey: string;
       orderAdapterKey: string;
+      warnings: CarrierConfirmWarning[];
     }
   | { ok: false; stage: "capture"; reason: "not_found" | "not_draft" }
   | {
@@ -98,11 +100,13 @@ export async function submitOrder(
       : null;
 
   let requestId: string | undefined;
+  let warnings: CarrierConfirmWarning[] = [];
 
   try {
     try {
       const confirmed = await confirm(offer, input, credentials);
       requestId = confirmed.requestId;
+      warnings = confirmed.warnings;
     } catch (error) {
       if (error instanceof CarrierQuoteChangedError) {
         await prisma.shipment.updateMany({
@@ -148,6 +152,8 @@ export async function submitOrder(
           // CarrierOffer.priceRub is rubles — raw would show 273.28 ₽ as 2,73 ₽.
           // plannedDeliveryDays left null: Yandex gives a date, not a day count.
           plannedCost: Math.round(offer.priceRub * 100),
+          // Neutral codes only — never provider message text (may echo PII).
+          confirmWarnings: warnings,
         },
       });
       return {
@@ -156,6 +162,7 @@ export async function submitOrder(
         status: "CREATED",
         providerKey,
         orderAdapterKey,
+        warnings,
       };
     } catch {
       try {

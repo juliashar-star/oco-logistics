@@ -113,6 +113,7 @@ test("confirmOffer happy path: request_id maps to requestId", async () => {
 
       assert.equal(result.requestId, "77241d8009bb46d0bff5c65a73077bcd-udp");
       assert.deepEqual(result.rawResponse, raw);
+      assert.deepEqual(result.warnings, []);
     } finally {
       mock.restore();
     }

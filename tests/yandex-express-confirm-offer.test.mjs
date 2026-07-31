@@ -207,7 +207,11 @@ test("confirmExpressOffer happy path: create → two estimating → ready → ac
     throw new Error(`unexpected url ${url}`);
   });
 
-  assert.deepEqual(result, { requestId: CLAIM_ID, rawResponse: acceptBody });
+  assert.deepEqual(result, {
+    requestId: CLAIM_ID,
+    rawResponse: acceptBody,
+    warnings: [],
+  });
   assert.equal(infoCalls, 3);
   assert.equal(
     mock.calls.filter((c) => isInfo(c.url)).length,
@@ -232,6 +236,163 @@ test("confirmExpressOffer happy path: create → two estimating → ready → ac
     new Headers(createCall.init.headers).get("Accept-Language"),
     "ru",
   );
+});
+
+test("confirmExpressOffer maps claims/info warnings onto the result (not message)", async () => {
+  const acceptBody = {
+    id: CLAIM_ID,
+    status: "accepted",
+    version: 2,
+  };
+  const { result } = await runConfirm(({ url }) => {
+    if (isCreate(url)) {
+      return jsonResponse(200, { id: CLAIM_ID, status: "new", version: 1 });
+    }
+    if (isInfo(url)) {
+      return jsonResponse(200, {
+        ...readyInfo(547.78, 1),
+        warnings: [
+          {
+            source: "client_requirements",
+            code: "requirement_unavailable",
+            message: "указанное требование недоступно +79001234567",
+          },
+          {
+            source: "route_points",
+            code: "address_not_found",
+            message: "ул Тверская",
+          },
+        ],
+      });
+    }
+    if (isAccept(url)) {
+      return jsonResponse(200, acceptBody);
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  assert.deepEqual(result.warnings, [
+    "REQUIREMENT_UNMET",
+    "ADDRESS_NOT_FOUND",
+  ]);
+  assert.equal(result.requestId, CLAIM_ID);
+  assert.deepEqual(result.rawResponse, acceptBody);
+});
+
+test("confirmExpressOffer warning present only on create reaches the result", async () => {
+  const { result } = await runConfirm(({ url }) => {
+    if (isCreate(url)) {
+      return jsonResponse(200, {
+        id: CLAIM_ID,
+        status: "new",
+        version: 1,
+        warnings: [
+          {
+            source: "route_points",
+            code: "address_too_far",
+            message: "coords only on create",
+          },
+        ],
+      });
+    }
+    if (isInfo(url)) {
+      return jsonResponse(200, readyInfo(547.78, 1));
+    }
+    if (isAccept(url)) {
+      return jsonResponse(200, { id: CLAIM_ID, status: "accepted", version: 2 });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  assert.deepEqual(result.warnings, ["ADDRESS_COORDINATE_MISMATCH"]);
+});
+
+test("confirmExpressOffer same warning code on create and info appears once", async () => {
+  const { result } = await runConfirm(({ url }) => {
+    if (isCreate(url)) {
+      return jsonResponse(200, {
+        id: CLAIM_ID,
+        status: "new",
+        version: 1,
+        warnings: [
+          {
+            source: "client_requirements",
+            code: "requirement_unavailable",
+            message: "on create",
+          },
+        ],
+      });
+    }
+    if (isInfo(url)) {
+      return jsonResponse(200, {
+        ...readyInfo(547.78, 1),
+        warnings: [
+          {
+            source: "client_requirements",
+            code: "requirement_unavailable",
+            message: "on info",
+          },
+        ],
+      });
+    }
+    if (isAccept(url)) {
+      return jsonResponse(200, { id: CLAIM_ID, status: "accepted", version: 2 });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  assert.deepEqual(result.warnings, ["REQUIREMENT_UNMET"]);
+});
+
+test("confirmExpressOffer create-only and info-only warnings merge in first-seen order", async () => {
+  const { result } = await runConfirm(({ url }) => {
+    if (isCreate(url)) {
+      return jsonResponse(200, {
+        id: CLAIM_ID,
+        status: "new",
+        version: 1,
+        warnings: [
+          {
+            source: "route_points",
+            code: "address_not_found",
+            message: "create only",
+          },
+          {
+            source: "client_requirements",
+            code: "not_fit_in_car",
+            message: "both",
+          },
+        ],
+      });
+    }
+    if (isInfo(url)) {
+      return jsonResponse(200, {
+        ...readyInfo(547.78, 1),
+        warnings: [
+          {
+            source: "client_requirements",
+            code: "not_fit_in_car",
+            message: "both again",
+          },
+          {
+            source: "client_requirements",
+            code: "requirement_unavailable",
+            message: "info only",
+          },
+        ],
+      });
+    }
+    if (isAccept(url)) {
+      return jsonResponse(200, { id: CLAIM_ID, status: "accepted", version: 2 });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  assert.deepEqual(result.warnings, [
+    "ADDRESS_NOT_FOUND",
+    "PARCEL_MAY_NOT_FIT",
+    "REQUIREMENT_UNMET",
+  ]);
 });
 
 test("confirmExpressOffer Accept-Language ru is present on create", async () => {

@@ -683,7 +683,7 @@ export async function confirmOffer(
     );
   }
 
-  return { requestId, rawResponse: raw };
+  return { requestId, rawResponse: raw, warnings: [] };
 }
 
 type YandexHistoryEntry = {

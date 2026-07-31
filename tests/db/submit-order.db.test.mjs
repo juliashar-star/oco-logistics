@@ -158,7 +158,7 @@ describe("submitOrder", { concurrency: false }, () => {
       orderAdapterKey: "yataxi:next_day",
       confirm: async () => {
         confirmCalls += 1;
-        return { requestId: "should-not-run", rawResponse: {} };
+        return { requestId: "should-not-run", rawResponse: {}, warnings: [] };
       },
     });
 
@@ -194,7 +194,7 @@ describe("submitOrder", { concurrency: false }, () => {
         assert.equal(offer.offerId, OFFER.offerId);
         assert.deepEqual(input, ORDER_INPUT);
         assert.deepEqual(credentials, CREDS);
-        return { requestId: REQUEST_ID, rawResponse: { request_id: REQUEST_ID } };
+        return { requestId: REQUEST_ID, rawResponse: { request_id: REQUEST_ID }, warnings: [] };
       },
     });
 
@@ -204,6 +204,7 @@ describe("submitOrder", { concurrency: false }, () => {
       status: "CREATED",
       providerKey: "test-provider",
       orderAdapterKey: "yataxi:next_day",
+      warnings: [],
     });
 
     const row = await assertNotSubmitting(prisma, shipment.id);
@@ -229,6 +230,42 @@ describe("submitOrder", { concurrency: false }, () => {
     );
     assert.equal(row.plannedCost, 27328);
     assert.notEqual(row.plannedCost, 273);
+    assert.deepEqual(row.confirmWarnings, []);
+  });
+
+  test("(ii-c) confirm warnings persist as neutral codes on Shipment", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Warnings Co",
+      `submit-warnings-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "yandex-request-warnings-1";
+    const WARNINGS = ["REQUIREMENT_UNMET", "ADDRESS_NOT_FOUND"];
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: OFFER,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:express",
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+        warnings: WARNINGS,
+      }),
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:express",
+      warnings: WARNINGS,
+    });
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.deepEqual(row.confirmWarnings, WARNINGS);
   });
 
   test("(ii-b) empty deliveryIntervalTo → plannedDeliveryDateTo stays null", async () => {
@@ -250,6 +287,7 @@ describe("submitOrder", { concurrency: false }, () => {
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
       }),
     });
 
@@ -259,6 +297,7 @@ describe("submitOrder", { concurrency: false }, () => {
       status: "CREATED",
       providerKey: "test-provider",
       orderAdapterKey: "yataxi:next_day",
+      warnings: [],
     });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
@@ -411,6 +450,7 @@ describe("submitOrder", { concurrency: false }, () => {
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
       }),
     });
 
@@ -447,6 +487,7 @@ describe("submitOrder", { concurrency: false }, () => {
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
       }),
     });
 
@@ -511,6 +552,7 @@ describe("submitOrder", { concurrency: false }, () => {
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
       }),
     });
 
@@ -520,6 +562,7 @@ describe("submitOrder", { concurrency: false }, () => {
       status: "CREATED",
       providerKey: "yataxi",
       orderAdapterKey: adapterKey,
+      warnings: [],
     });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");
@@ -549,6 +592,7 @@ describe("submitOrder", { concurrency: false }, () => {
       confirm: async () => ({
         requestId: REQUEST_ID,
         rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
       }),
     });
 
@@ -558,6 +602,7 @@ describe("submitOrder", { concurrency: false }, () => {
       status: "CREATED",
       providerKey: adapter.providerKey,
       orderAdapterKey: adapter.key,
+      warnings: [],
     });
     const row = await assertNotSubmitting(prisma, shipment.id);
     assert.equal(row.status, "CREATED");

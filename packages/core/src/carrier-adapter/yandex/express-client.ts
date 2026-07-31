@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { CarrierQuoteChangedError } from "@oco/core/carrier-adapter/errors";
 import type {
   CarrierConfirmResult,
+  CarrierConfirmWarning,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierOffer,
@@ -17,6 +18,10 @@ import {
   type ExpressTaxiClassLimits,
 } from "./express-taxi-class-limits";
 import { claimStatusTextRu } from "./map-claim-status";
+import {
+  mergeClaimWarnings,
+  parseClaimWarnings,
+} from "./parse-claim-warnings";
 import {
   assertYandexCredentials,
   resolveBaseUrl,
@@ -467,6 +472,7 @@ type ClaimsInfoSnapshot = {
   version: number;
   priceRaw: unknown;
   errorMessages: unknown;
+  warnings: CarrierConfirmWarning[];
   raw: unknown;
 };
 
@@ -621,6 +627,10 @@ async function fetchClaimsInfo(args: {
       "error_messages" in raw
         ? (raw as { error_messages: unknown }).error_messages
         : undefined,
+    // Never forward warning.message — codes only (see parseClaimWarnings).
+    warnings: parseClaimWarnings(
+      "warnings" in raw ? (raw as { warnings: unknown }).warnings : undefined,
+    ),
     raw,
   };
 }
@@ -672,6 +682,16 @@ export async function confirmExpressOffer(
   if (!claimId) {
     throw new Error("Yandex Express claims/create failed: missing claim id");
   }
+
+  // Docs put `warnings` on both create and info and never say the sets match,
+  // so reading only one risks losing a warning this slice exists to surface.
+  const createWarnings = parseClaimWarnings(
+    createRaw !== null &&
+      typeof createRaw === "object" &&
+      "warnings" in createRaw
+      ? (createRaw as { warnings: unknown }).warnings
+      : undefined,
+  );
 
   let version = readClaimVersion(createRaw, 1);
   const pollStartedAt = Date.now();
@@ -801,7 +821,11 @@ export async function confirmExpressOffer(
     );
   }
 
-  return { requestId: claimId, rawResponse: acceptRaw };
+  return {
+    requestId: claimId,
+    rawResponse: acceptRaw,
+    warnings: mergeClaimWarnings(createWarnings, info!.warnings),
+  };
 }
 
 /**

@@ -1775,3 +1775,16 @@ nationwide next_day до city-only Express в момент галочки, а с
 создать claim с тихо отброшенным требованием.
 Отвергли: hiding next_day; positive «с термосумкой» claim; `auto_courier`
 (утраивает цену, отложен).
+- **2026-07-31 · claims/info warnings — read codes, never message; persist neutral enum.**
+Почему: `requirement_unavailable` (и три других кода) приходят в `warnings` на
+`claims/info`, который confirm уже поллит; без чтения заказ создаётся «тихо»
+без термосумки / с кривым адресом. `message` не форвардим — может echo ПДн;
+маппим CODE → свои нейтральные значения + свой русский текст. На
+`CarrierConfirmResult` и в `Shipment.confirmWarnings` — коды-enum (с UNKNOWN
+на пятый будущий код), не строки Яндекса и не текст. Баннер одноразовый —
+коды переживают его в БД. Все четыре кода одним полем: адресные
+(`address_*`) предсказывают срыв доставки, пока посылка ещё у продавца.
+Docs ставят `warnings` и на create, и на info, и не говорят, что множества
+совпадают — читаем оба, merge+dedupe (first-seen), иначе потеряли бы
+предупреждение молча. Отвергли: трогать `error_messages` / estimating_failed
+(другой механизм, уже cancel); форвард `message`; хранить текст провайдера.

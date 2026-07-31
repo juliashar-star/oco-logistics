@@ -29,8 +29,11 @@ import {
   snapshotsEqual,
   type CalculationSnapshot,
 } from "@/lib/shipments/calculation-snapshot";
+import { confirmWarningMessage } from "@/lib/shipments/confirm-warning-message";
+import { parseSubmitConfirmWarnings } from "@/lib/shipments/parse-submit-confirm-warnings";
 import { parseSubmitSuccessLabelFields } from "@/lib/shipments/parse-submit-success-label-fields";
 import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offer-lacks-thermal-bag";
+import type { CarrierConfirmWarning } from "@oco/core/carrier-adapter/types";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 
@@ -66,6 +69,7 @@ type YandexSubmitResult = {
   status: string;
   providerKey: string | null;
   orderAdapterKey: string | null;
+  warnings: CarrierConfirmWarning[];
 };
 
 /** Yandex pickup-points list row (browser DTO). */
@@ -785,6 +789,7 @@ export function NewOrderForm() {
         ),
         priceRub: selectedOffer.priceRub,
         ...labelFields,
+        warnings: parseSubmitConfirmWarnings(data),
       });
     } catch {
       setError("Не удалось связаться с сервером");
@@ -1300,6 +1305,15 @@ export function NewOrderForm() {
             {yandexSubmitResult ? (
               <div className="space-y-2 text-sm text-slate-800">
                 <p className="font-semibold text-emerald-900">Отправление создано</p>
+                {yandexSubmitResult.warnings.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-5 text-amber-900">
+                    {yandexSubmitResult.warnings.map((code, index) => (
+                      <li key={`${code}-${index}`}>
+                        {confirmWarningMessage(code)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <p>
                   Ориентировочный срок доставки:{" "}
                   <strong>{yandexSubmitResult.deliveryDayLabel}</strong>

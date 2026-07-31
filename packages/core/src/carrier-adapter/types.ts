@@ -240,11 +240,23 @@ export type CarrierOffer = {
   rawOffer?: unknown;
 };
 
+/**
+ * Neutral confirm warnings any carrier could report. Not provider code strings.
+ * UNKNOWN keeps a fifth/future code visible instead of silently dropping it.
+ */
+export type CarrierConfirmWarning =
+  | "REQUIREMENT_UNMET"
+  | "PARCEL_MAY_NOT_FIT"
+  | "ADDRESS_NOT_FOUND"
+  | "ADDRESS_COORDINATE_MISMATCH"
+  | "UNKNOWN";
+
 /** Result of confirming a previously fetched offer (Yandex: offers/confirm). */
 export type CarrierConfirmResult = {
   requestId: string;
   /** Full raw provider response (data asset). */
   rawResponse: unknown;
+  warnings: CarrierConfirmWarning[];
 };
 
 export type CarrierTrackingEvent = {

@@ -244,6 +244,7 @@ export const POST = withAuth<{ id: string }>(
           status: result.status,
           providerKey: result.providerKey,
           orderAdapterKey: result.orderAdapterKey,
+          warnings: result.warnings,
         });
       }
 
