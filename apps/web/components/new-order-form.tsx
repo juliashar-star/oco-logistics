@@ -18,6 +18,10 @@ import {
 } from "@/lib/shipments/format-parcel-entry-summary";
 import { formatPickupPointOptionLabel } from "@/lib/shipments/format-pickup-point-option-label";
 import {
+  POSTAMAT_TOO_LARGE_NOTICE,
+  shouldShowPostamatTooLargeNotice,
+} from "@/lib/shipments/should-show-postamat-too-large";
+import {
   pickupPointFilterStatusLine,
   visiblePickupPointOptions,
 } from "@/lib/shipments/visible-pickup-point-options";
@@ -146,31 +150,21 @@ export function NewOrderForm() {
     widthCm,
     heightCm,
   );
-  const labeledPoints = useMemo(() => {
-    const weight = Number(weightG);
-    const length = Number(lengthCm);
-    const width = Number(widthCm);
-    const height = Number(heightCm);
-    const parcel =
-      Number.isFinite(weight) &&
-      Number.isFinite(length) &&
-      Number.isFinite(width) &&
-      Number.isFinite(height)
-        ? {
-            weightG: weight,
-            lengthCm: length,
-            widthCm: width,
-            heightCm: height,
-          }
-        : undefined;
-    return points.map((point) => ({
-      point,
-      // Mark (do not hide) postamats the current parcel exceeds — list is
-      // loaded once, the parcel can change, and hiding would vanish points
-      // for a reason the seller cannot see. Choice stays open.
-      label: formatPickupPointOptionLabel(point, parcel),
-    }));
-  }, [points, weightG, lengthCm, widthCm, heightCm]);
+  const labeledPoints = useMemo(
+    () =>
+      points.map((point) => ({
+        point,
+        label: formatPickupPointOptionLabel(point),
+      })),
+    [points],
+  );
+  const showPostamatTooLarge = shouldShowPostamatTooLargeNotice({
+    pickupType,
+    weightG: Number(weightG),
+    lengthCm: Number(lengthCm),
+    widthCm: Number(widthCm),
+    heightCm: Number(heightCm),
+  });
   const visiblePickup = useMemo(
     () =>
       visiblePickupPointOptions(labeledPoints, pointsFilterQuery, pointOutId),
@@ -1156,6 +1150,9 @@ export function NewOrderForm() {
         )}
         {parcelEntrySummary && (
           <p className="text-xs text-slate-500">{parcelEntrySummary}</p>
+        )}
+        {showPostamatTooLarge && (
+          <p className="text-xs text-slate-500">{POSTAMAT_TOO_LARGE_NOTICE}</p>
         )}
 
         <div className="max-w-xs">
