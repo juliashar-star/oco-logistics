@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { createDraftOrder } from "@/lib/shipments/create-draft-order";
+import { parcelEntryCeilingError } from "@/lib/shipments/format-parcel-entry-summary";
 
 const SELECTION_MODES = new Set<SelectionMode>(["FAST", "CHEAP", "OPTIMAL", "MANUAL"]);
 
@@ -73,6 +74,18 @@ export const POST = withAuth(async (request, user) => {
         { error: "Габариты должны быть больше 0" },
         { status: 400 },
       );
+    }
+
+    // Data-entry sanity ceiling only — not a carrier limit. See
+    // format-parcel-entry-summary.ts (RAISE if Грузовой / multi-tonne is added).
+    const ceilingError = parcelEntryCeilingError(
+      weightG,
+      lengthCm,
+      widthCm,
+      heightCm,
+    );
+    if (ceilingError) {
+      return NextResponse.json({ error: ceilingError }, { status: 400 });
     }
 
     if (!SELECTION_MODES.has(selectionMode)) {

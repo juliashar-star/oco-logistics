@@ -12,6 +12,10 @@ import {
 } from "@/lib/date/format-offer-interval";
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
+import {
+  formatParcelEntrySummary,
+  parcelEntryCeilingError,
+} from "@/lib/shipments/format-parcel-entry-summary";
 import { formatPickupPointOptionLabel } from "@/lib/shipments/format-pickup-point-option-label";
 import {
   pickupPointFilterStatusLine,
@@ -77,6 +81,9 @@ const MIN_CITY_LENGTH_FOR_PVZ = 3;
 
 const DEST_CITY_PICK_REQUIRED =
   "Выберите город доставки из списка";
+/** Instruction under the city field when text is present but not yet confirmed. */
+const DEST_CITY_PICK_HINT =
+  "Выберите город из списка подсказок";
 
 const RECALCULATE_AFTER_CREATE_HINT =
   "Для следующего отправления рассчитайте тарифы заново";
@@ -137,6 +144,12 @@ export function NewOrderForm() {
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
   const [pointsFilterQuery, setPointsFilterQuery] = useState("");
+  const parcelEntrySummary = formatParcelEntrySummary(
+    weightG,
+    lengthCm,
+    widthCm,
+    heightCm,
+  );
   const labeledPoints = useMemo(
     () =>
       points.map((point) => ({
@@ -520,6 +533,17 @@ export function NewOrderForm() {
       return;
     }
 
+    const ceilingError = parcelEntryCeilingError(
+      Number(weightG),
+      Number(lengthCm),
+      Number(widthCm),
+      Number(heightCm),
+    );
+    if (ceilingError) {
+      setError(ceilingError);
+      return;
+    }
+
     if (!legalBasisConfirmed) {
       setError("Подтвердите правовое основание обработки персональных данных");
       return;
@@ -848,6 +872,7 @@ export function NewOrderForm() {
               ref={destCityInputRef}
               value={destCity}
               displayValue={destCityDisplayValue || undefined}
+              resolveExactCityOnBlur
               onChange={(raw) => {
                 setDestCity(raw);
                 setDestCityDisplayValue("");
@@ -860,6 +885,9 @@ export function NewOrderForm() {
               }}
               placeholder="Город доставки"
             />
+            {destCity.trim() && !destCityDisplayValue.trim() && (
+              <p className="mt-1 text-xs text-slate-500">{DEST_CITY_PICK_HINT}</p>
+            )}
           </div>
         </div>
 
@@ -916,13 +944,13 @@ export function NewOrderForm() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {/* size = 1 + rendered options, capped at 3: empty stays single-line;
-                  one match → two rows; two+ → three and never grows. The third row
-                  budget includes «Выберите пункт выдачи», which cannot be dropped —
-                  it is how a seller clears a choice. */}
+              {/* size = 1 + rendered options, capped at 2: empty stays single-line;
+                  one+ matches → two rows and never grows. The cap’s two rows
+                  include «Выберите пункт выдачи», which occupies one of them
+                  and cannot be dropped — it is how a seller clears a choice. */}
               <select
                 required
-                size={Math.min(1 + visiblePickup.options.length, 3)}
+                size={Math.min(1 + visiblePickup.options.length, 2)}
                 value={pointOutId}
                 onChange={(e) => setPointOutId(e.target.value)}
                 disabled={pointsLoading || points.length === 0}
@@ -1075,6 +1103,9 @@ export function NewOrderForm() {
           </div>
         </div>
 
+        {/* No HTML max on these four: native validation reports grams
+            («…100000») and fires before our check; seller-facing ceiling must
+            say kilograms («Вес — не больше 100 кг»). Do not add max back. */}
         <div className="grid gap-4 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Вес, г</label>
@@ -1121,6 +1152,9 @@ export function NewOrderForm() {
             />
           </div>
         </div>
+        {parcelEntrySummary && (
+          <p className="text-xs text-slate-500">{parcelEntrySummary}</p>
+        )}
 
         <div className="max-w-xs">
           <label className="mb-1 block text-sm font-medium text-slate-700">

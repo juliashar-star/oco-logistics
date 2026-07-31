@@ -11,6 +11,7 @@ import {
   type Ref,
 } from "react";
 import { Input } from "@/components/ui/input";
+import { resolveExactCityMatch } from "@/lib/address/resolve-exact-city-match";
 
 export type AddressSuggestion = {
   city: string;
@@ -34,6 +35,12 @@ type Props = {
   displayValue?: string;
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * Destination-city mode: on blur, fetch suggestions and silently confirm when
+   * resolveExactCityMatch matches the first suggestion (see that helper).
+   * Otherwise open the list so the seller chooses.
+   */
+  resolveExactCityOnBlur?: boolean;
 };
 
 const MIN_QUERY_LENGTH = 3;
@@ -49,7 +56,15 @@ function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
 
 export const AddressAutocomplete = forwardRef<HTMLInputElement, Props>(
   function AddressAutocomplete(
-    { value, onChange, onSelect, displayValue, placeholder, disabled },
+    {
+      value,
+      onChange,
+      onSelect,
+      displayValue,
+      placeholder,
+      disabled,
+      resolveExactCityOnBlur = false,
+    },
     ref,
   ) {
     const listboxId = useId();
@@ -57,6 +72,7 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, Props>(
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isUserTypingRef = useRef(false);
+    const blurRequestId = useRef(0);
 
     const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
     const [open, setOpen] = useState(false);
@@ -139,6 +155,53 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, Props>(
       closeDropdown();
     }
 
+    async function handleBlur() {
+      if (!resolveExactCityOnBlur) {
+        return;
+      }
+      // Already confirmed (parent keeps displayValue set after onSelect).
+      if (displayValue !== undefined && displayValue.trim() !== "") {
+        return;
+      }
+      const text = value.trim();
+      if (text.length < MIN_QUERY_LENGTH) {
+        return;
+      }
+
+      // No setLoading here: the field has lost focus; a spinner on it is noise.
+      const requestId = ++blurRequestId.current;
+      try {
+        const response = await fetch(
+          `/api/address/suggest?query=${encodeURIComponent(text)}`,
+        );
+        if (requestId !== blurRequestId.current) {
+          return;
+        }
+        if (!response.ok) {
+          return;
+        }
+        const data = (await response.json()) as AddressSuggestion[];
+        if (requestId !== blurRequestId.current) {
+          return;
+        }
+
+        const confirmedCity = resolveExactCityMatch(text, data);
+        if (confirmedCity && data[0]) {
+          handleSelect(data[0]);
+          return;
+        }
+
+        // No silent match → open the list so the seller chooses.
+        if (data.length > 0) {
+          setSuggestions(data);
+          setOpen(true);
+          setActiveIndex(-1);
+        }
+      } catch {
+        // Leave text and hint as they are.
+      }
+    }
+
     function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
       if (!open || suggestions.length === 0) return;
 
@@ -179,6 +242,9 @@ export const AddressAutocomplete = forwardRef<HTMLInputElement, Props>(
           onChange={(e) => {
             isUserTypingRef.current = true;
             onChange(e.target.value);
+          }}
+          onBlur={() => {
+            void handleBlur();
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}

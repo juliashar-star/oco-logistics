@@ -1726,3 +1726,26 @@ Download reuses the CSV blob → `<a download>` path with POST body; errors use
 the same red inline banner as sync/export.
 Отвергли: new modal component; client-side re-check of status/cap/mix; hardcoded filename;
 widening the list DTO with providerOrderId.
+
+## 2026-07-31 · destination city — confirm against the FIRST suggestion
+
+The requirement to pick the destination city from suggestions **stays**: we send
+the carrier a city as free text, and free text is dangerous (Yandex location
+detect once ranked Ростов-на-Дону first for «мск»). Confirmed state is
+`destCityDisplayValue` non-empty; typing clears it while the field can still
+show `destCity` — that invisibility is fixed with a hint under the field, and
+on blur the typed text is resolved against suggestions.
+
+**Rule:** the typed text matches the **first** suggestion's `city` — trimmed,
+lower-cased (`ru-RU`), «ё» folded to «е». DaData ranks by relevance; that is
+why the first row is the anchor.
+
+Evidence (GET `/api/address/suggest`, 2026-07-31): Москва / Санкт-Петербург /
+Воронеж / Красноармейск / Королев (→ Королёв) confirm; Мск does not (first is
+Москва, not the settlement МСК); Ростов does not (Ростов-на-Дону); Новгород
+does not (Нижний Новгород).
+
+Отвергли: (1) «one distinct city in the whole response» — never fires (Москва
+alone returns four cities); (2) «any suggestion's city equals the text» —
+confirms Мск against a settlement named МСК; (3) removing the pick-from-list
+requirement altogether.
