@@ -146,14 +146,31 @@ export function NewOrderForm() {
     widthCm,
     heightCm,
   );
-  const labeledPoints = useMemo(
-    () =>
-      points.map((point) => ({
-        point,
-        label: formatPickupPointOptionLabel(point),
-      })),
-    [points],
-  );
+  const labeledPoints = useMemo(() => {
+    const weight = Number(weightG);
+    const length = Number(lengthCm);
+    const width = Number(widthCm);
+    const height = Number(heightCm);
+    const parcel =
+      Number.isFinite(weight) &&
+      Number.isFinite(length) &&
+      Number.isFinite(width) &&
+      Number.isFinite(height)
+        ? {
+            weightG: weight,
+            lengthCm: length,
+            widthCm: width,
+            heightCm: height,
+          }
+        : undefined;
+    return points.map((point) => ({
+      point,
+      // Mark (do not hide) postamats the current parcel exceeds — list is
+      // loaded once, the parcel can change, and hiding would vanish points
+      // for a reason the seller cannot see. Choice stays open.
+      label: formatPickupPointOptionLabel(point, parcel),
+    }));
+  }, [points, weightG, lengthCm, widthCm, heightCm]);
   const visiblePickup = useMemo(
     () =>
       visiblePickupPointOptions(labeledPoints, pointsFilterQuery, pointOutId),

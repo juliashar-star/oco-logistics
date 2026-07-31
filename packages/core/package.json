@@ -21,6 +21,7 @@
     "./carrier-adapter/dedupe-offers-by-same-provider-interval": "./src/carrier-adapter/dedupe-offers-by-same-provider-interval.ts",
     "./carrier-adapter/sort-offers-for-seller": "./src/carrier-adapter/sort-offers-for-seller.ts",
     "./carrier-adapter/provider-seller-display-names": "./src/carrier-adapter/provider-seller-display-names.ts",
+    "./carrier-adapter/parcel-fits-pickup-point-kind": "./src/carrier-adapter/parcel-fits-pickup-point-kind.ts",
     "./carrier-adapter/yandex/parse-price": "./src/carrier-adapter/yandex/parse-price.ts",
     "./carrier-adapter/yandex/map-status": "./src/carrier-adapter/yandex/map-status.ts",
     "./carrier-adapter/yandex/transport": "./src/carrier-adapter/yandex/transport.ts",

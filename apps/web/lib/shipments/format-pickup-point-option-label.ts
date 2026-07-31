@@ -1,4 +1,8 @@
 import type { CarrierPickupPointKind } from "@oco/core/carrier-adapter/types";
+import {
+  parcelFitsPickupPointKind,
+  type ParcelForPickupPointFit,
+} from "@oco/core/carrier-adapter/parcel-fits-pickup-point-kind";
 
 /**
  * Seller-facing <option> label for a pickup point.
@@ -20,6 +24,14 @@ import type { CarrierPickupPointKind } from "@oco/core/carrier-adapter/types";
  * and nothing about whether a buyer may collect there. Trade meaning is a
  * warehouse closed to walk-in shoppers, but some darkstores also serve as
  * pickup points — so we must not imply «buyer cannot collect».
+ *
+ * Oversized-for-postamat is also a MARK, not a hide: the parcel can change
+ * after the list is loaded once, and hiding would make points vanish for a
+ * reason the seller cannot see. We do NOT block the order — Yandex can cancel
+ * mid-route for limit violations, and the seller keeps the choice with a
+ * visible cue. Mark text stays SHORT («не влезет») — the list is two rows
+ * and already carries a kind prefix and a darkstore mark; the address is what
+ * distinguishes points that share a name.
  *
  * The mark leads — never trails — because a plain <select> truncates long
  * options by control width. When the kind word already opens the name, the
@@ -49,19 +61,36 @@ function nameBeginsWithKindWord(name: string, word: string): boolean {
   return !/\p{L}/u.test(nameLower.charAt(wordLower.length));
 }
 
+/** Short parenthetical marks attached to the kind word / leading the option. */
+function formatLeadingMarks(dark: boolean, oversized: boolean): string {
+  const parts: string[] = [];
+  if (dark) {
+    parts.push("даркстор");
+  }
+  if (oversized) {
+    parts.push("не влезет");
+  }
+  if (parts.length === 0) {
+    return "";
+  }
+  return `(${parts.join(", ")})`;
+}
+
 function withKindPrefix(
   kindWord: string,
   name: string,
   address: string,
   dark: boolean,
+  oversized: boolean,
 ): string {
   const base = `${name} — ${address}`;
   const nameHasWord = nameBeginsWithKindWord(name, kindWord);
-  if (dark) {
+  const marks = formatLeadingMarks(dark, oversized);
+  if (marks) {
     if (nameHasWord) {
-      return `(даркстор) ${base}`;
+      return `${marks} ${base}`;
     }
-    return `${kindWord} (даркстор) — ${base}`;
+    return `${kindWord} ${marks} — ${base}`;
   }
   if (nameHasWord) {
     return base;
@@ -69,28 +98,40 @@ function withKindPrefix(
   return `${kindWord} — ${base}`;
 }
 
-export function formatPickupPointOptionLabel(point: {
-  kind: CarrierPickupPointKind;
-  name: string;
-  address: string;
-  isDarkStore?: boolean;
-}): string {
+export function formatPickupPointOptionLabel(
+  point: {
+    kind: CarrierPickupPointKind;
+    name: string;
+    address: string;
+    isDarkStore?: boolean;
+  },
+  parcel?: ParcelForPickupPointFit,
+): string {
   const name = point.name.trimStart();
   const base = `${name} — ${point.address}`;
   const dark = point.isDarkStore === true;
+  const oversized =
+    parcel != null && !parcelFitsPickupPointKind(parcel, point.kind);
 
   if (point.kind === "postamat") {
-    return withKindPrefix("Постамат", name, point.address, dark);
+    return withKindPrefix("Постамат", name, point.address, dark, oversized);
   }
   if (point.kind === "warehouse") {
-    return withKindPrefix("Склад", name, point.address, dark);
+    return withKindPrefix("Склад", name, point.address, dark, oversized);
   }
   if (dark && point.kind === "pickup_point") {
-    return withKindPrefix("ПВЗ", name, point.address, dark);
+    return withKindPrefix("ПВЗ", name, point.address, dark, oversized);
   }
   if (dark) {
     // unknown (or any other non-prefixed kind): bare word — no real kind to qualify.
+    if (oversized) {
+      return `(даркстор, не влезет) — ${base}`;
+    }
     return `Даркстор — ${base}`;
+  }
+  if (oversized) {
+    // Non-prefixed kind that somehow failed a future kind check — keep short.
+    return `(не влезет) ${base}`;
   }
   return base;
 }
