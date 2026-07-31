@@ -121,6 +121,9 @@ model Shipment {
   deliveryComment String?
   pvzCode         String?
   pickupType      PickupType      @default(PVZ)
+  // Seller asked for a thermal bag. Services that cannot carry it stay listed
+  // and are marked on the card (registry supportsThermalBag).
+  needsThermalBag Boolean       @default(false)
   recipientName   String
   recipientPhone  String
 

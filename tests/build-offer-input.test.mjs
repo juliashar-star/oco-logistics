@@ -166,6 +166,17 @@ test("COURIER happy path: addressString set, no pointOutId", () => {
   assert.equal(result.input.pointOutId, undefined);
   assert.equal(result.input.recipient.addressString, "ул. Тверская, д. 1");
   assert.equal(result.input.items[0].name, "Посылка");
+  assert.equal(result.input.needsThermalBag, false);
+});
+
+test("buildOfferInput passes needsThermalBag from the shipment row", () => {
+  const result = build({
+    shipment: baseShipment({ needsThermalBag: true }),
+    company: COMPANY,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.input.needsThermalBag, true);
 });
 
 test("no_sender_phone when company.senderPhone blank", () => {

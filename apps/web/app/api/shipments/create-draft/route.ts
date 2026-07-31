@@ -21,6 +21,16 @@ export const POST = withAuth(async (request, user) => {
     const recipientPhone = String(body.recipientPhone ?? "").trim();
     const selectionMode = String(body.selectionMode ?? "MANUAL") as SelectionMode;
     const legalBasisConfirmed = Boolean(body.legalBasisConfirmed);
+    if (
+      "needsThermalBag" in body &&
+      typeof body.needsThermalBag !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "needsThermalBag должен быть boolean" },
+        { status: 400 },
+      );
+    }
+    const needsThermalBag = body.needsThermalBag === true;
     const weightG = Number(body.weightG);
     const lengthCm = Number(body.lengthCm);
     const widthCm = Number(body.widthCm);
@@ -111,6 +121,7 @@ export const POST = withAuth(async (request, user) => {
       recipientPhone: normalizedRecipientPhone.value,
       selectionMode,
       legalBasisConfirmed,
+      needsThermalBag,
       declaredValueRub:
         body.declaredValueRub != null ? Number(body.declaredValueRub) : undefined,
     });

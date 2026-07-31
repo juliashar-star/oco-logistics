@@ -39,6 +39,13 @@ export type OrderAdapter = {
    * without rated Express-class caps (e.g. next_day).
    */
   offerLimitCapacity?: number;
+  /**
+   * Whether this SERVICE can carry a thermal bag.
+   * Same optional shape as offerLimitCapacity. True on Express-family
+   * entries; absent/false on next_day — the other-day (request/*) family
+   * documents no thermal / temperature / insulated-bag option at all.
+   */
+  supportsThermalBag?: boolean;
   getOffers: CarrierAdapter["getOffers"];
   confirmOffer: CarrierAdapter["confirmOffer"];
   cancelOrder: CarrierAdapter["cancelOrder"];
@@ -64,6 +71,9 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     key: "yataxi:next_day",
     providerKey: yandexAdapter.providerKey,
     title: orderAdapterSellerTitle("yataxi:next_day"),
+    // No supportsThermalBag — other-day (request/*) documents no thermal
+    // option (method index + create/calculate bodies). Marked on the card
+    // when the seller asked for a bag; not hidden from the list.
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
@@ -77,9 +87,12 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     offerLimitCapacity: expressTaxiClassCapacity(
       EXPRESS_TAXI_CLASS_LIMITS.express,
     ),
+    supportsThermalBag: true,
     getOffers: (input, credentials) =>
       getExpressOffers(input, credentials, "express"),
-    confirmOffer: confirmExpressOffer,
+    // Same as getOffers: registry supplies the entry's taxi class.
+    confirmOffer: (offer, input, credentials) =>
+      confirmExpressOffer(offer, input, credentials, "express"),
     // Cancelling an ACCEPTED order can be PAID, so exposing it to a seller
     // without warning is a product decision, not a mapping.
     cancelOrder: expressCancelStub,
@@ -92,9 +105,11 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     offerLimitCapacity: expressTaxiClassCapacity(
       EXPRESS_TAXI_CLASS_LIMITS.courier,
     ),
+    supportsThermalBag: true,
     getOffers: (input, credentials) =>
       getExpressOffers(input, credentials, "courier"),
-    confirmOffer: confirmExpressOffer,
+    confirmOffer: (offer, input, credentials) =>
+      confirmExpressOffer(offer, input, credentials, "courier"),
     cancelOrder: expressCancelStub,
   },
 };

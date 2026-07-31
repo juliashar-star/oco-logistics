@@ -327,6 +327,30 @@ describe("createDraftOrder", { concurrency: false }, () => {
     });
   });
 
+  test("stores needsThermalBag true on create and update", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Thermal Bag Co",
+        `draft-thermal-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-thermal`;
+
+      const first = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        needsThermalBag: true,
+      });
+      assert.equal(first.created, true);
+      assert.equal(first.shipment.needsThermalBag, true);
+
+      const second = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        needsThermalBag: false,
+      });
+      assert.equal("created" in second && second.created, false);
+      assert.equal(second.shipment.needsThermalBag, false);
+    });
+  });
+
   test("(vii) DRAFT with submittingAt set → conflict, row untouched", async () => {
     await withEnv(PII_ENV, TEST_PII_KEY, async () => {
       const company = await seedCompany(

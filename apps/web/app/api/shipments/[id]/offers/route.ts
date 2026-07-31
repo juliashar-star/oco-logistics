@@ -16,6 +16,12 @@ import { toOffersResponse } from "@/lib/shipments/offer-dto";
 function resolveOfferServiceTitle(adapterKey: string | undefined): string {
   return resolveOrderAdapter(adapterKey).title;
 }
+
+function resolveOfferSupportsThermalBag(
+  adapterKey: string | undefined,
+): boolean {
+  return resolveOrderAdapter(adapterKey).supportsThermalBag === true;
+}
 function messageForBuildFailure(
   reason:
     | "no_declared_value"
@@ -67,6 +73,7 @@ export const POST = withAuth<{ id: string }>(
         widthCm: true,
         heightCm: true,
         pickupType: true,
+        needsThermalBag: true,
         pvzCode: true,
         destCity: true,
         destAddress: true,
@@ -146,6 +153,7 @@ export const POST = withAuth<{ id: string }>(
           widthCm: decrypted.widthCm,
           heightCm: decrypted.heightCm,
           pickupType: decrypted.pickupType,
+          needsThermalBag: decrypted.needsThermalBag,
           pvzCode: decrypted.pvzCode,
           destCity: decrypted.destCity,
           destAddress: decrypted.destAddress,
@@ -190,6 +198,7 @@ export const POST = withAuth<{ id: string }>(
           toOffersResponse(
             { ok: true, offers: taggedOffers },
             resolveOfferServiceTitle,
+            resolveOfferSupportsThermalBag,
           ),
         );
       }
@@ -207,6 +216,7 @@ export const POST = withAuth<{ id: string }>(
           toOffersResponse(
             { ok: false, reason: "no_delivery_options" },
             resolveOfferServiceTitle,
+            resolveOfferSupportsThermalBag,
           ),
         );
       }

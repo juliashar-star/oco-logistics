@@ -1764,3 +1764,14 @@ floored to UTC minute (как display), иначе одинаковые «до H
 тогда оба остаются.
 Отвергли: два класса в одном calculate; дедуп по цене; tolerance (±N сек);
 дедуп по разным перевозчикам; cargo / sdd_multislot / tariffs в этом слайсе.
+- **2026-07-31 · thermal bag — seller can ask; services that cannot carry it are MARKED, not hidden.**
+Почему: Яндекс продаёт опцию на same-day классах; нейтральный флаг
+`needsThermalBag` идёт с чекбокса через draft в calculate/create. Услуги без
+опции остаются в списке с пометкой «без термосумки»: скрытие схлопнуло бы
+nationwide next_day до city-only Express в момент галочки, а сравнение
+требовало бы untick → recalculate → look → re-tick → recalculate. Пометка
+только отрицательная — мы знаем, что у услуги опции нет, но не что сумка
+будет: опция не echoed на оффере, а `requirement_unavailable` позволяет
+создать claim с тихо отброшенным требованием.
+Отвергли: hiding next_day; positive «с термосумкой» claim; `auto_courier`
+(утраивает цену, отложен).

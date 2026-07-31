@@ -199,6 +199,11 @@ export type CarrierCreateOrderInput = {
    */
   deliveryApartment?: string | null;
   deliveryComment?: string | null;
+  /**
+   * Seller asked for a thermal bag. Neutral name — carrier-specific
+   * option vocabulary stays inside that adapter only.
+   */
+  needsThermalBag?: boolean;
 };
 
 export type CarrierCreateOrderResult = {

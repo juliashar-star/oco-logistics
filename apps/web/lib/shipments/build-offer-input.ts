@@ -20,6 +20,7 @@ export type BuildOfferShipment = {
   deliveryComment?: string | null;
   recipientName: string;
   recipientPhone: string;
+  needsThermalBag?: boolean;
 };
 
 export type BuildOfferCompany = {
@@ -154,6 +155,7 @@ export function buildOfferInput(args: {
     },
     deliveryApartment: shipment.destApartment ?? null,
     deliveryComment: shipment.deliveryComment ?? null,
+    needsThermalBag: shipment.needsThermalBag === true,
     items,
   };
 

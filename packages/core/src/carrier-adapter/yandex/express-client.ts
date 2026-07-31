@@ -157,6 +157,7 @@ function formatExpressCostValue(unitPriceRub: number): string {
 export function buildClaimsCreateBody(
   offer: CarrierOffer,
   input: CarrierCreateOrderInput,
+  taxiClass: ExpressTaxiClass,
 ): Record<string, unknown> {
   const senderEmail = input.sender.email?.trim();
   // Reject, do not omit or send undefined: docs text marks email required for
@@ -189,7 +190,7 @@ export function buildClaimsCreateBody(
     };
   });
 
-  return {
+  const body: Record<string, unknown> = {
     items,
     route_points: [
       {
@@ -226,6 +227,20 @@ export function buildClaimsCreateBody(
     ],
     offer_payload: offer.offerId,
   };
+
+  // When false/absent: send NO client_requirements at all — the create path
+  // has never been exercised live, so keep it byte-identical to today.
+  // When true: taxi_class is REQUIRED inside client_requirements once that
+  // object is present (measured); cargo_options carries thermobag (Yandex
+  // vocabulary — stays in this adapter only).
+  if (input.needsThermalBag === true) {
+    body.client_requirements = {
+      taxi_class: taxiClass,
+      cargo_options: ["thermobag"],
+    };
+  }
+
+  return body;
 }
 
 type ExpressOfferPrice = {
@@ -323,6 +338,15 @@ export function buildCalculateBody(
     };
   });
 
+  // When false/absent: requirements stays { taxi_classes } only — body
+  // byte-identical to today. thermobag is Yandex vocabulary; only here.
+  const requirements: Record<string, unknown> = {
+    taxi_classes: [taxiClass],
+  };
+  if (input.needsThermalBag === true) {
+    requirements.cargo_options = ["thermobag"];
+  }
+
   return {
     items,
     route_points: [
@@ -341,7 +365,7 @@ export function buildCalculateBody(
         ),
       },
     ],
-    requirements: { taxi_classes: [taxiClass] },
+    requirements,
   };
 }
 
@@ -613,6 +637,7 @@ export async function confirmExpressOffer(
   offer: CarrierOffer,
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
+  taxiClass: ExpressTaxiClass,
   options?: ConfirmExpressOfferOptions,
 ): Promise<CarrierConfirmResult> {
   const pollIntervalMs = options?.pollIntervalMs ?? 1000;
@@ -621,7 +646,7 @@ export async function confirmExpressOffer(
   const creds = assertYandexCredentials(credentials);
   const baseUrl = resolveBaseUrl("YANDEX_EXPRESS_BASE_URL");
   const requestId = deriveClaimsRequestId(input.clientNumber, offer.offerId);
-  const createBody = buildClaimsCreateBody(offer, input);
+  const createBody = buildClaimsCreateBody(offer, input, taxiClass);
 
   const createResponse = await yandexPost(
     baseUrl,

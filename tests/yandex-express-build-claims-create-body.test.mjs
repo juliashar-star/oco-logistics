@@ -92,14 +92,37 @@ const EXPECTED_CLAIMS_CREATE_BODY = {
 };
 
 test("buildClaimsCreateBody happy shape matches named constant", () => {
-  assert.deepEqual(buildClaimsCreateBody(OFFER, baseInput()), EXPECTED_CLAIMS_CREATE_BODY);
+  assert.deepEqual(
+    buildClaimsCreateBody(OFFER, baseInput(), "express"),
+    EXPECTED_CLAIMS_CREATE_BODY,
+  );
+});
+
+test("buildClaimsCreateBody without needsThermalBag has no client_requirements", () => {
+  const body = buildClaimsCreateBody(OFFER, baseInput(), "express");
+  assert.equal("client_requirements" in body, false);
+  assert.deepEqual(body, EXPECTED_CLAIMS_CREATE_BODY);
+});
+
+test("buildClaimsCreateBody with needsThermalBag adds client_requirements taxi_class + cargo_options", () => {
+  const body = buildClaimsCreateBody(
+    OFFER,
+    baseInput({ needsThermalBag: true }),
+    "courier",
+  );
+  assert.deepEqual(body.client_requirements, {
+    taxi_class: "courier",
+    cargo_options: ["thermobag"],
+  });
+  const { client_requirements: _cr, ...rest } = body;
+  assert.deepEqual(rest, EXPECTED_CLAIMS_CREATE_BODY);
 });
 
 test("buildClaimsCreateBody DOES contain the recipient name and phone", () => {
   // Opposite of getExpressOffers' calculate assertion (neither name nor phone).
   // Without this, stripping destination contact from create would still leave
   // both suites green.
-  const body = buildClaimsCreateBody(OFFER, baseInput());
+  const body = buildClaimsCreateBody(OFFER, baseInput(), "express");
   const serialized = JSON.stringify(body);
   assert.match(serialized, /Иванов Иван/);
   assert.match(serialized, /\+79001234567/);
@@ -117,6 +140,7 @@ test("buildClaimsCreateBody rejects missing sender email (does not send undefine
       buildClaimsCreateBody(
         OFFER,
         baseInput({ sender: { ...SENDER, email: undefined } }),
+        "express",
       ),
     /sender email/,
   );
@@ -125,6 +149,7 @@ test("buildClaimsCreateBody rejects missing sender email (does not send undefine
       buildClaimsCreateBody(
         OFFER,
         baseInput({ sender: { ...SENDER, email: "   " } }),
+        "express",
       ),
     /sender email/,
   );

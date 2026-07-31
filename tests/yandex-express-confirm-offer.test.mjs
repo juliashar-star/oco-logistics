@@ -163,6 +163,7 @@ async function runConfirm(handler, options = FAST_POLL) {
         OFFER,
         INPUT,
         VALID_CREDS,
+        "express",
         options,
       );
       return { result, mock };
@@ -223,7 +224,10 @@ test("confirmExpressOffer happy path: create → two estimating → ready → ac
       deriveClaimsRequestId(INPUT.clientNumber, OFFER.offerId),
     )}`,
   );
-  assert.deepEqual(createCall.body, buildClaimsCreateBody(OFFER, INPUT));
+  assert.deepEqual(
+    createCall.body,
+    buildClaimsCreateBody(OFFER, INPUT, "express"),
+  );
   assert.equal(
     new Headers(createCall.init.headers).get("Accept-Language"),
     "ru",

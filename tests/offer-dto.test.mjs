@@ -12,6 +12,7 @@ const EXPECTED_OFFER_KEYS = [
   "pickupIntervalTo",
   "priceRub",
   "serviceTitle",
+  "supportsThermalBag",
 ];
 
 const SAMPLE_OFFER = {
@@ -39,6 +40,13 @@ function fakeResolveServiceTitle(adapterKey) {
   return `TITLE_FOR:${adapterKey}`;
 }
 
+/** Fake resolver — express/courier support; next_day and unknown do not. */
+function fakeResolveSupportsThermalBag(adapterKey) {
+  return (
+    adapterKey === "yataxi:express" || adapterKey === "yataxi:courier"
+  );
+}
+
 test("mapped offer key set is exactly the DTO fields (catches future spread of rawOffer)", () => {
   const response = toOffersResponse(
     {
@@ -46,6 +54,7 @@ test("mapped offer key set is exactly the DTO fields (catches future spread of r
       offers: [SAMPLE_OFFER],
     },
     fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
   );
 
   assert.equal(response.ok, true);
@@ -61,6 +70,7 @@ test("fat rawOffer never appears in serialized response", () => {
       offers: [SAMPLE_OFFER],
     },
     fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
   );
 
   const serialized = JSON.stringify(response);
@@ -76,6 +86,7 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
       reason: "no_delivery_options",
     },
     fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
   );
   assert.deepEqual(response, {
     ok: true,
@@ -88,6 +99,7 @@ test("ok with empty offers -> ok true, status ok, empty offers", () => {
   const response = toOffersResponse(
     { ok: true, offers: [] },
     fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
   );
   assert.deepEqual(response, {
     ok: true,
@@ -108,10 +120,34 @@ test("serviceTitle comes from the resolver for each offer, including undefined a
   const response = toOffersResponse(
     { ok: true, offers: [withKey, withoutKey] },
     fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
   );
 
   assert.equal(response.offers[0].serviceTitle, "TITLE_FOR:yataxi:next_day");
   assert.equal(response.offers[1].serviceTitle, "DEFAULT_SERVICE_TITLE");
   assert.equal("adapterKey" in response.offers[0], false);
   assert.equal("adapterKey" in response.offers[1], false);
+});
+
+test("supportsThermalBag comes from the resolver; adapterKey stays off the wire", () => {
+  const nextDay = {
+    ...SAMPLE_OFFER,
+    offerId: "a",
+    adapterKey: "yataxi:next_day",
+  };
+  const express = {
+    ...SAMPLE_OFFER,
+    offerId: "b",
+    adapterKey: "yataxi:express",
+  };
+
+  const response = toOffersResponse(
+    { ok: true, offers: [nextDay, express] },
+    fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
+  );
+
+  assert.equal(response.offers[0].supportsThermalBag, false);
+  assert.equal(response.offers[1].supportsThermalBag, true);
+  assert.equal("adapterKey" in response.offers[0], false);
 });

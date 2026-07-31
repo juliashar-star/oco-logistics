@@ -44,11 +44,20 @@ test("ORDER_ADAPTERS holds next_day, express and courier with distinct titles; e
   assert.notEqual(nextTitle, expressTitle);
   assert.notEqual(expressTitle, courierTitle);
   assert.notEqual(nextTitle, courierTitle);
+  // Registry wrappers bind the entry's taxi class (same pattern as getOffers).
   assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:express"].confirmOffer,
+    "function",
+  );
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:courier"].confirmOffer,
+    "function",
+  );
+  assert.notEqual(
     ORDER_ADAPTERS["yataxi:express"].confirmOffer,
     confirmExpressOffer,
   );
-  assert.equal(
+  assert.notEqual(
     ORDER_ADAPTERS["yataxi:courier"].confirmOffer,
     confirmExpressOffer,
   );
@@ -112,6 +121,15 @@ test("express and courier offerLimitCapacity prefer express (wider documented li
   assert.ok(expressCap > courierCap);
   assert.equal(
     ORDER_ADAPTERS["yataxi:next_day"].offerLimitCapacity,
+    undefined,
+  );
+});
+
+test("supportsThermalBag true on express/courier; absent on next_day", () => {
+  assert.equal(ORDER_ADAPTERS["yataxi:express"].supportsThermalBag, true);
+  assert.equal(ORDER_ADAPTERS["yataxi:courier"].supportsThermalBag, true);
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:next_day"].supportsThermalBag,
     undefined,
   );
 });

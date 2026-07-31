@@ -29,6 +29,7 @@ export type CreateDraftInput = {
   recipientPhone: string;
   selectionMode: SelectionMode;
   legalBasisConfirmed: boolean;
+  needsThermalBag?: boolean;
 };
 
 export type CreateDraftResult =
@@ -80,6 +81,7 @@ export async function createDraftOrder(
     deliveryComment: encryptedRecipient.deliveryComment,
     pvzCode: input.pvzCode?.trim() || null,
     pickupType: input.pickupType,
+    needsThermalBag: input.needsThermalBag === true,
     recipientName: encryptedRecipient.recipientName,
     recipientPhone: encryptedRecipient.recipientPhone,
     selectionMode: input.selectionMode,

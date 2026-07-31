@@ -537,3 +537,26 @@ test("getOffers with neither pointOutId nor address throws YANDEX_NO_DESTINATION
     }
   });
 });
+
+test("getOffers with needsThermalBag still returns offers (next_day is not hidden)", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", TEST_BASE_URL, async () => {
+    const rawOffers = [makeRawOffer(0), makeRawOffer(1)];
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: rawOffers }),
+    );
+
+    try {
+      const result = await getOffers(
+        baseInput({ needsThermalBag: true }),
+        VALID_CREDS,
+      );
+
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.offers.length, 2);
+      assert.equal(mock.calls.length, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+});

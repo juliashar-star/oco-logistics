@@ -24,7 +24,13 @@ import {
 import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
 import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
+import {
+  calculationSnapshotKey,
+  snapshotsEqual,
+  type CalculationSnapshot,
+} from "@/lib/shipments/calculation-snapshot";
 import { parseSubmitSuccessLabelFields } from "@/lib/shipments/parse-submit-success-label-fields";
+import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offer-lacks-thermal-bag";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 
@@ -94,21 +100,6 @@ const NO_DELIVERY_TO_POINT =
 const NO_DELIVERY_TO_ADDRESS =
   "Доставка по этому адресу недоступна";
 
-type CalculationSnapshot = {
-  recipientName: string;
-  recipientPhone: string;
-  weightG: string;
-  lengthCm: string;
-  widthCm: string;
-  heightCm: string;
-  /** Yandex draft/offer input — both PVZ and COURIER. */
-  declaredValueRub: string;
-  destCity: string;
-  destAddress: string;
-  pointOutId: string;
-  pickupType: "PVZ" | "COURIER";
-};
-
 function quoteRowKey(quote: Quote): string {
   return `${quote.providerKey}:${quote.tariffId}:${quote.deliveryMode}`;
 }
@@ -133,6 +124,7 @@ export function NewOrderForm() {
   const [destApartment, setDestApartment] = useState("");
   const [deliveryComment, setDeliveryComment] = useState("");
   const [pickupType, setPickupType] = useState<"PVZ" | "COURIER">("PVZ");
+  const [needsThermalBag, setNeedsThermalBag] = useState(false);
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
@@ -257,32 +249,16 @@ export function NewOrderForm() {
       destAddress: destAddress.trim(),
       pointOutId,
       pickupType,
+      needsThermalBag,
     };
   }
 
-  /**
-   * Yandex draft/offer inputs for both PVZ and COURIER: base fields +
-   * declaredValueRub + destCity, then destination key by type
-   * (destAddress for COURIER, pointOutId for PVZ).
-   */
-  function snapshotsEqual(a: CalculationSnapshot, b: CalculationSnapshot): boolean {
-    const baseEqual =
-      a.recipientName === b.recipientName &&
-      a.recipientPhone === b.recipientPhone &&
-      a.weightG === b.weightG &&
-      a.lengthCm === b.lengthCm &&
-      a.widthCm === b.widthCm &&
-      a.heightCm === b.heightCm;
-
-    if (!baseEqual) {
-      return false;
-    }
-
-    if (a.declaredValueRub !== b.declaredValueRub) return false;
-    if (a.destCity !== b.destCity) return false;
-    if (b.pickupType === "COURIER") return a.destAddress === b.destAddress;
-    return a.pointOutId === b.pointOutId;
-  }
+  // Built once per render — its key is the invalidate-quotes effect dependency
+  // (see calculationSnapshotKey) so new snapshot fields cannot be forgotten.
+  const formCalculationSnapshot = snapshotFromForm();
+  const formCalculationSnapshotKey = calculationSnapshotKey(
+    formCalculationSnapshot,
+  );
 
   function invalidateQuotesIfParamsChanged() {
     const snapshot = calculationSnapshot.current;
@@ -291,7 +267,7 @@ export function NewOrderForm() {
     if (!snapshot || !hasResults) {
       return;
     }
-    if (!snapshotsEqual(snapshot, snapshotFromForm())) {
+    if (!snapshotsEqual(snapshot, formCalculationSnapshot)) {
       // Same idempotencyKey for the form session — create-draft updates the
       // existing DRAFT and wipes stale quotedOffers server-side.
       clearQuoteSelection();
@@ -418,19 +394,9 @@ export function NewOrderForm() {
 
   useEffect(() => {
     invalidateQuotesIfParamsChanged();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- сравниваем снимок расчёта с текущими полями
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot fields ride formCalculationSnapshotKey
   }, [
-    recipientName,
-    recipientPhone,
-    weightG,
-    lengthCm,
-    widthCm,
-    heightCm,
-    declaredValueRub,
-    destCity,
-    destAddress,
-    pointOutId,
-    pickupType,
+    formCalculationSnapshotKey,
     quotes.length,
     yandexOffers.length,
     noDeliveryToPoint,
@@ -592,6 +558,7 @@ export function NewOrderForm() {
           recipientName: recipientName.trim(),
           recipientPhone: phoneResult.value,
           legalBasisConfirmed: true,
+          needsThermalBag: pickupType === "COURIER" && needsThermalBag,
           declaredValueRub: declared,
           selectionMode,
         }),
@@ -901,6 +868,9 @@ export function NewOrderForm() {
               onChange={(e) => {
                 const next = e.target.value as "PVZ" | "COURIER";
                 setPickupType(next);
+                if (next !== "COURIER") {
+                  setNeedsThermalBag(false);
+                }
                 clearQuoteSelection();
                 setRecalculateHint(null);
                 setError("");
@@ -1152,6 +1122,16 @@ export function NewOrderForm() {
             />
           </div>
         </div>
+        {pickupType === "COURIER" && (
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={needsThermalBag}
+              onChange={(e) => setNeedsThermalBag(e.target.checked)}
+            />
+            <span>Термосумка</span>
+          </label>
+        )}
         {parcelEntrySummary && (
           <p className="text-xs text-slate-500">{parcelEntrySummary}</p>
         )}
@@ -1303,6 +1283,14 @@ export function NewOrderForm() {
                   <div className="mt-1 text-base font-semibold text-slate-900">
                     {offer.priceRub.toLocaleString("ru-RU")} ₽
                   </div>
+                  {shouldShowOfferLacksThermalBag({
+                    needsThermalBag,
+                    supportsThermalBag: offer.supportsThermalBag,
+                  }) ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      без термосумки
+                    </div>
+                  ) : null}
                 </button>
               );
             })}

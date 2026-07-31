@@ -173,6 +173,54 @@ test("getExpressOffers courier class puts taxi_classes: [courier] in the body", 
   });
 });
 
+test("getExpressOffers with needsThermalBag adds cargo_options thermobag beside taxi_classes", async () => {
+  await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawExpressOffer(0)] }),
+    );
+
+    try {
+      await getExpressOffers(
+        baseInput({ needsThermalBag: true }),
+        VALID_CREDS,
+        "express",
+      );
+
+      assert.deepEqual(mock.calls[0].body.requirements, {
+        taxi_classes: ["express"],
+        cargo_options: ["thermobag"],
+      });
+      const { requirements, ...rest } = mock.calls[0].body;
+      const { requirements: _expReq, ...expectedRest } = EXPECTED_CALCULATE_BODY;
+      assert.deepEqual(rest, expectedRest);
+      assert.ok(requirements.cargo_options);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getExpressOffers without needsThermalBag keeps calculate body unchanged", async () => {
+  await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawExpressOffer(0)] }),
+    );
+
+    try {
+      await getExpressOffers(
+        baseInput({ needsThermalBag: false }),
+        VALID_CREDS,
+        "express",
+      );
+
+      assert.deepEqual(mock.calls[0].body, EXPECTED_CALCULATE_BODY);
+      assert.equal("cargo_options" in mock.calls[0].body.requirements, false);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
 test("getExpressOffers over courier weight returns no_delivery_options with zero fetch", async () => {
   await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
     const mock = installFetchMock(() => {
