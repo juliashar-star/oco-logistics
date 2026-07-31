@@ -29,6 +29,7 @@ export function isLabelAllowedStatus(status: string): boolean {
 export const ORDER_ADAPTER_LABEL_SUPPORT: Readonly<Record<string, boolean>> = {
   "yataxi:next_day": true,
   "yataxi:express": false,
+  "yataxi:courier": false,
 };
 
 /**

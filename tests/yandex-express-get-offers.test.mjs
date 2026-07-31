@@ -142,7 +142,7 @@ test("getExpressOffers request body matches offers/calculate expected shape", as
     );
 
     try {
-      await getExpressOffers(baseInput(), VALID_CREDS);
+      await getExpressOffers(baseInput(), VALID_CREDS, "express");
 
       assert.deepEqual(mock.calls[0].body, EXPECTED_CALCULATE_BODY);
       assert.equal(
@@ -155,13 +155,64 @@ test("getExpressOffers request body matches offers/calculate expected shape", as
   });
 });
 
+test("getExpressOffers courier class puts taxi_classes: [courier] in the body", async () => {
+  await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(200, { offers: [makeRawExpressOffer(0)] }),
+    );
+
+    try {
+      await getExpressOffers(baseInput(), VALID_CREDS, "courier");
+
+      assert.deepEqual(mock.calls[0].body.requirements, {
+        taxi_classes: ["courier"],
+      });
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("getExpressOffers over courier weight returns no_delivery_options with zero fetch", async () => {
+  await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
+    const mock = installFetchMock(() => {
+      throw new Error("fetch must not be called when class limits reject the parcel");
+    });
+
+    try {
+      const result = await getExpressOffers(
+        baseInput({
+          items: [
+            {
+              name: "Посылка",
+              quantity: 1,
+              unitPriceRub: 100,
+              weightG: 15_000,
+              lengthCm: 30,
+              widthCm: 20,
+              heightCm: 10,
+            },
+          ],
+        }),
+        VALID_CREDS,
+        "courier",
+      );
+
+      assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
+      assert.equal(mock.calls.length, 0);
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
 test("getExpressOffers maps five offers using net total_price", async () => {
   await withEnv("YANDEX_EXPRESS_BASE_URL", TEST_BASE_URL, async () => {
     const rawOffers = Array.from({ length: 5 }, (_, i) => makeRawExpressOffer(i));
     const mock = installFetchMock(() => jsonResponse(200, { offers: rawOffers }));
 
     try {
-      const result = await getExpressOffers(baseInput(), VALID_CREDS);
+      const result = await getExpressOffers(baseInput(), VALID_CREDS, "express");
 
       assert.equal(result.ok, true);
       if (!result.ok) return;
@@ -206,6 +257,7 @@ test("getExpressOffers PVZ input returns no_delivery_options with zero fetch cal
       const result = await getExpressOffers(
         baseInput({ pointOutId: "pvz-station-uuid" }),
         VALID_CREDS,
+        "express",
       );
 
       assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
@@ -226,7 +278,7 @@ test("getExpressOffers zone code returns no_delivery_options", async () => {
     );
 
     try {
-      const result = await getExpressOffers(baseInput(), VALID_CREDS);
+      const result = await getExpressOffers(baseInput(), VALID_CREDS, "express");
       assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
     } finally {
       mock.restore();
@@ -239,7 +291,7 @@ test("getExpressOffers empty offers array returns no_delivery_options", async ()
     const mock = installFetchMock(() => jsonResponse(200, { offers: [] }));
 
     try {
-      const result = await getExpressOffers(baseInput(), VALID_CREDS);
+      const result = await getExpressOffers(baseInput(), VALID_CREDS, "express");
       assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
     } finally {
       mock.restore();
@@ -255,7 +307,7 @@ test("getExpressOffers non-200 throws", async () => {
 
     try {
       await assert.rejects(
-        () => getExpressOffers(baseInput(), VALID_CREDS),
+        () => getExpressOffers(baseInput(), VALID_CREDS, "express"),
         /Yandex Express get offers failed: HTTP 500/,
       );
     } finally {
@@ -271,7 +323,7 @@ test("getExpressOffers serialised body contains neither recipient name nor phone
     );
 
     try {
-      await getExpressOffers(baseInput(), VALID_CREDS);
+      await getExpressOffers(baseInput(), VALID_CREDS, "express");
 
       const serialised = JSON.stringify(mock.calls[0].body);
       assert.equal(serialised.includes(RECIPIENT.contactName), false);
@@ -294,7 +346,7 @@ test("getExpressOffers skips an offer without payload and keeps the valid one", 
     );
 
     try {
-      const result = await getExpressOffers(baseInput(), VALID_CREDS);
+      const result = await getExpressOffers(baseInput(), VALID_CREDS, "express");
 
       assert.equal(result.ok, true);
       if (!result.ok) return;
@@ -315,7 +367,7 @@ test("getExpressOffers throws when offer price has no total_price", async () => 
 
     try {
       await assert.rejects(
-        () => getExpressOffers(baseInput(), VALID_CREDS),
+        () => getExpressOffers(baseInput(), VALID_CREDS, "express"),
         /Yandex Express offer missing price.total_price/,
       );
     } finally {

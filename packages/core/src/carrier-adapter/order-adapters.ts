@@ -5,6 +5,10 @@ import {
   confirmExpressOffer,
   getExpressOffers,
 } from "./yandex/express-client";
+import {
+  EXPRESS_TAXI_CLASS_LIMITS,
+  expressTaxiClassCapacity,
+} from "./yandex/express-taxi-class-limits";
 
 /**
  * Order-path capability only — not a full CarrierAdapter.
@@ -28,6 +32,13 @@ export type OrderAdapter = {
    * which is covered by the display-name masking in provider-seller-display-names.
    */
   title: string;
+  /**
+   * Comparable capacity of this service's parcel limits (higher = wider).
+   * Fed to same-provider same-interval dedupe as a price-tie breaker —
+   * not "whichever entry came first in the registry". Absent on families
+   * without rated Express-class caps (e.g. next_day).
+   */
+  offerLimitCapacity?: number;
   getOffers: CarrierAdapter["getOffers"];
   confirmOffer: CarrierAdapter["confirmOffer"];
   cancelOrder: CarrierAdapter["cancelOrder"];
@@ -42,6 +53,10 @@ export type OrderAdapter = {
    * Looked up by orderAdapterKey — never by providerKey alone.
    */
   getHandoverAct?: CarrierAdapter["getHandoverAct"];
+};
+
+const expressCancelStub: CarrierAdapter["cancelOrder"] = async () => {
+  throw new Error("Оформление этой услуги ещё не реализовано");
 };
 
 export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
@@ -59,14 +74,28 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     key: "yataxi:express",
     providerKey: yandexAdapter.providerKey,
     title: orderAdapterSellerTitle("yataxi:express"),
-    getOffers: getExpressOffers,
+    offerLimitCapacity: expressTaxiClassCapacity(
+      EXPRESS_TAXI_CLASS_LIMITS.express,
+    ),
+    getOffers: (input, credentials) =>
+      getExpressOffers(input, credentials, "express"),
     confirmOffer: confirmExpressOffer,
     // Cancelling an ACCEPTED order can be PAID, so exposing it to a seller
     // without warning is a product decision, not a mapping.
-    cancelOrder: async () => {
-      throw new Error("Оформление этой услуги ещё не реализовано");
-    },
+    cancelOrder: expressCancelStub,
     // No generateLabels / getHandoverAct — Express claims/* has neither.
+  },
+  "yataxi:courier": {
+    key: "yataxi:courier",
+    providerKey: yandexAdapter.providerKey,
+    title: orderAdapterSellerTitle("yataxi:courier"),
+    offerLimitCapacity: expressTaxiClassCapacity(
+      EXPRESS_TAXI_CLASS_LIMITS.courier,
+    ),
+    getOffers: (input, credentials) =>
+      getExpressOffers(input, credentials, "courier"),
+    confirmOffer: confirmExpressOffer,
+    cancelOrder: expressCancelStub,
   },
 };
 

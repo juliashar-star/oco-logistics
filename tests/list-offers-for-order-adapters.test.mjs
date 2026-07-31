@@ -92,6 +92,39 @@ test("all ok → offers tagged with each adapter key", async () => {
   ]);
 });
 
+test("same interval from courier and express of one provider → keep cheaper", async () => {
+  const sharedInterval = {
+    deliveryIntervalFrom: "2026-07-27T10:00:00Z",
+    deliveryIntervalTo: "2026-07-27T18:00:00Z",
+    pickupIntervalFrom: "2026-07-27T08:00:00Z",
+    pickupIntervalTo: "2026-07-27T12:00:00Z",
+  };
+  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
+    {
+      ...fakeAdapter("yataxi:courier", async () => ({
+        ok: true,
+        offers: [
+          { ...makeOffer("courier-o"), ...sharedInterval, priceRub: 332 },
+        ],
+      })),
+      offerLimitCapacity: 2,
+    },
+    {
+      ...fakeAdapter("yataxi:express", async () => ({
+        ok: true,
+        offers: [
+          { ...makeOffer("express-o"), ...sharedInterval, priceRub: 331 },
+        ],
+      })),
+      offerLimitCapacity: 6,
+    },
+  ]);
+
+  assert.equal(result.offers.length, 1);
+  assert.equal(result.offers[0].offerId, "express-o");
+  assert.equal(result.offers[0].priceRub, 331);
+});
+
 test("merged offers from two adapters return soonest-deadline-first (not registry order)", async () => {
   const nextDayCheap = {
     ...makeOffer("next-day-cheap"),

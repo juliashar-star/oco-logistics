@@ -44,4 +44,11 @@ export const STATUS_SYNC_ADAPTERS: Record<string, StatusSyncAdapter> = {
     getOrderInfo: getExpressOrderInfo,
     mapStatus: mapClaimStatusToShipmentStatus,
   },
+  "yataxi:courier": {
+    orderAdapterKey: ORDER_ADAPTERS["yataxi:courier"].key,
+    providerKey: ORDER_ADAPTERS["yataxi:courier"].providerKey,
+    getOrderHistory: getExpressOrderHistory,
+    getOrderInfo: getExpressOrderInfo,
+    mapStatus: mapClaimStatusToShipmentStatus,
+  },
 };

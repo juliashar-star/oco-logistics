@@ -11,12 +11,23 @@ import type {
   CarrierOrderInfoResult,
   CarrierOrderItem,
 } from "@oco/core/carrier-adapter/types";
+import {
+  EXPRESS_TAXI_CLASS_LIMITS,
+  type ExpressTaxiClass,
+  type ExpressTaxiClassLimits,
+} from "./express-taxi-class-limits";
 import { claimStatusTextRu } from "./map-claim-status";
 import {
   assertYandexCredentials,
   resolveBaseUrl,
   yandexPost,
 } from "./transport";
+
+export type { ExpressTaxiClass, ExpressTaxiClassLimits };
+export {
+  EXPRESS_TAXI_CLASS_LIMITS,
+  expressTaxiClassCapacity,
+} from "./express-taxi-class-limits";
 
 /**
  * Compose a claims/* route_points[].fullname from city + addressString.
@@ -64,6 +75,47 @@ export function convertNeutralItemToExpressMeasures(item: {
     height: item.heightCm / 100,
     weight: item.weightG / 1000,
   };
+}
+
+/**
+ * Whether this parcel fits a class's documented limits (see EXPRESS_TAXI_CLASS_LIMITS).
+ * Sides are compared after sorting both parcel and limit dimensions descending
+ * (orientation does not matter). Total weight is sum of weightKg × quantity.
+ *
+ * Yandex does NOT enforce these at quote time — measured, a 15 kg parcel got
+ * courier offers — so this filter is ours and deliberate.
+ */
+export function isExpressTaxiClassUsableForParcel(
+  items: readonly CarrierOrderItem[],
+  limits: ExpressTaxiClassLimits,
+): boolean {
+  if (items.length === 0) {
+    return false;
+  }
+
+  let totalWeightKg = 0;
+  const limitSides = [
+    limits.maxLengthM,
+    limits.maxWidthM,
+    limits.maxHeightM,
+  ].sort((a, b) => b - a);
+
+  for (const item of items) {
+    const measures = convertNeutralItemToExpressMeasures(item);
+    totalWeightKg += measures.weight * item.quantity;
+    const parcelSides = [measures.length, measures.width, measures.height].sort(
+      (a, b) => b - a,
+    );
+    if (
+      parcelSides[0]! > limitSides[0]! ||
+      parcelSides[1]! > limitSides[1]! ||
+      parcelSides[2]! > limitSides[2]!
+    ) {
+      return false;
+    }
+  }
+
+  return totalWeightKg <= limits.maxWeightKg;
 }
 
 /**
@@ -233,6 +285,9 @@ function mapExpressOffer(raw: ExpressOffer): CarrierOffer | null {
   const pickup = raw.pickup_interval ?? {};
   const price = raw.price ?? {};
 
+  // Deliberately drop raw.taxi_class: the neutral CarrierOffer must not
+  // inherit carrier vocabulary — same rule that turned Yandex's `terminal`
+  // into our `postamat`. The registry entry / adapterKey names the service.
   return {
     offerId,
     expiresAt: raw.offer_ttl ?? "",
@@ -245,7 +300,14 @@ function mapExpressOffer(raw: ExpressOffer): CarrierOffer | null {
   };
 }
 
-function buildCalculateBody(input: CarrierCreateOrderInput): Record<string, unknown> {
+/**
+ * Build offers/calculate body. `taxiClass` comes from the caller (registry
+ * entry); it is NOT copied onto the neutral CarrierOffer.
+ */
+export function buildCalculateBody(
+  input: CarrierCreateOrderInput,
+  taxiClass: ExpressTaxiClass,
+): Record<string, unknown> {
   const items = input.items.map((item: CarrierOrderItem) => {
     const measures = convertNeutralItemToExpressMeasures(item);
     return {
@@ -279,17 +341,18 @@ function buildCalculateBody(input: CarrierCreateOrderInput): Record<string, unkn
         ),
       },
     ],
-    requirements: { taxi_classes: ["express"] },
+    requirements: { taxi_classes: [taxiClass] },
   };
 }
 
 /**
  * POST /b2b/cargo/integration/v2/offers/calculate — Express (claims/*) offers.
- * Same result shape as CarrierAdapter["getOffers"]; not wired into a registry yet.
+ * `taxiClass` is supplied by the registry entry that wraps this call.
  */
 export async function getExpressOffers(
   input: CarrierCreateOrderInput,
   credentials: CarrierCredentials,
+  taxiClass: ExpressTaxiClass,
 ): Promise<CarrierOffersResult> {
   // Schema fact from the OpenAPI RoutePointWithAddress / claims calculate contract:
   // a pickup-point destination cannot be expressed at all (no platform_station /
@@ -299,9 +362,16 @@ export async function getExpressOffers(
     return { ok: false, reason: "no_delivery_options" };
   }
 
+  const classLimits = EXPRESS_TAXI_CLASS_LIMITS[taxiClass];
+  // Ours and deliberate: Yandex does not enforce class limits at quote time
+  // (measured: 15 kg parcel still got courier offers).
+  if (!isExpressTaxiClassUsableForParcel(input.items, classLimits)) {
+    return { ok: false, reason: "no_delivery_options" };
+  }
+
   const creds = assertYandexCredentials(credentials);
   const baseUrl = resolveBaseUrl("YANDEX_EXPRESS_BASE_URL");
-  const body = buildCalculateBody(input);
+  const body = buildCalculateBody(input, taxiClass);
 
   const response = await yandexPost(
     baseUrl,
@@ -349,6 +419,7 @@ export async function getExpressOffers(
     return { ok: false, reason: "no_delivery_options" };
   }
 
+  // Class-limit gate already ran above; map only after that filter.
   const offers = (offersRaw as ExpressOffer[])
     .map(mapExpressOffer)
     .filter((offer): offer is CarrierOffer => offer !== null);

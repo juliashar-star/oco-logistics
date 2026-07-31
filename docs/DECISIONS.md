@@ -1749,3 +1749,18 @@ does not (Нижний Новгород).
 alone returns four cities); (2) «any suggestion's city equals the text» —
 confirms Мск against a settlement named МСК; (3) removing the pick-from-list
 requirement altogether.
+
+- **2026-07-31 · yataxi:courier — third Express-family entry; class from registry; our limits filter; same-provider interval dedupe keeps cheapest.**
+Почему: один `taxi_classes` массив не фанаутит по классам (measured: только
+courier); naive третья запись даёт дубликаты карт (prod prices ≈, те же
+description). `buildCalculateBody` берёт класс от registry wrapper; `taxi_class`
+не на `CarrierOffer` (как `terminal`→`postamat`). Лимиты FAQ (courier ≤10 кг /
+0.80×0.50×0.50, express ≤20 / 1.00×0.60×0.50) — наш фильтр: Яндекс на quote
+не режет (15 кг → courier offers). Dedupe по providerKey+interval (не цене):
+`deliveryIntervalFrom` = момент запроса, parallel classes ~30 ms skew; ключ
+floored to UTC minute (как display), иначе одинаковые «до HH:MM» не схлопываются.
+Дешевле побеждает, `offerLimitCapacity` только tie-break. Не по разным
+перевозчикам. Courier ladder может реально отличаться от express (~20 мин) —
+тогда оба остаются.
+Отвергли: два класса в одном calculate; дедуп по цене; tolerance (±N сек);
+дедуп по разным перевозчикам; cargo / sdd_multislot / tariffs в этом слайсе.

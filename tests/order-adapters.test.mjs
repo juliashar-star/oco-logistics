@@ -31,16 +31,25 @@ test("yataxi:next_day has seller-facing service title", () => {
   );
 });
 
-test("ORDER_ADAPTERS holds next_day and express with distinct titles; express confirm is wired, cancel stays stub", async () => {
+test("ORDER_ADAPTERS holds next_day, express and courier with distinct titles; express/courier confirm wired, cancel stays stub", async () => {
   assert.ok(ORDER_ADAPTERS["yataxi:next_day"]);
   assert.ok(ORDER_ADAPTERS["yataxi:express"]);
+  assert.ok(ORDER_ADAPTERS["yataxi:courier"]);
   const nextTitle = ORDER_ADAPTERS["yataxi:next_day"].title;
   const expressTitle = ORDER_ADAPTERS["yataxi:express"].title;
+  const courierTitle = ORDER_ADAPTERS["yataxi:courier"].title;
   assert.ok(nextTitle.length > 0);
   assert.ok(expressTitle.length > 0);
+  assert.ok(courierTitle.length > 0);
   assert.notEqual(nextTitle, expressTitle);
+  assert.notEqual(expressTitle, courierTitle);
+  assert.notEqual(nextTitle, courierTitle);
   assert.equal(
     ORDER_ADAPTERS["yataxi:express"].confirmOffer,
+    confirmExpressOffer,
+  );
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:courier"].confirmOffer,
     confirmExpressOffer,
   );
   await assert.rejects(
@@ -53,9 +62,19 @@ test("ORDER_ADAPTERS holds next_day and express with distinct titles; express co
       err instanceof Error &&
       err.message === "Оформление этой услуги ещё не реализовано",
   );
+  await assert.rejects(
+    () =>
+      ORDER_ADAPTERS["yataxi:courier"].cancelOrder(
+        "claim-id",
+        /** @type {never} */ ({}),
+      ),
+    (err) =>
+      err instanceof Error &&
+      err.message === "Оформление этой услуги ещё не реализовано",
+  );
 });
 
-test("next_day exposes generateLabels; express does not (labels resolve by orderAdapterKey)", () => {
+test("next_day exposes generateLabels; express and courier do not (labels resolve by orderAdapterKey)", () => {
   assert.equal(
     typeof ORDER_ADAPTERS["yataxi:next_day"].generateLabels,
     "function",
@@ -64,9 +83,13 @@ test("next_day exposes generateLabels; express does not (labels resolve by order
     typeof ORDER_ADAPTERS["yataxi:express"].generateLabels,
     "undefined",
   );
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:courier"].generateLabels,
+    "undefined",
+  );
 });
 
-test("next_day exposes getHandoverAct; express does not (act resolves by orderAdapterKey)", () => {
+test("next_day exposes getHandoverAct; express and courier do not (act resolves by orderAdapterKey)", () => {
   assert.equal(
     typeof ORDER_ADAPTERS["yataxi:next_day"].getHandoverAct,
     "function",
@@ -74,5 +97,21 @@ test("next_day exposes getHandoverAct; express does not (act resolves by orderAd
   assert.equal(
     typeof ORDER_ADAPTERS["yataxi:express"].getHandoverAct,
     "undefined",
+  );
+  assert.equal(
+    typeof ORDER_ADAPTERS["yataxi:courier"].getHandoverAct,
+    "undefined",
+  );
+});
+
+test("express and courier offerLimitCapacity prefer express (wider documented limits)", () => {
+  const expressCap = ORDER_ADAPTERS["yataxi:express"].offerLimitCapacity;
+  const courierCap = ORDER_ADAPTERS["yataxi:courier"].offerLimitCapacity;
+  assert.equal(typeof expressCap, "number");
+  assert.equal(typeof courierCap, "number");
+  assert.ok(expressCap > courierCap);
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:next_day"].offerLimitCapacity,
+    undefined,
   );
 });

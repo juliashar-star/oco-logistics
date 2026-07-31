@@ -1,4 +1,5 @@
 import { CarrierAuthError } from "./errors";
+import { dedupeOffersBySameProviderInterval } from "./dedupe-offers-by-same-provider-interval";
 import type { OrderAdapter } from "./order-adapters";
 import { sortOffersForSeller } from "./sort-offers-for-seller";
 import type {
@@ -124,6 +125,10 @@ async function runOneAdapter(
  * a throw or timeout never fails the whole call (same isolation as
  * listPickupPointsForCompany). Offers are tagged with the producing entry's
  * key. Status objects carry no provider text.
+ *
+ * After fan-out concatenates: same-provider same-interval duplicates are
+ * collapsed (interval bounds floored to the UTC minute; cheapest kept;
+ * wider offerLimitCapacity breaks a price tie), then sorted for the seller.
  */
 export async function listOffersForOrderAdapters(
   input: CarrierCreateOrderInput,
@@ -146,5 +151,28 @@ export async function listOffersForOrderAdapters(
     offers.push(...row.offers);
   }
 
-  return { offers: sortOffersForSeller(offers), adapters: entries };
+  const providerKeyByAdapterKey = new Map(
+    adapters.map((adapter) => [adapter.key, adapter.providerKey] as const),
+  );
+  const capacityByAdapterKey = new Map(
+    adapters
+      .filter((adapter) => adapter.offerLimitCapacity !== undefined)
+      .map(
+        (adapter) =>
+          [adapter.key, adapter.offerLimitCapacity as number] as const,
+      ),
+  );
+
+  const deduped = dedupeOffersBySameProviderInterval(offers, {
+    providerKeyOf: (adapterKey) =>
+      adapterKey === undefined
+        ? undefined
+        : providerKeyByAdapterKey.get(adapterKey),
+    serviceLimitCapacityOf: (adapterKey) =>
+      adapterKey === undefined
+        ? undefined
+        : capacityByAdapterKey.get(adapterKey),
+  });
+
+  return { offers: sortOffersForSeller(deduped), adapters: entries };
 }
