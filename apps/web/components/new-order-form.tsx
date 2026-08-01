@@ -1152,7 +1152,7 @@ export function NewOrderForm() {
           <p className="text-xs text-slate-500">{parcelEntrySummary}</p>
         )}
         {showPostamatTooLarge && (
-          <p className="text-xs text-slate-500">{POSTAMAT_TOO_LARGE_NOTICE}</p>
+          <p className="text-xs text-red-700">{POSTAMAT_TOO_LARGE_NOTICE}</p>
         )}
 
         <div className="max-w-xs">
