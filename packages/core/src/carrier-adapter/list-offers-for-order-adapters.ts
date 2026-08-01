@@ -1,6 +1,7 @@
 import { CarrierAuthError } from "./errors";
 import { dedupeOffersBySameProviderInterval } from "./dedupe-offers-by-same-provider-interval";
 import type { OrderAdapter } from "./order-adapters";
+import type { SelectedOrderAdapter } from "./select-order-adapters-for-connected-carriers";
 import { sortOffersForSeller } from "./sort-offers-for-seller";
 import type {
   CarrierCreateOrderInput,
@@ -117,9 +118,8 @@ async function runOneAdapter(
 /**
  * Fetch priced offers from injectable order adapters in parallel.
  *
- * The single CarrierCredentials argument is an INTERMEDIATE shape, correct
- * only while every registered adapter shares one providerKey; a second
- * carrier needs per-carrier credentials, which is its own slice.
+ * Each SelectedOrderAdapter carries its own credentials — one bag per
+ * provider entry, so a second carrier can pass distinct credentials.
  *
  * Per-adapter: ok / no_delivery_options / auth_failed / timed_out / failed —
  * a throw or timeout never fails the whole call (same isolation as
@@ -132,14 +132,13 @@ async function runOneAdapter(
  */
 export async function listOffersForOrderAdapters(
   input: CarrierCreateOrderInput,
-  credentials: CarrierCredentials,
-  adapters: OrderAdapter[],
+  selected: SelectedOrderAdapter[],
   options?: ListOffersForOrderAdaptersOptions,
 ): Promise<ListOffersForOrderAdaptersResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const settled = await Promise.all(
-    adapters.map((adapter) =>
+    selected.map(({ adapter, credentials }) =>
       runOneAdapter(adapter, input, credentials, timeoutMs),
     ),
   );
@@ -151,6 +150,7 @@ export async function listOffersForOrderAdapters(
     offers.push(...row.offers);
   }
 
+  const adapters = selected.map((entry) => entry.adapter);
   const providerKeyByAdapterKey = new Map(
     adapters.map((adapter) => [adapter.key, adapter.providerKey] as const),
   );

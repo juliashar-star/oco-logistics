@@ -7,6 +7,8 @@ import { listOffersForOrderAdapters } from "../packages/core/src/carrier-adapter
 /** @typedef {import("../packages/core/src/carrier-adapter/order-adapters.ts").OrderAdapter} OrderAdapter */
 /** @typedef {import("../packages/core/src/carrier-adapter/types.ts").CarrierOffer} CarrierOffer */
 /** @typedef {import("../packages/core/src/carrier-adapter/types.ts").CarrierCreateOrderInput} CarrierCreateOrderInput */
+/** @typedef {import("../packages/core/src/carrier-adapter/types.ts").CarrierCredentials} CarrierCredentials */
+/** @typedef {import("../packages/core/src/carrier-adapter/select-order-adapters-for-connected-carriers.ts").SelectedOrderAdapter} SelectedOrderAdapter */
 
 const INPUT = /** @type {CarrierCreateOrderInput} */ ({
   providerKey: "yataxi",
@@ -29,6 +31,15 @@ const INPUT = /** @type {CarrierCreateOrderInput} */ ({
 });
 
 const CREDS = { token: "t", platformStationId: "station" };
+
+/**
+ * @param {OrderAdapter[]} adapters
+ * @param {CarrierCredentials} [credentials]
+ * @returns {SelectedOrderAdapter[]}
+ */
+function withCreds(adapters, credentials = CREDS) {
+  return adapters.map((adapter) => ({ adapter, credentials }));
+}
 
 /**
  * @param {string} key
@@ -66,8 +77,7 @@ function makeOffer(offerId) {
 test("all ok → offers tagged with each adapter key", async () => {
   const result = await listOffersForOrderAdapters(
     INPUT,
-    CREDS,
-    [
+    withCreds([
       fakeAdapter("a:one", async () => ({
         ok: true,
         offers: [makeOffer("o-a")],
@@ -76,7 +86,7 @@ test("all ok → offers tagged with each adapter key", async () => {
         ok: true,
         offers: [makeOffer("o-b")],
       })),
-    ],
+    ]),
   );
 
   assert.deepEqual(
@@ -99,26 +109,29 @@ test("same interval from courier and express of one provider → keep cheaper", 
     pickupIntervalFrom: "2026-07-27T08:00:00Z",
     pickupIntervalTo: "2026-07-27T12:00:00Z",
   };
-  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
-    {
-      ...fakeAdapter("yataxi:courier", async () => ({
-        ok: true,
-        offers: [
-          { ...makeOffer("courier-o"), ...sharedInterval, priceRub: 332 },
-        ],
-      })),
-      offerLimitCapacity: 2,
-    },
-    {
-      ...fakeAdapter("yataxi:express", async () => ({
-        ok: true,
-        offers: [
-          { ...makeOffer("express-o"), ...sharedInterval, priceRub: 331 },
-        ],
-      })),
-      offerLimitCapacity: 6,
-    },
-  ]);
+  const result = await listOffersForOrderAdapters(
+    INPUT,
+    withCreds([
+      {
+        ...fakeAdapter("yataxi:courier", async () => ({
+          ok: true,
+          offers: [
+            { ...makeOffer("courier-o"), ...sharedInterval, priceRub: 332 },
+          ],
+        })),
+        offerLimitCapacity: 2,
+      },
+      {
+        ...fakeAdapter("yataxi:express", async () => ({
+          ok: true,
+          offers: [
+            { ...makeOffer("express-o"), ...sharedInterval, priceRub: 331 },
+          ],
+        })),
+        offerLimitCapacity: 6,
+      },
+    ]),
+  );
 
   assert.equal(result.offers.length, 1);
   assert.equal(result.offers[0].offerId, "express-o");
@@ -142,16 +155,19 @@ test("merged offers from two adapters return soonest-deadline-first (not registr
     priceRub: 350,
   };
 
-  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
-    fakeAdapter("yataxi:next_day", async () => ({
-      ok: true,
-      offers: [nextDayCheap],
-    })),
-    fakeAdapter("yataxi:express", async () => ({
-      ok: true,
-      offers: [sameDayExpensive, sameDayCheap],
-    })),
-  ]);
+  const result = await listOffersForOrderAdapters(
+    INPUT,
+    withCreds([
+      fakeAdapter("yataxi:next_day", async () => ({
+        ok: true,
+        offers: [nextDayCheap],
+      })),
+      fakeAdapter("yataxi:express", async () => ({
+        ok: true,
+        offers: [sameDayExpensive, sameDayCheap],
+      })),
+    ]),
+  );
 
   assert.deepEqual(
     result.offers.map((o) => o.offerId),
@@ -164,12 +180,15 @@ test("merged offers from two adapters return soonest-deadline-first (not registr
 });
 
 test("one no_delivery_options → that status, no offers from it", async () => {
-  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
-    fakeAdapter("solo", async () => ({
-      ok: false,
-      reason: "no_delivery_options",
-    })),
-  ]);
+  const result = await listOffersForOrderAdapters(
+    INPUT,
+    withCreds([
+      fakeAdapter("solo", async () => ({
+        ok: false,
+        reason: "no_delivery_options",
+      })),
+    ]),
+  );
 
   assert.deepEqual(result.offers, []);
   assert.deepEqual(result.adapters, [
@@ -178,11 +197,14 @@ test("one no_delivery_options → that status, no offers from it", async () => {
 });
 
 test("one throws → failed status, never rethrows; status has no provider text", async () => {
-  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
-    fakeAdapter("boom", async () => {
-      throw new Error("PROVIDER_SECRET_FAULT_xyz_raw_body");
-    }),
-  ]);
+  const result = await listOffersForOrderAdapters(
+    INPUT,
+    withCreds([
+      fakeAdapter("boom", async () => {
+        throw new Error("PROVIDER_SECRET_FAULT_xyz_raw_body");
+      }),
+    ]),
+  );
 
   assert.deepEqual(result.offers, []);
   assert.deepEqual(result.adapters, [{ key: "boom", status: "failed" }]);
@@ -195,8 +217,7 @@ test("one throws → failed status, never rethrows; status has no provider text"
 test("one times out → timed_out", async () => {
   const result = await listOffersForOrderAdapters(
     INPUT,
-    CREDS,
-    [
+    withCreds([
       fakeAdapter(
         "slow",
         () =>
@@ -204,7 +225,7 @@ test("one times out → timed_out", async () => {
             /* never settles */
           }),
       ),
-    ],
+    ]),
     { timeoutMs: 20 },
   );
 
@@ -213,15 +234,18 @@ test("one times out → timed_out", async () => {
 });
 
 test("two adapters: one fails, the other returns offers → offers still come back", async () => {
-  const result = await listOffersForOrderAdapters(INPUT, CREDS, [
-    fakeAdapter("bad", async () => {
-      throw new CarrierAuthError("auth boom with raw body");
-    }),
-    fakeAdapter("good", async () => ({
-      ok: true,
-      offers: [makeOffer("kept")],
-    })),
-  ]);
+  const result = await listOffersForOrderAdapters(
+    INPUT,
+    withCreds([
+      fakeAdapter("bad", async () => {
+        throw new CarrierAuthError("auth boom with raw body");
+      }),
+      fakeAdapter("good", async () => ({
+        ok: true,
+        offers: [makeOffer("kept")],
+      })),
+    ]),
+  );
 
   assert.equal(result.offers.length, 1);
   assert.equal(result.offers[0].offerId, "kept");
@@ -250,7 +274,7 @@ test("each adapter getOffers receives that adapter's own providerKey", async () 
     providerKey: "carrier-b",
   };
 
-  await listOffersForOrderAdapters(INPUT, CREDS, [a, b]);
+  await listOffersForOrderAdapters(INPUT, withCreds([a, b]));
   assert.deepEqual(seen.sort(), ["carrier-a", "carrier-b"]);
 });
 
@@ -261,11 +285,14 @@ test("console.error never receives recipient PII from INPUT", async () => {
     calls.push(args);
   };
   try {
-    await listOffersForOrderAdapters(INPUT, CREDS, [
-      fakeAdapter("boom", async () => {
-        throw new Error("benign adapter fault");
-      }),
-    ]);
+    await listOffersForOrderAdapters(
+      INPUT,
+      withCreds([
+        fakeAdapter("boom", async () => {
+          throw new Error("benign adapter fault");
+        }),
+      ]),
+    );
   } finally {
     console.error = original;
   }
@@ -274,4 +301,31 @@ test("console.error never receives recipient PII from INPUT", async () => {
   assert.equal(blob.includes(INPUT.recipient.contactName), false);
   assert.equal(blob.includes(INPUT.recipient.phone), false);
   assert.equal(blob.includes(INPUT.recipient.addressString), false);
+});
+
+test("each adapter getOffers receives its own credentials object", async () => {
+  const credsA = { token: "creds-a" };
+  const credsB = { token: "creds-b" };
+  /** @type {CarrierCredentials[]} */
+  const seen = [];
+
+  const a = fakeAdapter("a:one", async (_input, credentials) => {
+    seen.push(credentials);
+    return { ok: true, offers: [makeOffer("o-a")] };
+  });
+  const b = fakeAdapter("b:two", async (_input, credentials) => {
+    seen.push(credentials);
+    return { ok: true, offers: [makeOffer("o-b")] };
+  });
+
+  await listOffersForOrderAdapters(INPUT, [
+    { adapter: a, credentials: credsA },
+    { adapter: b, credentials: credsB },
+  ]);
+
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0], credsA);
+  assert.equal(seen[1], credsB);
+  assert.notEqual(seen[0], credsB);
+  assert.notEqual(seen[1], credsA);
 });

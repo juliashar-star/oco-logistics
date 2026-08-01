@@ -179,8 +179,10 @@ export const POST = withAuth<{ id: string }>(
       // Client DTO keeps adapterKey off the wire; serviceTitle is resolved here.
       const { offers: taggedOffers, adapters } = await listOffersForOrderAdapters(
         built.input,
-        credsResult.credentials,
-        Object.values(ORDER_ADAPTERS),
+        Object.values(ORDER_ADAPTERS).map((adapter) => ({
+          adapter,
+          credentials: credsResult.credentials,
+        })),
       );
 
       if (
