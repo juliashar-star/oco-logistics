@@ -18,6 +18,7 @@
     "./carrier-adapter/order-adapter-seller-titles": "./src/carrier-adapter/order-adapter-seller-titles.ts",
     "./carrier-adapter/order-adapter-label-support": "./src/carrier-adapter/order-adapter-label-support.ts",
     "./carrier-adapter/list-offers-for-order-adapters": "./src/carrier-adapter/list-offers-for-order-adapters.ts",
+    "./carrier-adapter/select-order-adapters-for-connected-carriers": "./src/carrier-adapter/select-order-adapters-for-connected-carriers.ts",
     "./carrier-adapter/dedupe-offers-by-same-provider-interval": "./src/carrier-adapter/dedupe-offers-by-same-provider-interval.ts",
     "./carrier-adapter/sort-offers-for-seller": "./src/carrier-adapter/sort-offers-for-seller.ts",
     "./carrier-adapter/provider-seller-display-names": "./src/carrier-adapter/provider-seller-display-names.ts",

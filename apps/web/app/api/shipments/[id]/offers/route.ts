@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { listOffersForOrderAdapters } from "@oco/core/carrier-adapter/list-offers-for-order-adapters";
 import {
-  DEFAULT_ORDER_ADAPTER,
   ORDER_ADAPTERS,
   resolveOrderAdapter,
 } from "@oco/core/carrier-adapter/order-adapters";
+import { selectOrderAdaptersForConnectedCarriers } from "@oco/core/carrier-adapter/select-order-adapters-for-connected-carriers";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 import { buildOfferInput } from "@/lib/shipments/build-offer-input";
-import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
+import { listConnectedCarriers } from "@/lib/shipments/list-connected-carriers";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
 
 function resolveOfferServiceTitle(adapterKey: string | undefined): string {
@@ -103,14 +103,17 @@ export const POST = withAuth<{ id: string }>(
     }
 
     try {
-      const credsResult = await getCarrierCredentials(
-        prisma,
-        user.companyId,
-        DEFAULT_ORDER_ADAPTER.providerKey,
+      const connected = await listConnectedCarriers(prisma, user.companyId);
+      const selected = selectOrderAdaptersForConnectedCarriers(
+        Object.values(ORDER_ADAPTERS),
+        connected,
       );
-      if (!credsResult.ok) {
+      if (selected.length === 0) {
         return NextResponse.json(
-          { error: "Яндекс Доставка не подключена" },
+          {
+            error:
+              "Подключите перевозчика в настройках, чтобы рассчитать доставку",
+          },
           { status: 400 },
         );
       }
@@ -163,7 +166,7 @@ export const POST = withAuth<{ id: string }>(
           recipientPhone: decrypted.recipientPhone,
         },
         company,
-        providerKey: DEFAULT_ORDER_ADAPTER.providerKey,
+        providerKey: selected[0].adapter.providerKey,
       });
 
       if (!built.ok) {
@@ -179,10 +182,7 @@ export const POST = withAuth<{ id: string }>(
       // Client DTO keeps adapterKey off the wire; serviceTitle is resolved here.
       const { offers: taggedOffers, adapters } = await listOffersForOrderAdapters(
         built.input,
-        Object.values(ORDER_ADAPTERS).map((adapter) => ({
-          adapter,
-          credentials: credsResult.credentials,
-        })),
+        selected,
       );
 
       if (
@@ -230,7 +230,7 @@ export const POST = withAuth<{ id: string }>(
         return NextResponse.json(
           {
             error:
-              "Не удалось авторизоваться в Яндекс Доставке. Проверьте подключение.",
+              "Не удалось авторизоваться у перевозчика. Проверьте подключение в настройках.",
           },
           { status: 400 },
         );
