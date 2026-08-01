@@ -232,6 +232,18 @@ export type CarrierOffer = {
   pickupIntervalTo: string;
   priceRub: number;
   /**
+   * Calendar day (YYYY-MM-DD) when the carrier quotes by DAY, not by time window.
+   * Set only by carriers that have no time-of-day interval; the interval fields
+   * stay "" in that case. Never a timestamp.
+   */
+  deliveryDayFrom?: string;
+  deliveryDayTo?: string;
+  /**
+   * True when the quote is an estimate rather than a carrier commitment
+   * (CDEK's calculator is explicitly not an offer). Absent = firm.
+   */
+  priceIsEstimate?: boolean;
+  /**
    * Set by the order route from the resolved registry entry, NOT populated by
    * adapters — an adapter does not know its own registry key.
    */

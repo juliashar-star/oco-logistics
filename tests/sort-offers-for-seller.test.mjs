@@ -142,3 +142,99 @@ test("does not mutate the input array", () => {
     ["sooner", "later"],
   );
 });
+
+test("blank deliveryIntervalTo + deliveryDayTo sorts by Moscow day-end, not last", () => {
+  const dayOffer = offer({
+    offerId: "day",
+    deliveryIntervalTo: "",
+    deliveryDayTo: "2026-07-28",
+    priceRub: 900,
+  });
+  const unknown = offer({
+    offerId: "unknown",
+    deliveryIntervalTo: "",
+    priceRub: 1,
+  });
+
+  const sorted = sortOffersForSeller([unknown, dayOffer]);
+  assert.deepEqual(
+    sorted.map((o) => o.offerId),
+    ["day", "unknown"],
+  );
+});
+
+test("deliveryDayTo sorts after earlier datetime and before later datetime", () => {
+  // Moscow end of 2026-07-28 = 2026-07-28T20:59:59.999Z
+  const dayOffer = offer({
+    offerId: "day",
+    deliveryIntervalTo: "",
+    deliveryDayTo: "2026-07-28",
+    priceRub: 500,
+  });
+  const earlier = offer({
+    offerId: "yandex-earlier",
+    deliveryIntervalTo: "2026-07-28T12:00:00Z",
+    priceRub: 400,
+  });
+  const later = offer({
+    offerId: "yandex-later",
+    deliveryIntervalTo: "2026-07-29T12:00:00Z",
+    priceRub: 300,
+  });
+
+  const sorted = sortOffersForSeller([later, dayOffer, earlier]);
+  assert.deepEqual(
+    sorted.map((o) => o.offerId),
+    ["yandex-earlier", "day", "yandex-later"],
+  );
+
+  const reversed = sortOffersForSeller([earlier, later, dayOffer]);
+  assert.deepEqual(
+    reversed.map((o) => o.offerId),
+    ["yandex-earlier", "day", "yandex-later"],
+  );
+});
+
+test("deliveryDayFrom used when deliveryDayTo is absent", () => {
+  const fromOnly = offer({
+    offerId: "from-only",
+    deliveryIntervalTo: "",
+    deliveryDayFrom: "2026-07-28",
+    priceRub: 500,
+  });
+  const earlier = offer({
+    offerId: "yandex-earlier",
+    deliveryIntervalTo: "2026-07-28T12:00:00Z",
+    priceRub: 400,
+  });
+  const later = offer({
+    offerId: "yandex-later",
+    deliveryIntervalTo: "2026-07-29T12:00:00Z",
+    priceRub: 300,
+  });
+
+  const sorted = sortOffersForSeller([later, fromOnly, earlier]);
+  assert.deepEqual(
+    sorted.map((o) => o.offerId),
+    ["yandex-earlier", "from-only", "yandex-later"],
+  );
+});
+
+test("blank interval and no day fields still sort last", () => {
+  const known = offer({
+    offerId: "known",
+    deliveryIntervalTo: "2026-07-28T12:00:00Z",
+    priceRub: 900,
+  });
+  const blank = offer({
+    offerId: "blank",
+    deliveryIntervalTo: "",
+    priceRub: 1,
+  });
+
+  const sorted = sortOffersForSeller([blank, known]);
+  assert.deepEqual(
+    sorted.map((o) => o.offerId),
+    ["known", "blank"],
+  );
+});

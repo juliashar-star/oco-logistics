@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  formatOfferDeliveryDays,
   formatOfferInterval,
   moscowDayKey,
 } from "../apps/web/lib/date/format-offer-interval.ts";
@@ -98,4 +99,65 @@ test("formatOfferInterval: Moscow zone — UTC evening is next calendar day in M
     ),
     "сегодня, до 18:00",
   );
+});
+
+test("formatOfferDeliveryDays: both blank or invalid → empty string", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z");
+  assert.equal(formatOfferDeliveryDays("", "", now), "");
+  assert.equal(formatOfferDeliveryDays("  ", "not-a-date", now), "");
+  assert.equal(formatOfferDeliveryDays("2026-13-40", "bad", now), "");
+});
+
+test("formatOfferDeliveryDays: only one usable → single-day label", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z"); // Mon 27 Jul Moscow
+  assert.equal(formatOfferDeliveryDays("2026-07-27", "", now), "сегодня");
+  assert.equal(formatOfferDeliveryDays("", "2026-07-28", now), "завтра");
+  assert.equal(
+    formatOfferDeliveryDays("2026-07-29", "", now),
+    "ср, 29 июля",
+  );
+});
+
+test("formatOfferDeliveryDays: same day → single-day label", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z");
+  assert.equal(
+    formatOfferDeliveryDays("2026-07-27", "2026-07-27", now),
+    "сегодня",
+  );
+  assert.equal(
+    formatOfferDeliveryDays("2026-07-29", "2026-07-29", now),
+    "ср, 29 июля",
+  );
+});
+
+test("formatOfferDeliveryDays: same month → day–day month (en dash)", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z");
+  assert.equal(
+    formatOfferDeliveryDays("2026-08-03", "2026-08-04", now),
+    "3–4 августа",
+  );
+});
+
+test("formatOfferDeliveryDays: different months → day month — day month (em dash)", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z");
+  assert.equal(
+    formatOfferDeliveryDays("2026-07-31", "2026-08-02", now),
+    "31 июля — 2 августа",
+  );
+});
+
+test("formatOfferDeliveryDays: no clock time in any output", () => {
+  const now = new Date("2026-07-27T06:00:00.000Z");
+  const samples = [
+    formatOfferDeliveryDays("", "", now),
+    formatOfferDeliveryDays("2026-07-27", "", now),
+    formatOfferDeliveryDays("", "2026-07-28", now),
+    formatOfferDeliveryDays("2026-07-29", "", now),
+    formatOfferDeliveryDays("2026-07-27", "2026-07-27", now),
+    formatOfferDeliveryDays("2026-08-03", "2026-08-04", now),
+    formatOfferDeliveryDays("2026-07-31", "2026-08-02", now),
+  ];
+  for (const label of samples) {
+    assert.equal(label.includes(":"), false, `unexpected clock in ${JSON.stringify(label)}`);
+  }
 });

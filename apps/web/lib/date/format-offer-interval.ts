@@ -87,3 +87,74 @@ export function formatOfferInterval(
   }
   return `${formatMoscowDayLabel(from!, now)} ${formatMoscowClockTime(from!)} — ${formatMoscowDayLabel(to!, now)} ${formatMoscowClockTime(to!)}`;
 }
+
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Parse YYYY-MM-DD as noon UTC (same approach as nextCalendarDayKey) so the
+ * calendar day cannot shift across a timezone boundary. Never `new Date(dayKey)`.
+ */
+function parseDayKeyNoonUtc(dayKey: string): Date | null {
+  const trimmed = dayKey.trim();
+  if (!DAY_KEY_RE.test(trimmed)) {
+    return null;
+  }
+  const [year, month, day] = trimmed.split("-").map(Number);
+  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (
+    noonUtc.getUTCFullYear() !== year ||
+    noonUtc.getUTCMonth() !== month - 1 ||
+    noonUtc.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return noonUtc;
+}
+
+/** Day + genitive month parts (month-alone is nominative in ru-RU). */
+function moscowDayMonthParts(date: Date): { day: string; month: string } {
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: MOSCOW_TIMEZONE,
+    day: "numeric",
+    month: "long",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return { day: get("day"), month: get("month") };
+}
+
+/**
+ * Seller-facing day-precision delivery range (no clock time).
+ * `now` is injected so today/tomorrow labels stay unit-testable.
+ */
+export function formatOfferDeliveryDays(
+  dayFrom: string,
+  dayTo: string,
+  now: Date,
+): string {
+  const from = parseDayKeyNoonUtc(dayFrom);
+  const to = parseDayKeyNoonUtc(dayTo);
+
+  if (!from && !to) {
+    return "";
+  }
+  if (from && !to) {
+    return formatMoscowDayLabel(from, now);
+  }
+  if (!from && to) {
+    return formatMoscowDayLabel(to, now);
+  }
+
+  if (moscowDayKey(from!) === moscowDayKey(to!)) {
+    return formatMoscowDayLabel(from!, now);
+  }
+
+  const fromMonth = moscowDayKey(from!).slice(0, 7);
+  const toMonth = moscowDayKey(to!).slice(0, 7);
+  const fromParts = moscowDayMonthParts(from!);
+  const toParts = moscowDayMonthParts(to!);
+  if (fromMonth === toMonth) {
+    return `${fromParts.day}–${toParts.day} ${toParts.month}`;
+  }
+  return `${fromParts.day} ${fromParts.month} — ${toParts.day} ${toParts.month}`;
+}
