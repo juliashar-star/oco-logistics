@@ -6,6 +6,10 @@ import { CARRIER_REGISTRY } from "../carrier-picker/registry";
  */
 export const PROVIDER_SELLER_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   yataxi: "Перевозчик №1",
+  // yataxi is masked; leaving cdek on its real registry name would name one
+  // carrier while masking the other, and public carrier naming is still an
+  // open legal question.
+  cdek: "Перевозчик №2",
 };
 
 /**

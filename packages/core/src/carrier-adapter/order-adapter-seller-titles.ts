@@ -10,6 +10,8 @@ export const ORDER_ADAPTER_SELLER_TITLES: Readonly<Record<string, string>> = {
   "yataxi:express": "Доставка в тот же день",
   // Service for light same-day parcels — not Yandex's product word «Курьер».
   "yataxi:courier": "Доставка лёгких посылок в тот же день",
+  // Service name, not a speed — per-offer tariff arrives as serviceName.
+  "cdek:delivery": "Доставка по России",
 };
 
 /** Same default key resolveOrderAdapter uses for null/unknown. */

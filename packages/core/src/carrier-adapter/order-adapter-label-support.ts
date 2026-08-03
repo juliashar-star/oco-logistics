@@ -30,6 +30,8 @@ export const ORDER_ADAPTER_LABEL_SUPPORT: Readonly<Record<string, boolean>> = {
   "yataxi:next_day": true,
   "yataxi:express": false,
   "yataxi:courier": false,
+  // No generateLabels on cdek:delivery yet — confirm/cancel are stubs too.
+  "cdek:delivery": false,
 };
 
 /**

@@ -1,4 +1,5 @@
 import type { CarrierAdapter } from "./types";
+import { getOffers as cdekGetOffers } from "./cdek/client";
 import { orderAdapterSellerTitle } from "./order-adapter-seller-titles";
 import { yandexAdapter } from "./yandex/adapter";
 import {
@@ -66,6 +67,14 @@ const expressCancelStub: CarrierAdapter["cancelOrder"] = async () => {
   throw new Error("Оформление этой услуги ещё не реализовано");
 };
 
+const cdekConfirmStub: CarrierAdapter["confirmOffer"] = async () => {
+  throw new Error("Оформление этой услуги ещё не реализовано");
+};
+
+const cdekCancelStub: CarrierAdapter["cancelOrder"] = async () => {
+  throw new Error("Оформление этой услуги ещё не реализовано");
+};
+
 export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
   "yataxi:next_day": {
     key: "yataxi:next_day",
@@ -111,6 +120,18 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     confirmOffer: (offer, input, credentials) =>
       confirmExpressOffer(offer, input, credentials, "courier"),
     cancelOrder: expressCancelStub,
+  },
+  "cdek:delivery": {
+    key: "cdek:delivery",
+    providerKey: "cdek",
+    title: orderAdapterSellerTitle("cdek:delivery"),
+    // No offerLimitCapacity ON PURPOSE: CDEK offers carry blank delivery
+    // intervals, so they all share one dedupe key, and the unrated-capacity
+    // branch is what keeps all of them. Adding a capacity here would collapse
+    // the whole CDEK list to its cheapest row.
+    getOffers: cdekGetOffers,
+    confirmOffer: cdekConfirmStub,
+    cancelOrder: cdekCancelStub,
   },
 };
 
