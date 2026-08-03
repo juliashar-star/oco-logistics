@@ -8,8 +8,11 @@ import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
 import type { OfferDto } from "@/lib/shipments/offer-dto";
 import {
   formatMoscowClockTime,
-  formatOfferInterval,
 } from "@/lib/date/format-offer-interval";
+import {
+  formatOfferDeliveryLine,
+  formatOfferPickupLine,
+} from "@/lib/date/format-offer-lines";
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import {
@@ -793,9 +796,8 @@ export function NewOrderForm() {
       setYandexSubmitResult({
         shipmentId: draftShipmentId,
         requestId,
-        deliveryDayLabel: formatOfferInterval(
-          selectedOffer.deliveryIntervalFrom,
-          selectedOffer.deliveryIntervalTo,
+        deliveryDayLabel: formatOfferDeliveryLine(
+          selectedOffer,
           new Date(),
         ),
         priceRub: selectedOffer.priceRub,
@@ -1270,6 +1272,7 @@ export function NewOrderForm() {
             {yandexOffers.map((offer) => {
               const isSelected = selectedOfferId === offer.offerId;
               const now = new Date();
+              const pickupLine = formatOfferPickupLine(offer, now);
               return (
                 <button
                   key={offer.offerId}
@@ -1285,23 +1288,21 @@ export function NewOrderForm() {
                     <div className="text-xs text-slate-500">{offer.serviceTitle}</div>
                   ) : null}
                   <div className="text-sm font-medium text-slate-900">
-                    {formatOfferInterval(
-                      offer.deliveryIntervalFrom,
-                      offer.deliveryIntervalTo,
-                      now,
-                    )}
+                    {formatOfferDeliveryLine(offer, now)}
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    Забор:{" "}
-                    {formatOfferInterval(
-                      offer.pickupIntervalFrom,
-                      offer.pickupIntervalTo,
-                      now,
-                    )}
-                  </div>
+                  {pickupLine ? (
+                    <div className="mt-1 text-sm text-slate-600">
+                      Забор: {pickupLine}
+                    </div>
+                  ) : null}
                   <div className="mt-1 text-base font-semibold text-slate-900">
                     {offer.priceRub.toLocaleString("ru-RU")} ₽
                   </div>
+                  {offer.priceIsEstimate ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      предварительная цена
+                    </div>
+                  ) : null}
                   {shouldShowOfferLacksThermalBag({
                     needsThermalBag,
                     supportsThermalBag: offer.supportsThermalBag,
