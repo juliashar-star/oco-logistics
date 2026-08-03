@@ -19,6 +19,7 @@ function baseSnapshot(overrides = {}) {
     destAddress: "ул Тверская, д 1",
     pointOutId: "",
     pickupType: /** @type {const} */ ("COURIER"),
+    handoverMode: /** @type {const} */ ("DROP_OFF"),
     needsThermalBag: false,
     ...overrides,
   };
@@ -33,6 +34,18 @@ test("snapshotsEqual returns false when only needsThermalBag differs", () => {
 test("snapshotsEqual returns true when needsThermalBag matches with otherwise equal fields", () => {
   const a = baseSnapshot({ needsThermalBag: true });
   const b = baseSnapshot({ needsThermalBag: true });
+  assert.equal(snapshotsEqual(a, b), true);
+});
+
+test("snapshotsEqual returns false when only handoverMode differs", () => {
+  const a = baseSnapshot({ handoverMode: "DROP_OFF" });
+  const b = baseSnapshot({ handoverMode: "COURIER" });
+  assert.equal(snapshotsEqual(a, b), false);
+});
+
+test("snapshotsEqual returns true when handoverMode matches with otherwise equal fields", () => {
+  const a = baseSnapshot({ handoverMode: "COURIER" });
+  const b = baseSnapshot({ handoverMode: "COURIER" });
   assert.equal(snapshotsEqual(a, b), true);
 });
 

@@ -11,6 +11,10 @@ export type CalculationSnapshot = {
   destAddress: string;
   pointOutId: string;
   pickupType: "PVZ" | "COURIER";
+  // Without this a seller can quote «привезу сам» at the cheaper price, switch
+  // to «заберёт курьер», and submit against a price for a service that costs
+  // roughly double.
+  handoverMode: "DROP_OFF" | "COURIER";
   needsThermalBag: boolean;
 };
 
@@ -33,8 +37,8 @@ export function calculationSnapshotKey(snapshot: CalculationSnapshot): string {
 
 /**
  * Yandex draft/offer inputs for both PVZ and COURIER: base fields +
- * declaredValueRub + destCity + needsThermalBag, then destination key by type
- * (destAddress for COURIER, pointOutId for PVZ).
+ * declaredValueRub + destCity + needsThermalBag + handoverMode, then
+ * destination key by type (destAddress for COURIER, pointOutId for PVZ).
  * Do NOT touch the pickupType comparison — latent defect noted separately.
  */
 export function snapshotsEqual(
@@ -56,6 +60,7 @@ export function snapshotsEqual(
   if (a.declaredValueRub !== b.declaredValueRub) return false;
   if (a.destCity !== b.destCity) return false;
   if (a.needsThermalBag !== b.needsThermalBag) return false;
+  if (a.handoverMode !== b.handoverMode) return false;
   if (b.pickupType === "COURIER") return a.destAddress === b.destAddress;
   return a.pointOutId === b.pointOutId;
 }

@@ -135,6 +135,9 @@ export function NewOrderForm() {
   const [destApartment, setDestApartment] = useState("");
   const [deliveryComment, setDeliveryComment] = useState("");
   const [pickupType, setPickupType] = useState<"PVZ" | "COURIER">("PVZ");
+  const [handoverMode, setHandoverMode] = useState<"DROP_OFF" | "COURIER">(
+    "DROP_OFF",
+  );
   const [needsThermalBag, setNeedsThermalBag] = useState(false);
   const [pointOutId, setPointOutId] = useState("");
   const [recipientName, setRecipientName] = useState("");
@@ -267,6 +270,7 @@ export function NewOrderForm() {
       destAddress: destAddress.trim(),
       pointOutId,
       pickupType,
+      handoverMode,
       needsThermalBag,
     };
   }
@@ -562,6 +566,7 @@ export function NewOrderForm() {
           category,
           destCity,
           pickupType,
+          handoverMode,
           ...(pickupType === "PVZ"
             ? { pvzCode: pointOutId }
             : {
@@ -879,7 +884,27 @@ export function NewOrderForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Тип доставки
+              Откуда
+            </label>
+            <select
+              value={handoverMode}
+              onChange={(e) => {
+                const next = e.target.value as "DROP_OFF" | "COURIER";
+                setHandoverMode(next);
+                clearQuoteSelection();
+                setRecalculateHint(null);
+                setError("");
+                setCreateResult(null);
+              }}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            >
+              <option value="DROP_OFF">Привезу в пункт приёма</option>
+              <option value="COURIER">Заберёт курьер</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Куда
             </label>
             <select
               value={pickupType}
