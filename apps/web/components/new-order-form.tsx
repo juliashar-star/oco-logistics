@@ -1298,6 +1298,14 @@ export function NewOrderForm() {
               const isSelected = selectedOfferId === offer.offerId;
               const now = new Date();
               const pickupLine = formatOfferPickupLine(offer, now);
+              const service = offer.serviceName
+                ? offer.serviceName
+                : shouldShowOfferServiceTitle(yandexOffers)
+                  ? offer.serviceTitle
+                  : "";
+              const heading = service
+                ? `${offer.carrierName} · ${service}`
+                : offer.carrierName;
               return (
                 <button
                   key={offer.offerId}
@@ -1309,10 +1317,8 @@ export function NewOrderForm() {
                       : "border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                 >
-                  {offer.serviceName ? (
-                    <div className="text-xs text-slate-500">{offer.serviceName}</div>
-                  ) : shouldShowOfferServiceTitle(yandexOffers) ? (
-                    <div className="text-xs text-slate-500">{offer.serviceTitle}</div>
+                  {heading ? (
+                    <div className="text-xs text-slate-500">{heading}</div>
                   ) : null}
                   <div className="text-sm font-medium text-slate-900">
                     {formatOfferDeliveryLine(offer, now)}

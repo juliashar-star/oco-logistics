@@ -5,6 +5,7 @@ import {
   ORDER_ADAPTERS,
   resolveOrderAdapter,
 } from "@oco/core/carrier-adapter/order-adapters";
+import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import { selectOrderAdaptersForConnectedCarriers } from "@oco/core/carrier-adapter/select-order-adapters-for-connected-carriers";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
@@ -21,6 +22,13 @@ function resolveOfferSupportsThermalBag(
   adapterKey: string | undefined,
 ): boolean {
   return resolveOrderAdapter(adapterKey).supportsThermalBag === true;
+}
+
+function resolveOfferCarrierName(adapterKey: string | undefined): string {
+  return (
+    providerSellerDisplayName(resolveOrderAdapter(adapterKey).providerKey) ??
+    ""
+  );
 }
 function messageForBuildFailure(
   reason:
@@ -203,6 +211,7 @@ export const POST = withAuth<{ id: string }>(
             { ok: true, offers: taggedOffers },
             resolveOfferServiceTitle,
             resolveOfferSupportsThermalBag,
+            resolveOfferCarrierName,
           ),
         );
       }
@@ -221,6 +230,7 @@ export const POST = withAuth<{ id: string }>(
             { ok: false, reason: "no_delivery_options" },
             resolveOfferServiceTitle,
             resolveOfferSupportsThermalBag,
+            resolveOfferCarrierName,
           ),
         );
       }

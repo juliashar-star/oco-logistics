@@ -26,6 +26,12 @@ export type OfferDto = {
    * identical for every carrier.
    */
   serviceName: string;
+  /**
+   * Masked seller-facing carrier name (e.g. «Перевозчик №1»).
+   * Resolved from adapterKey → providerKey → display map — providerKey
+   * itself never goes on the wire.
+   */
+  carrierName: string;
 };
 
 export type OffersResponse = {
@@ -42,6 +48,10 @@ export type ResolveOfferSupportsThermalBag = (
   adapterKey: string | undefined,
 ) => boolean;
 
+export type ResolveOfferCarrierName = (
+  adapterKey: string | undefined,
+) => string;
+
 /**
  * Boundary map: CarrierOffersResult → browser-safe DTO.
  * Fields named explicitly — never `{ ...offer }` — so rawOffer cannot leak.
@@ -53,6 +63,7 @@ export function toOffersResponse(
   result: CarrierOffersResult,
   resolveServiceTitle: ResolveOfferServiceTitle,
   resolveSupportsThermalBag: ResolveOfferSupportsThermalBag,
+  resolveCarrierName: ResolveOfferCarrierName,
 ): OffersResponse {
   if (!result.ok) {
     return { ok: true, status: "no_delivery_options", offers: [] };
@@ -75,6 +86,7 @@ export function toOffersResponse(
       deliveryDayTo: offer.deliveryDayTo ?? "",
       priceIsEstimate: offer.priceIsEstimate === true,
       serviceName: offer.serviceName ?? "",
+      carrierName: resolveCarrierName(offer.adapterKey),
     })),
   };
 }

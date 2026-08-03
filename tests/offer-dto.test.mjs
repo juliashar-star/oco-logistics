@@ -17,6 +17,7 @@ const EXPECTED_OFFER_KEYS = [
   "deliveryDayTo",
   "priceIsEstimate",
   "serviceName",
+  "carrierName",
 ];
 
 const SAMPLE_OFFER = {
@@ -51,15 +52,31 @@ function fakeResolveSupportsThermalBag(adapterKey) {
   );
 }
 
-test("mapped offer key set is exactly the DTO fields (catches future spread of rawOffer)", () => {
-  const response = toOffersResponse(
-    {
-      ok: true,
-      offers: [SAMPLE_OFFER],
-    },
+/** Fake resolver — masked carrier label by adapter family. */
+function fakeResolveCarrierName(adapterKey) {
+  if (adapterKey === undefined) {
+    return "DEFAULT_CARRIER";
+  }
+  if (String(adapterKey).startsWith("cdek:")) {
+    return "Перевозчик №2";
+  }
+  return "Перевозчик №1";
+}
+
+function mapOffers(result) {
+  return toOffersResponse(
+    result,
     fakeResolveServiceTitle,
     fakeResolveSupportsThermalBag,
+    fakeResolveCarrierName,
   );
+}
+
+test("mapped offer key set is exactly the DTO fields (catches future spread of rawOffer)", () => {
+  const response = mapOffers({
+    ok: true,
+    offers: [SAMPLE_OFFER],
+  });
 
   assert.equal(response.ok, true);
   assert.equal(response.status, "ok");
@@ -68,14 +85,10 @@ test("mapped offer key set is exactly the DTO fields (catches future spread of r
 });
 
 test("fat rawOffer never appears in serialized response", () => {
-  const response = toOffersResponse(
-    {
-      ok: true,
-      offers: [SAMPLE_OFFER],
-    },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({
+    ok: true,
+    offers: [SAMPLE_OFFER],
+  });
 
   const serialized = JSON.stringify(response);
   assert.equal(serialized.includes("RAW_OFFER_LEAK_MARKER_abc99"), false);
@@ -84,14 +97,10 @@ test("fat rawOffer never appears in serialized response", () => {
 });
 
 test("no_delivery_options -> ok true, status no_delivery_options, empty offers", () => {
-  const response = toOffersResponse(
-    {
-      ok: false,
-      reason: "no_delivery_options",
-    },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({
+    ok: false,
+    reason: "no_delivery_options",
+  });
   assert.deepEqual(response, {
     ok: true,
     status: "no_delivery_options",
@@ -100,11 +109,7 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
 });
 
 test("ok with empty offers -> ok true, status ok, empty offers", () => {
-  const response = toOffersResponse(
-    { ok: true, offers: [] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [] });
   assert.deepEqual(response, {
     ok: true,
     status: "ok",
@@ -121,11 +126,7 @@ test("serviceTitle comes from the resolver for each offer, including undefined a
   };
   delete withoutKey.adapterKey;
 
-  const response = toOffersResponse(
-    { ok: true, offers: [withKey, withoutKey] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [withKey, withoutKey] });
 
   assert.equal(response.offers[0].serviceTitle, "TITLE_FOR:yataxi:next_day");
   assert.equal(response.offers[1].serviceTitle, "DEFAULT_SERVICE_TITLE");
@@ -145,11 +146,7 @@ test("supportsThermalBag comes from the resolver; adapterKey stays off the wire"
     adapterKey: "yataxi:express",
   };
 
-  const response = toOffersResponse(
-    { ok: true, offers: [nextDay, express] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [nextDay, express] });
 
   assert.equal(response.offers[0].supportsThermalBag, false);
   assert.equal(response.offers[1].supportsThermalBag, true);
@@ -157,11 +154,7 @@ test("supportsThermalBag comes from the resolver; adapterKey stays off the wire"
 });
 
 test("Yandex-shaped offer: day fields absent → \"\", estimate absent → false", () => {
-  const response = toOffersResponse(
-    { ok: true, offers: [SAMPLE_OFFER] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [SAMPLE_OFFER] });
 
   assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
   assert.equal(response.offers[0].deliveryDayFrom, "");
@@ -184,11 +177,7 @@ test("day-precision offer: days present, priceIsEstimate true", () => {
     adapterKey: "cdek:parcel",
   };
 
-  const response = toOffersResponse(
-    { ok: true, offers: [dayOffer] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [dayOffer] });
 
   assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
   assert.equal(response.offers[0].deliveryDayFrom, "2026-08-03");
@@ -205,14 +194,38 @@ test("serviceName: absent → \"\"; present → exact carrier string", () => {
     serviceName: "Посылка склад-склад",
   };
 
-  const response = toOffersResponse(
-    { ok: true, offers: [without, withName] },
-    fakeResolveServiceTitle,
-    fakeResolveSupportsThermalBag,
-  );
+  const response = mapOffers({ ok: true, offers: [without, withName] });
 
   assert.equal(response.offers[0].serviceName, "");
   assert.equal(response.offers[1].serviceName, "Посылка склад-склад");
   assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
   assert.deepEqual(Object.keys(response.offers[1]), EXPECTED_OFFER_KEYS);
+});
+
+test("carrierName comes from the resolver; providerKey stays off the wire", () => {
+  const yandex = {
+    ...SAMPLE_OFFER,
+    offerId: "a",
+    adapterKey: "yataxi:next_day",
+  };
+  const cdek = {
+    ...SAMPLE_OFFER,
+    offerId: "b",
+    adapterKey: "cdek:delivery",
+  };
+  const withoutKey = {
+    ...SAMPLE_OFFER,
+    offerId: "c",
+    adapterKey: undefined,
+  };
+  delete withoutKey.adapterKey;
+
+  const response = mapOffers({ ok: true, offers: [yandex, cdek, withoutKey] });
+
+  assert.equal(response.offers[0].carrierName, "Перевозчик №1");
+  assert.equal(response.offers[1].carrierName, "Перевозчик №2");
+  assert.equal(response.offers[2].carrierName, "DEFAULT_CARRIER");
+  assert.equal("providerKey" in response.offers[0], false);
+  assert.equal("adapterKey" in response.offers[0], false);
+  assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
 });
