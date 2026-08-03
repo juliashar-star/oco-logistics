@@ -31,6 +31,18 @@ export const POST = withAuth(async (request, user) => {
       );
     }
     const needsThermalBag = body.needsThermalBag === true;
+    if (
+      "handoverMode" in body &&
+      body.handoverMode !== "COURIER" &&
+      body.handoverMode !== "DROP_OFF"
+    ) {
+      return NextResponse.json(
+        { error: "Некорректный способ передачи отправления" },
+        { status: 400 },
+      );
+    }
+    const handoverMode =
+      body.handoverMode === "COURIER" ? "COURIER" : "DROP_OFF";
     const weightG = Number(body.weightG);
     const lengthCm = Number(body.lengthCm);
     const widthCm = Number(body.widthCm);
@@ -117,6 +129,7 @@ export const POST = withAuth(async (request, user) => {
       deliveryComment: pickupType === "COURIER" ? deliveryComment : undefined,
       pvzCode,
       pickupType: pickupType === "COURIER" ? "COURIER" : "PVZ",
+      handoverMode,
       recipientName,
       recipientPhone: normalizedRecipientPhone.value,
       selectionMode,

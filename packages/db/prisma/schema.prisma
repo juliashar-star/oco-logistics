@@ -25,6 +25,14 @@ enum PickupType {
   PVZ
 }
 
+/// How the parcel reaches the carrier: a courier collects it from the seller,
+/// or the seller brings it to a carrier point. DISTINCT from PickupType,
+/// which despite its name describes the LAST mile (where the buyer collects).
+enum HandoverMode {
+  COURIER
+  DROP_OFF
+}
+
 enum SelectionMode {
   FAST
   CHEAP
@@ -130,6 +138,8 @@ model Shipment {
   deliveryComment String?
   pvzCode         String?
   pickupType      PickupType      @default(PVZ)
+  // Default DROP_OFF: cheaper branch — an inattentive seller saves money rather than overpaying.
+  handoverMode    HandoverMode    @default(DROP_OFF)
   // Seller asked for a thermal bag. Services that cannot carry it stay listed
   // and are marked on the card (registry supportsThermalBag).
   needsThermalBag Boolean       @default(false)

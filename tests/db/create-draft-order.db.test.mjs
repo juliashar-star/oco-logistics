@@ -351,6 +351,62 @@ describe("createDraftOrder", { concurrency: false }, () => {
     });
   });
 
+  test("without handoverMode stores DROP_OFF", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Handover Default Co",
+        `draft-handover-default-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-handover-default`;
+
+      const result = await createDraftOrder(prisma, draftInput(company.id, key));
+      assert.equal(result.created, true);
+      assert.equal(result.shipment.handoverMode, "DROP_OFF");
+    });
+  });
+
+  test('with handoverMode "COURIER" stores COURIER', async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Handover Courier Co",
+        `draft-handover-courier-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-handover-courier`;
+
+      const result = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        handoverMode: "COURIER",
+      });
+      assert.equal(result.created, true);
+      assert.equal(result.shipment.handoverMode, "COURIER");
+    });
+  });
+
+  test("update path changes stored COURIER to DROP_OFF", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Handover Update Co",
+        `draft-handover-upd-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-handover-upd`;
+
+      const first = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        handoverMode: "COURIER",
+      });
+      assert.equal(first.created, true);
+      assert.equal(first.shipment.handoverMode, "COURIER");
+
+      const second = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        handoverMode: "DROP_OFF",
+      });
+      assert.equal("created" in second && second.created, false);
+      assert.equal(second.shipment.id, first.shipment.id);
+      assert.equal(second.shipment.handoverMode, "DROP_OFF");
+    });
+  });
+
   test("(vii) DRAFT with submittingAt set → conflict, row untouched", async () => {
     await withEnv(PII_ENV, TEST_PII_KEY, async () => {
       const company = await seedCompany(

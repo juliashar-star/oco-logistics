@@ -25,6 +25,7 @@ export type CreateDraftInput = {
   deliveryComment?: string;
   pvzCode?: string;
   pickupType: PickupType;
+  handoverMode: "COURIER" | "DROP_OFF";
   recipientName: string;
   recipientPhone: string;
   selectionMode: SelectionMode;
@@ -81,6 +82,7 @@ export async function createDraftOrder(
     deliveryComment: encryptedRecipient.deliveryComment,
     pvzCode: input.pvzCode?.trim() || null,
     pickupType: input.pickupType,
+    handoverMode: input.handoverMode ?? "DROP_OFF",
     needsThermalBag: input.needsThermalBag === true,
     recipientName: encryptedRecipient.recipientName,
     recipientPhone: encryptedRecipient.recipientPhone,
