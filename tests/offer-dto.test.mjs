@@ -13,6 +13,9 @@ const EXPECTED_OFFER_KEYS = [
   "priceRub",
   "serviceTitle",
   "supportsThermalBag",
+  "deliveryDayFrom",
+  "deliveryDayTo",
+  "priceIsEstimate",
 ];
 
 const SAMPLE_OFFER = {
@@ -150,4 +153,43 @@ test("supportsThermalBag comes from the resolver; adapterKey stays off the wire"
   assert.equal(response.offers[0].supportsThermalBag, false);
   assert.equal(response.offers[1].supportsThermalBag, true);
   assert.equal("adapterKey" in response.offers[0], false);
+});
+
+test("Yandex-shaped offer: day fields absent → \"\", estimate absent → false", () => {
+  const response = toOffersResponse(
+    { ok: true, offers: [SAMPLE_OFFER] },
+    fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
+  );
+
+  assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
+  assert.equal(response.offers[0].deliveryDayFrom, "");
+  assert.equal(response.offers[0].deliveryDayTo, "");
+  assert.equal(response.offers[0].priceIsEstimate, false);
+});
+
+test("day-precision offer: days present, priceIsEstimate true", () => {
+  const dayOffer = {
+    ...SAMPLE_OFFER,
+    offerId: "cdek-day",
+    deliveryIntervalFrom: "",
+    deliveryIntervalTo: "",
+    pickupIntervalFrom: "",
+    pickupIntervalTo: "",
+    deliveryDayFrom: "2026-08-03",
+    deliveryDayTo: "2026-08-04",
+    priceIsEstimate: true,
+    adapterKey: "cdek:parcel",
+  };
+
+  const response = toOffersResponse(
+    { ok: true, offers: [dayOffer] },
+    fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
+  );
+
+  assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
+  assert.equal(response.offers[0].deliveryDayFrom, "2026-08-03");
+  assert.equal(response.offers[0].deliveryDayTo, "2026-08-04");
+  assert.equal(response.offers[0].priceIsEstimate, true);
 });

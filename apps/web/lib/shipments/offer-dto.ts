@@ -15,6 +15,11 @@ export type OfferDto = {
    * the browser must not know which adapter keys support what.
    */
   supportsThermalBag: boolean;
+  /** YYYY-MM-DD when the carrier quotes by day; "" when absent. */
+  deliveryDayFrom: string;
+  deliveryDayTo: string;
+  /** True when the quote is an estimate, not a commitment. */
+  priceIsEstimate: boolean;
 };
 
 export type OffersResponse = {
@@ -60,6 +65,9 @@ export function toOffersResponse(
       priceRub: offer.priceRub,
       serviceTitle: resolveServiceTitle(offer.adapterKey),
       supportsThermalBag: resolveSupportsThermalBag(offer.adapterKey),
+      deliveryDayFrom: offer.deliveryDayFrom ?? "",
+      deliveryDayTo: offer.deliveryDayTo ?? "",
+      priceIsEstimate: offer.priceIsEstimate === true,
     })),
   };
 }
