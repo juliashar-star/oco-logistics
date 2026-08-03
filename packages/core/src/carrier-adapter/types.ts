@@ -244,6 +244,16 @@ export type CarrierOffer = {
    */
   priceIsEstimate?: boolean;
   /**
+   * The carrier's own seller-facing name for THIS offer's service
+   * (e.g. CDEK "Посылка склад-склад"). Set only by carriers whose service set
+   * is discovered per route and per contract, so a static registry title
+   * cannot cover it. NOT the same case as Yandex taxi_class, which is a CODE
+   * with a curated registry title; this is already Russian seller-facing text
+   * from an OPEN set. Raw as the carrier sent it — display decisions belong
+   * to the UI layer, not here.
+   */
+  serviceName?: string;
+  /**
    * Set by the order route from the resolved registry entry, NOT populated by
    * adapters — an adapter does not know its own registry key.
    */
