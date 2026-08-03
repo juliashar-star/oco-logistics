@@ -204,6 +204,14 @@ export type CarrierCreateOrderInput = {
    * option vocabulary stays inside that adapter only.
    */
   needsThermalBag?: boolean;
+  /**
+   * How the parcel reaches the carrier: a courier collects it from the seller,
+   * or the seller brings it to a carrier acceptance point. Carriers whose
+   * departure point is fixed by the credentials (Yandex: the platform station)
+   * ignore this. Distinct from the destination, which is expressed by
+   * pointOutId / recipient.addressString.
+   */
+  handoverMode?: "COURIER" | "DROP_OFF";
 };
 
 export type CarrierCreateOrderResult = {

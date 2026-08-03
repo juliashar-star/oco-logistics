@@ -21,6 +21,7 @@ export type BuildOfferShipment = {
   recipientName: string;
   recipientPhone: string;
   needsThermalBag?: boolean;
+  handoverMode: "COURIER" | "DROP_OFF";
 };
 
 export type BuildOfferCompany = {
@@ -156,6 +157,7 @@ export function buildOfferInput(args: {
     deliveryApartment: shipment.destApartment ?? null,
     deliveryComment: shipment.deliveryComment ?? null,
     needsThermalBag: shipment.needsThermalBag === true,
+    handoverMode: shipment.handoverMode,
     items,
   };
 

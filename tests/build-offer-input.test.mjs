@@ -30,6 +30,7 @@ function baseShipment(overrides = {}) {
     destAddress: "ул. Тверская, д. 1",
     recipientName: "Иванов Иван",
     recipientPhone: "+79001234567",
+    handoverMode: "DROP_OFF",
     ...overrides,
   };
 }
@@ -177,6 +178,44 @@ test("buildOfferInput passes needsThermalBag from the shipment row", () => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.input.needsThermalBag, true);
+});
+
+test('handoverMode "DROP_OFF" is copied onto the input', () => {
+  const result = build({
+    shipment: baseShipment({ handoverMode: "DROP_OFF" }),
+    company: COMPANY,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.input.handoverMode, "DROP_OFF");
+});
+
+test('handoverMode "COURIER" is copied onto the input', () => {
+  const result = build({
+    shipment: baseShipment({ handoverMode: "COURIER" }),
+    company: COMPANY,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.input.handoverMode, "COURIER");
+});
+
+test("only handoverMode differs when shipment handoverMode differs", () => {
+  const dropOff = build({
+    shipment: baseShipment({ handoverMode: "DROP_OFF" }),
+    company: COMPANY,
+  });
+  const courier = build({
+    shipment: baseShipment({ handoverMode: "COURIER" }),
+    company: COMPANY,
+  });
+  assert.equal(dropOff.ok, true);
+  assert.equal(courier.ok, true);
+  if (!dropOff.ok || !courier.ok) return;
+
+  const { handoverMode: _a, ...dropOffRest } = dropOff.input;
+  const { handoverMode: _b, ...courierRest } = courier.input;
+  assert.deepEqual(dropOffRest, courierRest);
 });
 
 test("no_sender_phone when company.senderPhone blank", () => {
