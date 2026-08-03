@@ -1309,7 +1309,9 @@ export function NewOrderForm() {
                       : "border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                 >
-                  {shouldShowOfferServiceTitle(yandexOffers) ? (
+                  {offer.serviceName ? (
+                    <div className="text-xs text-slate-500">{offer.serviceName}</div>
+                  ) : shouldShowOfferServiceTitle(yandexOffers) ? (
                     <div className="text-xs text-slate-500">{offer.serviceTitle}</div>
                   ) : null}
                   <div className="text-sm font-medium text-slate-900">

@@ -20,6 +20,12 @@ export type OfferDto = {
   deliveryDayTo: string;
   /** True when the quote is an estimate, not a commitment. */
   priceIsEstimate: boolean;
+  /**
+   * Carrier's own seller-facing name for this offer's service (e.g. CDEK
+   * tariff name). "" when absent — always on the wire so the key set is
+   * identical for every carrier.
+   */
+  serviceName: string;
 };
 
 export type OffersResponse = {
@@ -68,6 +74,7 @@ export function toOffersResponse(
       deliveryDayFrom: offer.deliveryDayFrom ?? "",
       deliveryDayTo: offer.deliveryDayTo ?? "",
       priceIsEstimate: offer.priceIsEstimate === true,
+      serviceName: offer.serviceName ?? "",
     })),
   };
 }

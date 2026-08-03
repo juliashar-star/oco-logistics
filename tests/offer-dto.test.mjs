@@ -16,6 +16,7 @@ const EXPECTED_OFFER_KEYS = [
   "deliveryDayFrom",
   "deliveryDayTo",
   "priceIsEstimate",
+  "serviceName",
 ];
 
 const SAMPLE_OFFER = {
@@ -166,6 +167,7 @@ test("Yandex-shaped offer: day fields absent → \"\", estimate absent → false
   assert.equal(response.offers[0].deliveryDayFrom, "");
   assert.equal(response.offers[0].deliveryDayTo, "");
   assert.equal(response.offers[0].priceIsEstimate, false);
+  assert.equal(response.offers[0].serviceName, "");
 });
 
 test("day-precision offer: days present, priceIsEstimate true", () => {
@@ -192,4 +194,25 @@ test("day-precision offer: days present, priceIsEstimate true", () => {
   assert.equal(response.offers[0].deliveryDayFrom, "2026-08-03");
   assert.equal(response.offers[0].deliveryDayTo, "2026-08-04");
   assert.equal(response.offers[0].priceIsEstimate, true);
+  assert.equal(response.offers[0].serviceName, "");
+});
+
+test("serviceName: absent → \"\"; present → exact carrier string", () => {
+  const without = { ...SAMPLE_OFFER, offerId: "a" };
+  const withName = {
+    ...SAMPLE_OFFER,
+    offerId: "b",
+    serviceName: "Посылка склад-склад",
+  };
+
+  const response = toOffersResponse(
+    { ok: true, offers: [without, withName] },
+    fakeResolveServiceTitle,
+    fakeResolveSupportsThermalBag,
+  );
+
+  assert.equal(response.offers[0].serviceName, "");
+  assert.equal(response.offers[1].serviceName, "Посылка склад-склад");
+  assert.deepEqual(Object.keys(response.offers[0]), EXPECTED_OFFER_KEYS);
+  assert.deepEqual(Object.keys(response.offers[1]), EXPECTED_OFFER_KEYS);
 });
