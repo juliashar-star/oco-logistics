@@ -32,7 +32,7 @@ async function withEnv(name, value, run) {
 
 test("token request is form-encoded with grant_type/client_id/client_secret", async () => {
   const baseUrl = "https://cdek-form.test";
-  const creds = { account: "acct-form", securePassword: SECRET };
+  const creds = { account: "acct-form", securePassword: SECRET, contractType: "1" };
   /** @type {{ method?: string, headers?: HeadersInit, body?: BodyInit | null }} */
   let seen = {};
   const originalFetch = globalThis.fetch;
@@ -64,7 +64,7 @@ test("token request is form-encoded with grant_type/client_id/client_secret", as
 
 test("401 on token call → CdekAuthError; message has neither secret nor body", async () => {
   const baseUrl = "https://cdek-401.test";
-  const creds = { account: "acct-401", securePassword: SECRET };
+  const creds = { account: "acct-401", securePassword: SECRET, contractType: "1" };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ error: "bad_client", hint: SECRET }), {
@@ -90,7 +90,7 @@ test("401 on token call → CdekAuthError; message has neither secret nor body",
 
 test("cached token is reused across two cdekGet calls (one oauth fetch)", async () => {
   const baseUrl = "https://cdek-reuse.test";
-  const creds = { account: "acct-reuse", securePassword: SECRET };
+  const creds = { account: "acct-reuse", securePassword: SECRET, contractType: "1" };
   let oauthCalls = 0;
   let getCalls = 0;
   const originalFetch = globalThis.fetch;
@@ -121,8 +121,8 @@ test("cached token is reused across two cdekGet calls (one oauth fetch)", async 
 
 test("two different accounts never share a token", async () => {
   const baseUrl = "https://cdek-two-acct.test";
-  const a = { account: "acct-A", securePassword: "secret-A" };
-  const b = { account: "acct-B", securePassword: "secret-B" };
+  const a = { account: "acct-A", securePassword: "secret-A", contractType: "1" };
+  const b = { account: "acct-B", securePassword: "secret-B", contractType: "1" };
   /** @type {string[]} */
   const authHeaders = [];
   let oauthCalls = 0;
@@ -153,7 +153,7 @@ test("two different accounts never share a token", async () => {
 
 test("expired cache entry refetches (driven by injected now)", async () => {
   const baseUrl = "https://cdek-expiry.test";
-  const creds = { account: "acct-exp", securePassword: SECRET };
+  const creds = { account: "acct-exp", securePassword: SECRET, contractType: "1" };
   let clock = 1_000_000;
   let oauthCalls = 0;
   const originalFetch = globalThis.fetch;
@@ -188,7 +188,7 @@ test("expired cache entry refetches (driven by injected now)", async () => {
 
 test("extraHeaders cannot override Authorization or Content-Type on cdekPost", async () => {
   const baseUrl = "https://cdek-headers.test";
-  const creds = { account: "acct-hdr", securePassword: SECRET };
+  const creds = { account: "acct-hdr", securePassword: SECRET, contractType: "1" };
   /** @type {HeadersInit | undefined} */
   let seenHeaders;
   const originalFetch = globalThis.fetch;
@@ -222,7 +222,7 @@ test("extraHeaders cannot override Authorization or Content-Type on cdekPost", a
 
 test("cdekPost HTTP 500 returns raw Response, does not throw", async () => {
   const baseUrl = "https://cdek-500.test";
-  const creds = { account: "acct-500", securePassword: SECRET };
+  const creds = { account: "acct-500", securePassword: SECRET, contractType: "1" };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url).endsWith("/v2/oauth/token")) {
@@ -244,7 +244,7 @@ test("cdekPost HTTP 500 returns raw Response, does not throw", async () => {
 
 test("expires_in as number 3600 → cached with that lifetime", async () => {
   const baseUrl = "https://cdek-exp-num.test";
-  const creds = { account: "acct-exp-num", securePassword: SECRET };
+  const creds = { account: "acct-exp-num", securePassword: SECRET, contractType: "1" };
   let clock = 10_000_000;
   let oauthCalls = 0;
   const originalFetch = globalThis.fetch;
@@ -271,7 +271,7 @@ test("expires_in as number 3600 → cached with that lifetime", async () => {
 
 test('expires_in as string "3600" → same lifetime behaviour', async () => {
   const baseUrl = "https://cdek-exp-str.test";
-  const creds = { account: "acct-exp-str", securePassword: SECRET };
+  const creds = { account: "acct-exp-str", securePassword: SECRET, contractType: "1" };
   let clock = 20_000_000;
   let oauthCalls = 0;
   const originalFetch = globalThis.fetch;
@@ -297,7 +297,7 @@ test('expires_in as string "3600" → same lifetime behaviour', async () => {
 
 test("expires_in absent → falls back to 3600 seconds", async () => {
   const baseUrl = "https://cdek-exp-absent.test";
-  const creds = { account: "acct-exp-absent", securePassword: SECRET };
+  const creds = { account: "acct-exp-absent", securePassword: SECRET, contractType: "1" };
   let clock = 30_000_000;
   let oauthCalls = 0;
   const originalFetch = globalThis.fetch;
@@ -324,7 +324,7 @@ test("expires_in absent → falls back to 3600 seconds", async () => {
 
 test("missing access_token still throws", async () => {
   const baseUrl = "https://cdek-no-token.test";
-  const creds = { account: "acct-no-token", securePassword: SECRET };
+  const creds = { account: "acct-no-token", securePassword: SECRET, contractType: "1" };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     Response.json({ expires_in: 3600 }, { status: 200 });
@@ -345,7 +345,7 @@ test("missing access_token still throws", async () => {
 
 test("concurrent cdekGet for same account → one oauth fetch, same Bearer", async () => {
   const baseUrl = "https://cdek-concurrent.test";
-  const creds = { account: "acct-concurrent", securePassword: SECRET };
+  const creds = { account: "acct-concurrent", securePassword: SECRET, contractType: "1" };
   let oauthCalls = 0;
   /** @type {string[]} */
   const authHeaders = [];
@@ -383,7 +383,7 @@ test("concurrent cdekGet for same account → one oauth fetch, same Bearer", asy
 
 test("failed token request does not poison cache; next call retries", async () => {
   const baseUrl = "https://cdek-poison.test";
-  const creds = { account: "acct-poison", securePassword: SECRET };
+  const creds = { account: "acct-poison", securePassword: SECRET, contractType: "1" };
   let oauthCalls = 0;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {
@@ -412,10 +412,13 @@ test("failed token request does not poison cache; next call retries", async () =
 test("assertCdekCredentials throws when account absent; message has neither value", () => {
   const securePassword = "pw-must-not-leak";
   assert.throws(
-    () => assertCdekCredentials({ securePassword }),
+    () => assertCdekCredentials({ securePassword, contractType: "1" }),
     (error) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /CDEK_CREDENTIALS_INVALID/);
+      assert.match(
+        error.message,
+        /CDEK_CREDENTIALS_INVALID: account, securePassword and contractType are required/,
+      );
       assert.equal(error.message.includes(securePassword), false);
       return true;
     },
@@ -425,11 +428,32 @@ test("assertCdekCredentials throws when account absent; message has neither valu
 test("assertCdekCredentials throws when securePassword absent; message has neither value", () => {
   const account = "acct-must-not-leak";
   assert.throws(
-    () => assertCdekCredentials({ account }),
+    () => assertCdekCredentials({ account, contractType: "1" }),
     (error) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /CDEK_CREDENTIALS_INVALID/);
+      assert.match(
+        error.message,
+        /CDEK_CREDENTIALS_INVALID: account, securePassword and contractType are required/,
+      );
       assert.equal(error.message.includes(account), false);
+      return true;
+    },
+  );
+});
+
+test("assertCdekCredentials throws when contractType absent; message has neither value", () => {
+  const account = "acct-contract-leak";
+  const securePassword = "pw-contract-leak";
+  assert.throws(
+    () => assertCdekCredentials({ account, securePassword }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.match(
+        error.message,
+        /CDEK_CREDENTIALS_INVALID: account, securePassword and contractType are required/,
+      );
+      assert.equal(error.message.includes(account), false);
+      assert.equal(error.message.includes(securePassword), false);
       return true;
     },
   );

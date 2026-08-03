@@ -8,7 +8,17 @@ export class CdekAuthError extends CarrierAuthError {
   }
 }
 
-type CdekCredentials = { account: string; securePassword: string };
+type CdekCredentials = {
+  account: string;
+  securePassword: string;
+  /**
+   * CDEK calculator `type`: "1" = интернет-магазин, "2" = доставка.
+   * Required with no default — C0 measured type 1 returning Посылка at
+   * 150 RUB склад-склад while type 2 does not and the cheapest becomes
+   * 325 RUB; guessing would double the price shown to a seller.
+   */
+  contractType: "1" | "2";
+};
 
 type CacheEntry = { token: string; expiresAtMs: number };
 
@@ -47,12 +57,17 @@ export function assertCdekCredentials(
 ): CdekCredentials {
   const account = creds.account;
   const securePassword = creds.securePassword;
-  if (!account || !securePassword) {
+  const contractType = creds.contractType;
+  if (
+    !account ||
+    !securePassword ||
+    (contractType !== "1" && contractType !== "2")
+  ) {
     throw new Error(
-      "CDEK_CREDENTIALS_INVALID: account and securePassword are required",
+      "CDEK_CREDENTIALS_INVALID: account, securePassword and contractType are required",
     );
   }
-  return { account, securePassword };
+  return { account, securePassword, contractType };
 }
 
 /**
