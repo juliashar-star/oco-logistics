@@ -6,7 +6,9 @@ import {
   isActiveOffice,
   mapCdekOfficeTypeToKind,
   mapCdekPickupPoints,
+  normaliseForRegionCompare,
 } from "../packages/core/src/carrier-adapter/cdek/map-pickup-points.ts";
+import { normaliseCdekCityName } from "../packages/core/src/carrier-adapter/cdek/cities.ts";
 
 /**
  * Verbatim from GET https://api.edu.cdek.ru/v2/deliverypoints?city_code=44&is_handout=true
@@ -371,4 +373,196 @@ test("non-object array elements are skipped; good row still maps", () => {
   assert.equal(points.length, 1);
   assert.equal(points[0].id, "MSK5");
   assert.equal(points[0].rawPoint, MSK5);
+});
+
+test("region differing from city → address prefixed with region", () => {
+  const pskovMoscow = {
+    ...MSK5,
+    code: "PSK-MSK",
+    location: {
+      ...MSK5.location,
+      region: "Псковская область",
+      city: "Москва",
+      city_code: 1172673,
+      address: "ул. Примерная, 1",
+    },
+  };
+  const [pskov] = mapCdekPickupPoints([pskovMoscow]);
+  assert.ok(pskov);
+  assert.equal(pskov.address, "Псковская область, ул. Примерная, 1");
+  assert.ok(pskov.address.startsWith("Псковская область, "));
+  assert.equal(pskov.city, "Москва");
+
+  const uryupinsk = {
+    ...MSK5,
+    code: "URY1",
+    location: {
+      ...MSK5.location,
+      region: "Волгоградская область",
+      city: "Урюпинск",
+      address: "ул. Ленина, 10",
+    },
+  };
+  const [ury] = mapCdekPickupPoints([uryupinsk]);
+  assert.ok(ury);
+  assert.equal(ury.address, "Волгоградская область, ул. Ленина, 10");
+  assert.ok(ury.address.startsWith("Волгоградская область, "));
+});
+
+test("region absent / empty / not a string → address unchanged", () => {
+  const street = "ул. Тестовая, 2";
+  const baseLocation = {
+    ...MSK5.location,
+    city: "Урюпинск",
+    address: street,
+  };
+
+  const { region: _r, ...noRegion } = baseLocation;
+  assert.equal(
+    mapCdekPickupPoints([{ ...MSK5, code: "A1", location: noRegion }])[0]
+      .address,
+    street,
+  );
+  assert.equal(
+    mapCdekPickupPoints([
+      { ...MSK5, code: "A2", location: { ...baseLocation, region: "" } },
+    ])[0].address,
+    street,
+  );
+  assert.equal(
+    mapCdekPickupPoints([
+      { ...MSK5, code: "A3", location: { ...baseLocation, region: "   " } },
+    ])[0].address,
+    street,
+  );
+  assert.equal(
+    mapCdekPickupPoints([
+      { ...MSK5, code: "A4", location: { ...baseLocation, region: 81 } },
+    ])[0].address,
+    street,
+  );
+  assert.equal(
+    mapCdekPickupPoints([
+      { ...MSK5, code: "A5", location: { ...baseLocation, region: null } },
+    ])[0].address,
+    street,
+  );
+});
+
+test("region differing only by ё or case → NOT prefixed", () => {
+  const street = "ул. Советская, 5";
+  const yo = {
+    ...MSK5,
+    code: "KOR1",
+    location: {
+      ...MSK5.location,
+      region: "Королёв",
+      city: "Королев",
+      address: street,
+    },
+  };
+  assert.equal(mapCdekPickupPoints([yo])[0].address, street);
+
+  const caseOnly = {
+    ...MSK5,
+    code: "KOR2",
+    location: {
+      ...MSK5.location,
+      region: "МОСКВА",
+      city: "москва",
+      address: street,
+    },
+  };
+  assert.equal(mapCdekPickupPoints([caseOnly])[0].address, street);
+});
+
+test("region alone when address absent or not a string; empty when neither usable", () => {
+  const regionOnly = {
+    ...MSK5,
+    code: "REG1",
+    location: {
+      ...MSK5.location,
+      region: "Псковская область",
+      city: "Москва",
+      address: null,
+    },
+  };
+  assert.equal(
+    mapCdekPickupPoints([regionOnly])[0].address,
+    "Псковская область",
+  );
+
+  const { address: _a, ...noAddress } = {
+    ...MSK5.location,
+    region: "Волгоградская область",
+    city: "Урюпинск",
+  };
+  assert.equal(
+    mapCdekPickupPoints([
+      { ...MSK5, code: "REG2", location: noAddress },
+    ])[0].address,
+    "Волгоградская область",
+  );
+
+  assert.equal(
+    mapCdekPickupPoints([
+      {
+        ...MSK5,
+        code: "REG3",
+        location: {
+          ...MSK5.location,
+          region: "Псковская область",
+          city: "Москва",
+          address: 42,
+        },
+      },
+    ])[0].address,
+    "Псковская область",
+  );
+
+  const { region: _r, address: _addr, ...neither } = {
+    ...MSK5.location,
+    city: "Урюпинск",
+  };
+  assert.equal(
+    mapCdekPickupPoints([{ ...MSK5, code: "REG4", location: neither }])[0]
+      .address,
+    "",
+  );
+  assert.equal(
+    mapCdekPickupPoints([
+      {
+        ...MSK5,
+        code: "REG5",
+        location: {
+          ...MSK5.location,
+          region: "",
+          city: "Урюпинск",
+          address: null,
+        },
+      },
+    ])[0].address,
+    "",
+  );
+});
+
+test("region comparison and city cache normalisation must stay identical (deliberate duplicate — this is the guard)", () => {
+  const samples = [
+    "Москва",
+    " Москва ",
+    "МОСКВА",
+    "Королёв",
+    "Королев",
+    "королёв",
+    "Ростов-на-Дону",
+    "",
+    "  ",
+  ];
+  for (const sample of samples) {
+    assert.equal(
+      normaliseForRegionCompare(sample),
+      normaliseCdekCityName(sample),
+      `normalisation diverged for ${JSON.stringify(sample)}`,
+    );
+  }
 });
