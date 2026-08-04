@@ -16,6 +16,14 @@ export type CalculationSnapshot = {
   // roughly double.
   handoverMode: "DROP_OFF" | "COURIER";
   needsThermalBag: boolean;
+  /**
+   * Carrier network of the chosen pickup point (empty when none / courier).
+   * Switching Yandex ↔ CDEK changes the carrier and therefore the price, so a
+   * quote taken before the switch must not survive it.
+   * calculationSnapshotKey hashes the object's own entries sorted by key, so
+   * this field joins the invalidate-quotes effect dependencies automatically.
+   */
+  pvzProviderKey: string;
 };
 
 /**
@@ -37,9 +45,9 @@ export function calculationSnapshotKey(snapshot: CalculationSnapshot): string {
 
 /**
  * Yandex draft/offer inputs for both PVZ and COURIER: base fields +
- * declaredValueRub + destCity + needsThermalBag + handoverMode, then
- * destination key by type (destAddress for COURIER, pointOutId for PVZ).
- * Do NOT touch the pickupType comparison — latent defect noted separately.
+ * declaredValueRub + destCity + needsThermalBag + handoverMode +
+ * pvzProviderKey + pickupType, then destination key by type (destAddress for
+ * COURIER, pointOutId for PVZ).
  */
 export function snapshotsEqual(
   a: CalculationSnapshot,
@@ -61,6 +69,11 @@ export function snapshotsEqual(
   if (a.destCity !== b.destCity) return false;
   if (a.needsThermalBag !== b.needsThermalBag) return false;
   if (a.handoverMode !== b.handoverMode) return false;
+  if (a.pvzProviderKey !== b.pvzProviderKey) return false;
+  // Compare pickupType itself — not only as a switch for which destination
+  // field to read. When both destAddress and pointOutId are blank, differing
+  // pickupType alone used to compare equal and leave a stale quote on screen.
+  if (a.pickupType !== b.pickupType) return false;
   if (b.pickupType === "COURIER") return a.destAddress === b.destAddress;
   return a.pointOutId === b.pointOutId;
 }

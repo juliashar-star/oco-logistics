@@ -49,19 +49,25 @@ export const POST = withAuth(async (request, user) => {
     // points. Do not check whether that carrier is CONNECTED: the offers
     // fan-out already intersects with the company's credentials, and
     // re-querying here would add a database round trip to every re-quote.
+    // Absent or empty/whitespace → null (form sends "" when no point is chosen).
     let pvzProviderKey: string | undefined;
     if ("pvzProviderKey" in body) {
-      const trimmed =
-        typeof body.pvzProviderKey === "string"
-          ? body.pvzProviderKey.trim()
-          : body.pvzProviderKey;
-      if (!isKnownPickupPointProviderKey(trimmed)) {
+      if (typeof body.pvzProviderKey !== "string") {
         return NextResponse.json(
           { error: "Некорректный перевозчик пункта выдачи" },
           { status: 400 },
         );
       }
-      pvzProviderKey = trimmed;
+      const trimmed = body.pvzProviderKey.trim();
+      if (trimmed !== "") {
+        if (!isKnownPickupPointProviderKey(trimmed)) {
+          return NextResponse.json(
+            { error: "Некорректный перевозчик пункта выдачи" },
+            { status: 400 },
+          );
+        }
+        pvzProviderKey = trimmed;
+      }
     }
     const weightG = Number(body.weightG);
     const lengthCm = Number(body.lengthCm);

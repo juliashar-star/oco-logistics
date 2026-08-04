@@ -269,6 +269,9 @@ export function NewOrderForm() {
   }
 
   function snapshotFromForm(): CalculationSnapshot {
+    const selectedPoint = pointOutId
+      ? points.find((point) => point.id === pointOutId)
+      : undefined;
     return {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhoneForSnapshot(recipientPhone),
@@ -283,6 +286,10 @@ export function NewOrderForm() {
       pickupType,
       handoverMode,
       needsThermalBag,
+      pvzProviderKey:
+        pickupType === "PVZ" && selectedPoint
+          ? selectedPoint.providerKey
+          : "",
     };
   }
 
@@ -588,7 +595,12 @@ export function NewOrderForm() {
           pickupType,
           handoverMode,
           ...(pickupType === "PVZ"
-            ? { pvzCode: pointOutId }
+            ? {
+                pvzCode: pointOutId,
+                pvzProviderKey:
+                  points.find((point) => point.id === pointOutId)
+                    ?.providerKey ?? "",
+              }
             : {
                 destAddress: destAddress.trim(),
                 destApartment: destApartment.trim() || undefined,

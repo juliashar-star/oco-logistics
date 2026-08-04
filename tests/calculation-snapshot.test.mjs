@@ -21,6 +21,7 @@ function baseSnapshot(overrides = {}) {
     pickupType: /** @type {const} */ ("COURIER"),
     handoverMode: /** @type {const} */ ("DROP_OFF"),
     needsThermalBag: false,
+    pvzProviderKey: "",
     ...overrides,
   };
 }
@@ -46,6 +47,54 @@ test("snapshotsEqual returns false when only handoverMode differs", () => {
 test("snapshotsEqual returns true when handoverMode matches with otherwise equal fields", () => {
   const a = baseSnapshot({ handoverMode: "COURIER" });
   const b = baseSnapshot({ handoverMode: "COURIER" });
+  assert.equal(snapshotsEqual(a, b), true);
+});
+
+test("snapshotsEqual returns false when only pickupType differs and both destinations are blank", () => {
+  // Pre-existing defect: without comparing pickupType itself, blank destAddress
+  // and blank pointOutId make PVZ vs COURIER look equal and a stale quote survives.
+  const a = baseSnapshot({
+    pickupType: "PVZ",
+    destAddress: "",
+    pointOutId: "",
+  });
+  const b = baseSnapshot({
+    pickupType: "COURIER",
+    destAddress: "",
+    pointOutId: "",
+  });
+  assert.equal(snapshotsEqual(a, b), false);
+});
+
+test("snapshotsEqual returns false when only pvzProviderKey differs", () => {
+  const a = baseSnapshot({
+    pickupType: "PVZ",
+    pointOutId: "station-1",
+    destAddress: "",
+    pvzProviderKey: "yataxi",
+  });
+  const b = baseSnapshot({
+    pickupType: "PVZ",
+    pointOutId: "station-1",
+    destAddress: "",
+    pvzProviderKey: "cdek",
+  });
+  assert.equal(snapshotsEqual(a, b), false);
+});
+
+test("snapshotsEqual returns true when pvzProviderKey matches with otherwise equal fields", () => {
+  const a = baseSnapshot({
+    pickupType: "PVZ",
+    pointOutId: "station-1",
+    destAddress: "",
+    pvzProviderKey: "yataxi",
+  });
+  const b = baseSnapshot({
+    pickupType: "PVZ",
+    pointOutId: "station-1",
+    destAddress: "",
+    pvzProviderKey: "yataxi",
+  });
   assert.equal(snapshotsEqual(a, b), true);
 });
 
