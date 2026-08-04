@@ -1,13 +1,16 @@
 import type {
+  CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
   CarrierListPointsInput,
   CarrierListPointsResult,
+  CarrierOffer,
   CarrierOffersResult,
   CarrierOrderItem,
   CarrierPickupPoint,
 } from "../types";
 import { buildCdekLocation } from "./build-cdek-location";
+import { buildCdekOrderBody } from "./build-order-body";
 import {
   type CdekCity,
   resolveCdekCities,
@@ -20,6 +23,10 @@ import {
   mapCdekPickupPoints,
   normaliseForRegionCompare,
 } from "./map-pickup-points";
+import {
+  isCdekOrderNotFound,
+  readCdekCreateState,
+} from "./order-state";
 import {
   assertCdekCredentials,
   cdekGet,
@@ -35,6 +42,40 @@ import {
  * with no office request.
  */
 export const CDEK_LIST_PICKUP_POINTS_MAX_CITY_MATCHES = 5;
+
+/** Poll budget for CREATE settlement. Measured settlement is 3–7 s. */
+const CDEK_CONFIRM_POLL_BUDGET_MS = 15_000;
+const CDEK_CONFIRM_POLL_INTERVAL_MS = 1_000;
+/** Hard cap on GET /v2/orders/{uuid} attempts — wall clock alone is not enough. */
+const CDEK_CONFIRM_POLL_MAX_ATTEMPTS = 20;
+
+export type CdekConfirmOfferOptions = {
+  /** Injectable delay between polls — tests pass a no-op so they do not wait. */
+  sleep?: (ms: number) => Promise<void>;
+  pollIntervalMs?: number;
+  pollBudgetMs?: number;
+  /** Max GET polls after create; stops even if wall budget remains. */
+  pollMaxAttempts?: number;
+};
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+function throwInvalid(errorCodes: string[]): never {
+  throw new Error(`CDEK_ORDER_INVALID: ${errorCodes.join(",")}`);
+}
 
 /**
  * Destination side of delivery_mode — same rule as Yandex
@@ -119,6 +160,137 @@ export async function getOffers(
     return { ok: false, reason: "no_delivery_options" };
   }
   return { ok: true, offers };
+}
+
+/**
+ * Confirm a chosen CDEK offer: lookup-by-im_number → create if absent → poll.
+ *
+ * Not wired into ORDER_ADAPTERS yet — the registry stub still throws. Call
+ * this function directly (tests) until the registration slice.
+ *
+ * Optional 4th arg is for tests (no-op sleep / short poll budget).
+ */
+export async function confirmOffer(
+  offer: CarrierOffer,
+  input: CarrierCreateOrderInput,
+  credentials: CarrierCredentials,
+  options?: CdekConfirmOfferOptions,
+): Promise<CarrierConfirmResult> {
+  // 1. Build FIRST, before any network call: validates items, offer id and
+  // credentials so our own bugs never reach the carrier.
+  const orderBody = buildCdekOrderBody(input, offer, credentials);
+  const creds = assertCdekCredentials(credentials);
+  const baseUrl = resolveBaseUrl("CDEK_BASE_URL");
+  const sleep = options?.sleep ?? defaultSleep;
+  const pollIntervalMs =
+    options?.pollIntervalMs ?? CDEK_CONFIRM_POLL_INTERVAL_MS;
+  const pollBudgetMs = options?.pollBudgetMs ?? CDEK_CONFIRM_POLL_BUDGET_MS;
+
+  // 2. LOOKUP by our own number — adopt an existing order rather than POST
+  // again (measured: duplicate POSTs under the same number create NEW uuids).
+  const lookupPath = `/v2/orders?im_number=${encodeURIComponent(input.clientNumber)}`;
+  const lookupRes = await cdekGet(baseUrl, creds, lookupPath);
+  const lookupBody = await readResponseBody(lookupRes);
+
+  if (lookupRes.ok) {
+    const adopted = readCdekCreateState(lookupBody);
+    if (
+      (adopted.state === "created" || adopted.state === "pending") &&
+      adopted.uuid
+    ) {
+      // ADOPT — do not POST.
+      return {
+        requestId: adopted.uuid,
+        rawResponse: lookupBody,
+        warnings: [],
+      };
+    }
+    if (adopted.state === "invalid") {
+      // Do NOT create a second order: the body comes from the same draft and
+      // would be rejected the same way.
+      throwInvalid(adopted.errorCodes);
+    }
+    // 200 but nothing to adopt (no uuid) — do not POST; that risks a duplicate
+    // against an order we failed to read. Own code — not an HTTP failure.
+    throw new Error("CDEK_ORDER_LOOKUP_UNREADABLE");
+  }
+
+  if (!isCdekOrderNotFound(lookupBody)) {
+    // Status only — never the body (may echo submitted fields / PII).
+    throw new Error(`CDEK order lookup failed: HTTP ${lookupRes.status}`);
+  }
+  // v2_entity_not_found_im_number (measured HTTP 400) → nothing exists yet.
+
+  // 3. POST /v2/orders
+  const createRes = await cdekPost(baseUrl, creds, "/v2/orders", orderBody);
+  const createBody = await readResponseBody(createRes);
+  if (!createRes.ok) {
+    throw new Error(`CDEK order create failed: HTTP ${createRes.status}`);
+  }
+  const created = readCdekCreateState(createBody);
+  if (!created.uuid) {
+    // Distinctive: safe to retry because the next attempt's lookup adopts the
+    // order if CDEK did create one despite omitting uuid in this reply.
+    throw new Error("CDEK_ORDER_CREATE_NO_UUID");
+  }
+
+  // 4. POLL GET /v2/orders/{uuid} until not pending (measured settle 3–7 s).
+  let lastBody: unknown = createBody;
+  let lastState = created;
+  const pollStartedAt = Date.now();
+  const pollMaxAttempts =
+    options?.pollMaxAttempts ?? CDEK_CONFIRM_POLL_MAX_ATTEMPTS;
+  let pollsDone = 0;
+
+  while (lastState.state === "pending") {
+    if (
+      pollsDone >= pollMaxAttempts ||
+      Date.now() - pollStartedAt >= pollBudgetMs
+    ) {
+      // Still pending at the cap → RETURN SUCCESS with the uuid. Losing it
+      // would abandon a live order; the status sync will learn the truth later.
+      return {
+        requestId: created.uuid,
+        rawResponse: lastBody,
+        warnings: [],
+      };
+    }
+    await sleep(pollIntervalMs);
+    pollsDone += 1;
+    const pollRes = await cdekGet(
+      baseUrl,
+      creds,
+      `/v2/orders/${encodeURIComponent(created.uuid)}`,
+    );
+    // Non-2xx (or an unreadable body) is NOT evidence the order failed — we
+    // already hold the uuid. Throwing here would skip persisting
+    // providerOrderId and orphan a live carrier order. Unrecoverable beats
+    // recoverable: treat as still pending, keep polling to the cap, return uuid.
+    if (!pollRes.ok) {
+      continue;
+    }
+    let pollBody: unknown;
+    try {
+      pollBody = await readResponseBody(pollRes);
+    } catch {
+      continue;
+    }
+    lastBody = pollBody;
+    lastState = readCdekCreateState(pollBody);
+  }
+
+  if (lastState.state === "created") {
+    // 5. warnings: [] — neutral warning enum is Yandex-shaped; CDEK has none.
+    // 6. requestId = uuid; rawResponse = last body read.
+    return {
+      requestId: created.uuid,
+      rawResponse: lastBody,
+      warnings: [],
+    };
+  }
+
+  // "invalid" — codes only, never provider message text.
+  throwInvalid(lastState.errorCodes);
 }
 
 /**
