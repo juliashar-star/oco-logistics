@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SelectionMode } from "@prisma/client";
+import { isKnownPickupPointProviderKey } from "@oco/core/carrier-adapter/pickup-point-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
@@ -43,6 +44,25 @@ export const POST = withAuth(async (request, user) => {
     }
     const handoverMode =
       body.handoverMode === "COURIER" ? "COURIER" : "DROP_OFF";
+    // Membership via isKnownPickupPointProviderKey (OWN keys of
+    // PICKUP_POINT_ADAPTERS only) — a point's carrier must be one that can list
+    // points. Do not check whether that carrier is CONNECTED: the offers
+    // fan-out already intersects with the company's credentials, and
+    // re-querying here would add a database round trip to every re-quote.
+    let pvzProviderKey: string | undefined;
+    if ("pvzProviderKey" in body) {
+      const trimmed =
+        typeof body.pvzProviderKey === "string"
+          ? body.pvzProviderKey.trim()
+          : body.pvzProviderKey;
+      if (!isKnownPickupPointProviderKey(trimmed)) {
+        return NextResponse.json(
+          { error: "Некорректный перевозчик пункта выдачи" },
+          { status: 400 },
+        );
+      }
+      pvzProviderKey = trimmed;
+    }
     const weightG = Number(body.weightG);
     const lengthCm = Number(body.lengthCm);
     const widthCm = Number(body.widthCm);
@@ -128,6 +148,7 @@ export const POST = withAuth(async (request, user) => {
       destApartment: pickupType === "COURIER" ? destApartment : undefined,
       deliveryComment: pickupType === "COURIER" ? deliveryComment : undefined,
       pvzCode,
+      pvzProviderKey,
       pickupType: pickupType === "COURIER" ? "COURIER" : "PVZ",
       handoverMode,
       recipientName,

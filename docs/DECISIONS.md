@@ -20,6 +20,16 @@
 
 ---
 
+- **2026-08-04 · Shipment.pvzProviderKey — persist which carrier the chosen PVZ belongs to.**
+Почему: список ПВЗ теперь от нескольких сетей; пункт принадлежит ровно одной,
+а строка хранила только `pvzCode` (код CDEK ≠ id станции Яндекса). Nullable
+`String?` рядом с `providerKey`, не enum. Пишется только когда computed
+`pvzCode` не null (общий `draftFields` create+updateMany — черновик
+переписывается на каждый пересчёт). Роут валидирует ключ по
+`PICKUP_POINT_ADAPTERS` (400 как handoverMode), без проверки подключения —
+fan-out офферов уже пересекает credentials.
+Отвергли: UNIQUE на pvzCode; Prisma enum; проверка ConnectedCarrier на
+каждом re-quote; silent coercion как у pickupType.
 - **2026-08-04 · Partial PVZ load — amber caution under the list, not pointsError; CarrierDto.carrierName.**
 Почему: когда часть перевозчиков отдала пункты, а часть — failed /
 city_not_resolved / no_adapter, список непустой и красный `pointsError`

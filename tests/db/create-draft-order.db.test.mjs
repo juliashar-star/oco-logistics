@@ -407,6 +407,112 @@ describe("createDraftOrder", { concurrency: false }, () => {
     });
   });
 
+  test("stores pvzProviderKey alongside pvzCode", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Pvz Provider Co",
+        `draft-pvz-prov-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-pvz-prov`;
+
+      const result = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "PVZ",
+        destAddress: undefined,
+        pvzCode: "station-abc",
+        pvzProviderKey: "yataxi",
+      });
+      assert.equal(result.created, true);
+      assert.equal(result.shipment.pvzCode, "station-abc");
+      assert.equal(result.shipment.pvzProviderKey, "yataxi");
+    });
+  });
+
+  test("stores null pvzProviderKey when pvzCode absent even if a key was passed", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Pvz Key Orphan Co",
+        `draft-pvz-orphan-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-pvz-orphan`;
+
+      const result = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "COURIER",
+        pvzCode: undefined,
+        pvzProviderKey: "cdek",
+      });
+      assert.equal(result.created, true);
+      assert.equal(result.shipment.pvzCode, null);
+      assert.equal(result.shipment.pvzProviderKey, null);
+    });
+  });
+
+  test("stores null pvzProviderKey when pvzCode is whitespace-only even if a key was passed", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Pvz Whitespace Co",
+        `draft-pvz-ws-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-pvz-ws`;
+
+      const result = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "PVZ",
+        destAddress: undefined,
+        pvzCode: "   ",
+        pvzProviderKey: "yataxi",
+      });
+      assert.equal(result.created, true);
+      assert.equal(result.shipment.pvzCode, null);
+      assert.equal(result.shipment.pvzProviderKey, null);
+    });
+  });
+
+  test("UPDATE path overwrites pvzProviderKey and clears it when the point is removed", async () => {
+    await withEnv(PII_ENV, TEST_PII_KEY, async () => {
+      const company = await seedCompany(
+        "Pvz Provider Upd Co",
+        `draft-pvz-upd-${Date.now()}@example.com`,
+      );
+      const key = `idem-${Date.now()}-pvz-upd`;
+
+      const first = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "PVZ",
+        destAddress: undefined,
+        pvzCode: "station-old",
+        pvzProviderKey: "yataxi",
+      });
+      assert.equal(first.created, true);
+      assert.equal(first.shipment.pvzProviderKey, "yataxi");
+
+      const overwritten = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "PVZ",
+        destAddress: undefined,
+        pvzCode: "office-cdek-1",
+        pvzProviderKey: "cdek",
+      });
+      assert.equal("created" in overwritten && overwritten.created, false);
+      assert.equal(overwritten.shipment.id, first.shipment.id);
+      assert.equal(overwritten.shipment.pvzCode, "office-cdek-1");
+      assert.equal(overwritten.shipment.pvzProviderKey, "cdek");
+
+      const cleared = await createDraftOrder(prisma, {
+        ...draftInput(company.id, key),
+        pickupType: "COURIER",
+        destAddress: "ул. Курьерская, 2",
+        pvzCode: undefined,
+        pvzProviderKey: "cdek",
+      });
+      assert.equal("created" in cleared && cleared.created, false);
+      assert.equal(cleared.shipment.id, first.shipment.id);
+      assert.equal(cleared.shipment.pvzCode, null);
+      assert.equal(cleared.shipment.pvzProviderKey, null);
+    });
+  });
+
   test("(vii) DRAFT with submittingAt set → conflict, row untouched", async () => {
     await withEnv(PII_ENV, TEST_PII_KEY, async () => {
       const company = await seedCompany(

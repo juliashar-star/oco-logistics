@@ -24,6 +24,8 @@ export type CreateDraftInput = {
   destApartment?: string;
   deliveryComment?: string;
   pvzCode?: string;
+  /** Carrier network of the chosen point; stored only when pvzCode is stored. */
+  pvzProviderKey?: string;
   pickupType: PickupType;
   handoverMode: "COURIER" | "DROP_OFF";
   recipientName: string;
@@ -69,6 +71,17 @@ export async function createDraftOrder(
       ? Math.round(input.declaredValueRub * 100)
       : null;
 
+  // Computed pvzCode (trim → empty becomes null). The carrier key is stored
+  // only when THIS value is non-null — not when the raw input had a code — so
+  // whitespace-only codes cannot leave an orphan key. Switching «Куда» to
+  // courier clears both. draftFields is shared by create AND updateMany: the
+  // draft is rewritten on every re-quote, which is exactly why the clearing
+  // rule matters.
+  const pvzCode = input.pvzCode?.trim() || null;
+  const pvzProviderKey = pvzCode
+    ? input.pvzProviderKey?.trim() || null
+    : null;
+
   const draftFields = {
     category: input.category ?? "OTHER",
     weightG: input.weightG,
@@ -80,7 +93,8 @@ export async function createDraftOrder(
     destAddress: encryptedRecipient.destAddress,
     destApartment: encryptedRecipient.destApartment,
     deliveryComment: encryptedRecipient.deliveryComment,
-    pvzCode: input.pvzCode?.trim() || null,
+    pvzCode,
+    pvzProviderKey,
     pickupType: input.pickupType,
     handoverMode: input.handoverMode ?? "DROP_OFF",
     needsThermalBag: input.needsThermalBag === true,

@@ -137,6 +137,13 @@ model Shipment {
   destApartment   String?
   deliveryComment String?
   pvzCode         String?
+  // Which carrier network the chosen pickup point belongs to. The destination
+  // list now spans several carriers; a point is exactly one network, so the
+  // order can only go through that carrier — but the row used to store only
+  // pvzCode, and a CDEK office code is not a Yandex station id. Nullable sibling
+  // of providerKey (plain string, not a Prisma enum). Null when there is no
+  // point (courier) or when the draft predates this field.
+  pvzProviderKey  String?
   pickupType      PickupType      @default(PVZ)
   // Default DROP_OFF: cheaper branch — an inattentive seller saves money rather than overpaying.
   handoverMode    HandoverMode    @default(DROP_OFF)

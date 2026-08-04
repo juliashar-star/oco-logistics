@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   getPickupPointAdapter,
+  isKnownPickupPointProviderKey,
   PICKUP_POINT_ADAPTERS,
 } from "../packages/core/src/carrier-adapter/pickup-point-adapters.ts";
 import { listPickupPoints as cdekListPickupPoints } from "../packages/core/src/carrier-adapter/cdek/client.ts";
@@ -48,3 +49,29 @@ test("registry has both yataxi and cdek entries", () => {
     cdekListPickupPoints,
   );
 });
+
+test("isKnownPickupPointProviderKey: yataxi and cdek are true", () => {
+  assert.equal(isKnownPickupPointProviderKey("yataxi"), true);
+  assert.equal(isKnownPickupPointProviderKey("cdek"), true);
+});
+
+test("isKnownPickupPointProviderKey: unknown key is false", () => {
+  assert.equal(isKnownPickupPointProviderKey("unknown-carrier"), false);
+  assert.equal(isKnownPickupPointProviderKey(""), false);
+});
+
+test("isKnownPickupPointProviderKey: non-string / null / undefined / number are false", () => {
+  assert.equal(isKnownPickupPointProviderKey(null), false);
+  assert.equal(isKnownPickupPointProviderKey(undefined), false);
+  assert.equal(isKnownPickupPointProviderKey(42), false);
+  assert.equal(isKnownPickupPointProviderKey({}), false);
+});
+
+test("isKnownPickupPointProviderKey: prototype-chain names that `in` would accept are ALL false", () => {
+  assert.equal(isKnownPickupPointProviderKey("toString"), false);
+  assert.equal(isKnownPickupPointProviderKey("constructor"), false);
+  assert.equal(isKnownPickupPointProviderKey("hasOwnProperty"), false);
+  assert.equal(isKnownPickupPointProviderKey("__proto__"), false);
+  assert.equal(isKnownPickupPointProviderKey("valueOf"), false);
+});
+
