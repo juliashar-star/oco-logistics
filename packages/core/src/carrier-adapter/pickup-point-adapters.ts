@@ -1,4 +1,5 @@
 import type { CarrierAdapter } from "./types";
+import { listPickupPoints as cdekListPickupPoints } from "./cdek/client";
 import { yandexAdapter } from "./yandex/adapter";
 
 /**
@@ -15,6 +16,10 @@ export const PICKUP_POINT_ADAPTERS: Record<string, PickupPointAdapter> = {
   yataxi: {
     providerKey: yandexAdapter.providerKey,
     listPickupPoints: yandexAdapter.listPickupPoints,
+  },
+  cdek: {
+    providerKey: "cdek",
+    listPickupPoints: cdekListPickupPoints,
   },
 };
 

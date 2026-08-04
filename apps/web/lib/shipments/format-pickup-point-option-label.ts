@@ -74,23 +74,32 @@ export function formatPickupPointOptionLabel(point: {
   name: string;
   address: string;
   isDarkStore?: boolean;
+  /** Masked seller-facing carrier name from the DTO; empty → no prefix. */
+  carrierName?: string;
 }): string {
   const name = point.name.trimStart();
   const base = `${name} — ${point.address}`;
   const dark = point.isDarkStore === true;
 
+  let existingLabel: string;
   if (point.kind === "postamat") {
-    return withKindPrefix("Постамат", name, point.address, dark);
-  }
-  if (point.kind === "warehouse") {
-    return withKindPrefix("Склад", name, point.address, dark);
-  }
-  if (dark && point.kind === "pickup_point") {
-    return withKindPrefix("ПВЗ", name, point.address, dark);
-  }
-  if (dark) {
+    existingLabel = withKindPrefix("Постамат", name, point.address, dark);
+  } else if (point.kind === "warehouse") {
+    existingLabel = withKindPrefix("Склад", name, point.address, dark);
+  } else if (dark && point.kind === "pickup_point") {
+    existingLabel = withKindPrefix("ПВЗ", name, point.address, dark);
+  } else if (dark) {
     // unknown (or any other non-prefixed kind): bare word — no real kind to qualify.
-    return `Даркстор — ${base}`;
+    existingLabel = `Даркстор — ${base}`;
+  } else {
+    existingLabel = base;
   }
-  return base;
+
+  // Same « · » separator as the offer card (carrierName · service).
+  const carrierName =
+    typeof point.carrierName === "string" ? point.carrierName.trim() : "";
+  if (carrierName.length > 0) {
+    return `${carrierName} · ${existingLabel}`;
+  }
+  return existingLabel;
 }

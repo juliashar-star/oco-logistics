@@ -220,3 +220,56 @@ test("darkstore postamat without suppressed prefix: kind word + mark", () => {
     "Постамат (даркстор) — Лучше чем МП — ул. Арбат, 10",
   );
 });
+
+test("non-empty carrierName prefixes with offer-card separator", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+      carrierName: "Перевозчик №1",
+    }),
+    "Перевозчик №1 · Пункт на Тверской — ул. Тверская, 1",
+  );
+});
+
+test("empty or absent carrierName leaves existing label unchanged", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+      carrierName: "",
+    }),
+    "Пункт на Тверской — ул. Тверская, 1",
+  );
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+      carrierName: "   ",
+    }),
+    "Пункт на Тверской — ул. Тверская, 1",
+  );
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "pickup_point",
+      name: "Пункт на Тверской",
+      address: "ул. Тверская, 1",
+    }),
+    "Пункт на Тверской — ул. Тверская, 1",
+  );
+});
+
+test("carrierName prefixes postamat label", () => {
+  assert.equal(
+    formatPickupPointOptionLabel({
+      kind: "postamat",
+      name: "Лучше чем МП",
+      address: "ул. Арбат, 10",
+      carrierName: "Перевозчик №2",
+    }),
+    "Перевозчик №2 · Постамат — Лучше чем МП — ул. Арбат, 10",
+  );
+});

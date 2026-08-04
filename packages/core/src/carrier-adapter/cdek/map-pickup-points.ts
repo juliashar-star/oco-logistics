@@ -152,8 +152,12 @@ export function mapCdekPickupPoints(raw: unknown): CarrierPickupPoint[] {
       continue;
     }
 
-    const name =
-      typeof row.name === "string" ? row.name : "";
+    // WHY: CDEK's wire name is mechanical «code, city, street» (e.g.
+    // «MSK65, Москва, ул. Динамовская»). Street and house live in `address`
+    // (with region prefixed when it differs from city); the city is the one
+    // the seller typed; rawPoint keeps the provider's original name — so
+    // nothing is lost and the option label stops repeating the street.
+    const name = code;
     const address = formatOfficeAddress(location);
     const city =
       typeof location.city === "string" ? location.city : "";

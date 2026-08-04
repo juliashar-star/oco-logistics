@@ -14,6 +14,12 @@ export type PickupPointDto = {
   longitude: number;
   kind: CarrierPickupPointKind;
   isDarkStore: boolean;
+  /**
+   * Masked seller-facing carrier name (e.g. «Перевозчик №1»).
+   * Always on the wire — same key set for every carrier. Resolved from
+   * providerKey via the same display-name function as the offer card.
+   */
+  carrierName: string;
 };
 
 export type CarrierDto = {
@@ -30,12 +36,20 @@ export type PickupPointsResponse = {
 };
 
 /**
+ * Same shape as ResolveOfferCarrierName, but keyed by providerKey — pickup
+ * points already carry providerKey (offers carry adapterKey and map through
+ * the order adapter). Required so this module does not import the map.
+ */
+export type ResolvePickupPointCarrierName = (providerKey: string) => string;
+
+/**
  * Boundary map: internal CarrierPickupPoint → browser-safe DTO.
  * Fields named explicitly — never `{ ...point }` — so rawPoint/code cannot leak.
  */
 export function toPickupPointsResponse(
   city: string,
   result: ListPickupPointsForCompanyResult,
+  resolveCarrierName: ResolvePickupPointCarrierName,
 ): PickupPointsResponse {
   return {
     ok: true,
@@ -50,6 +64,7 @@ export function toPickupPointsResponse(
       longitude: point.longitude,
       kind: point.kind,
       isDarkStore: point.isDarkStore,
+      carrierName: resolveCarrierName(point.providerKey),
     })),
     carriers: result.carriers.map((carrier) => {
       if (carrier.resolvedLocation) {

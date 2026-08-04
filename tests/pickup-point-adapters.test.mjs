@@ -5,6 +5,7 @@ import {
   getPickupPointAdapter,
   PICKUP_POINT_ADAPTERS,
 } from "../packages/core/src/carrier-adapter/pickup-point-adapters.ts";
+import { listPickupPoints as cdekListPickupPoints } from "../packages/core/src/carrier-adapter/cdek/client.ts";
 import { listPickupPoints as yandexListPickupPoints } from "../packages/core/src/carrier-adapter/yandex/client.ts";
 
 test("known providerKey resolves and providerKey matches", () => {
@@ -26,5 +27,24 @@ test("registered listPickupPoints is the same function reference as Yandex expor
   assert.equal(
     PICKUP_POINT_ADAPTERS.yataxi.listPickupPoints,
     yandexListPickupPoints,
+  );
+});
+
+test("registry has both yataxi and cdek entries", () => {
+  assert.deepEqual(Object.keys(PICKUP_POINT_ADAPTERS).sort(), [
+    "cdek",
+    "yataxi",
+  ]);
+
+  const yandex = getPickupPointAdapter("yataxi");
+  const cdek = getPickupPointAdapter("cdek");
+  assert.ok(yandex);
+  assert.ok(cdek);
+  assert.equal(yandex.providerKey, "yataxi");
+  assert.equal(cdek.providerKey, "cdek");
+  assert.equal(cdek.listPickupPoints, cdekListPickupPoints);
+  assert.equal(
+    PICKUP_POINT_ADAPTERS.cdek.listPickupPoints,
+    cdekListPickupPoints,
   );
 });

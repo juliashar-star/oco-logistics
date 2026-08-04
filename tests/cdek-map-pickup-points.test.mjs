@@ -199,7 +199,8 @@ test("MSK65 maps field by field (id←code, schedule null, rawPoint preserved)",
   assert.equal(point.id, "MSK65");
   assert.equal(point.code, "MSK65");
   assert.equal(point.providerKey, "cdek");
-  assert.equal(point.name, "MSK65, Москва, ул. Динамовская");
+  assert.equal(point.name, "MSK65");
+  assert.equal(point.rawPoint.name, "MSK65, Москва, ул. Динамовская");
   assert.equal(point.address, "ул. Динамовская, 1А, 110а");
   assert.equal(point.city, "Москва");
   assert.equal(point.latitude, 55.732175);
@@ -222,7 +223,8 @@ test("MSK5 maps field by field; lacking office_image_list", () => {
   assert.equal(point.id, "MSK5");
   assert.equal(point.code, "MSK5");
   assert.equal(point.providerKey, "cdek");
-  assert.equal(point.name, "MSK5, Москва, ул. Авиамоторная");
+  assert.equal(point.name, "MSK5");
+  assert.equal(point.rawPoint.name, "MSK5, Москва, ул. Авиамоторная");
   assert.equal(point.address, "ул. Авиамоторная, 67/8, стр.3");
   assert.equal(point.city, "Москва");
   assert.equal(point.latitude, 55.737845);
