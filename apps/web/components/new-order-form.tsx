@@ -15,6 +15,7 @@ import {
 } from "@/lib/date/format-offer-lines";
 import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
+import { describePartialPickupPoints } from "@/lib/shipments/describe-partial-pickup-points";
 import {
   formatParcelEntrySummary,
   parcelEntryCeilingError,
@@ -29,7 +30,10 @@ import {
   visiblePickupPointOptions,
 } from "@/lib/shipments/visible-pickup-point-options";
 import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
-import type { PickupPointDto } from "@/lib/shipments/pickup-point-dto";
+import type {
+  CarrierDto,
+  PickupPointDto,
+} from "@/lib/shipments/pickup-point-dto";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import {
   calculationSnapshotKey,
@@ -147,9 +151,16 @@ export function NewOrderForm() {
   /** Shared across PVZ re-quotes; regenerated when draft-affecting PVZ params change. */
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [points, setPoints] = useState<YandexPickupPoint[]>([]);
+  const [pointsCarriers, setPointsCarriers] = useState<CarrierDto[]>([]);
   const [pointsLoading, setPointsLoading] = useState(false);
   const [pointsError, setPointsError] = useState("");
   const [pointsFilterQuery, setPointsFilterQuery] = useState("");
+  const partialPickupPointsNotice = useMemo(() => {
+    if (points.length === 0) {
+      return null;
+    }
+    return describePartialPickupPoints(pointsCarriers);
+  }, [points.length, pointsCarriers]);
   const parcelEntrySummary = formatParcelEntrySummary(
     weightG,
     lengthCm,
@@ -315,6 +326,7 @@ export function NewOrderForm() {
     const trimmed = city.trim();
     if (!trimmed) {
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError("");
@@ -323,6 +335,7 @@ export function NewOrderForm() {
 
     if (trimmed.length < MIN_CITY_LENGTH_FOR_PVZ) {
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError("Введите полное название города (минимум 3 символа)");
@@ -344,6 +357,7 @@ export function NewOrderForm() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setPoints([]);
+        setPointsCarriers([]);
         setPointOutId("");
         setPointsFilterQuery("");
         setPointsError(
@@ -355,17 +369,20 @@ export function NewOrderForm() {
       }
 
       const nextPoints = data.points ?? [];
+      const nextCarriers = Array.isArray(data.carriers) ? data.carriers : [];
       setPoints(nextPoints);
+      setPointsCarriers(nextCarriers);
       setPointOutId("");
       setPointsFilterQuery("");
       if (nextPoints.length === 0) {
-        setPointsError(describeEmptyPickupPoints(data.carriers));
+        setPointsError(describeEmptyPickupPoints(nextCarriers));
       }
     } catch {
       if (requestId !== pointsRequestId.current) {
         return;
       }
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError("Не удалось загрузить список ПВЗ");
@@ -380,6 +397,7 @@ export function NewOrderForm() {
     if (pickupType !== "PVZ") {
       pointsRequestId.current += 1;
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError("");
@@ -391,6 +409,7 @@ export function NewOrderForm() {
     if (!destCityDisplayValue.trim()) {
       pointsRequestId.current += 1;
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError(DEST_CITY_PICK_REQUIRED);
@@ -401,6 +420,7 @@ export function NewOrderForm() {
     const trimmed = destCity.trim();
     if (trimmed.length < MIN_CITY_LENGTH_FOR_PVZ) {
       setPoints([]);
+      setPointsCarriers([]);
       setPointOutId("");
       setPointsFilterQuery("");
       setPointsError("");
@@ -1005,6 +1025,14 @@ export function NewOrderForm() {
             <p className="mt-2 min-h-5 text-xs leading-5 text-slate-500 break-words">
               {selectedPointLabel ? `Выбрано: ${selectedPointLabel}` : null}
             </p>
+            {partialPickupPointsNotice && (
+              <p
+                className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                role="status"
+              >
+                {partialPickupPointsNotice}
+              </p>
+            )}
             {pointsError && (
               <p className="mt-2 text-sm text-red-700" role="alert">
                 {pointsError}

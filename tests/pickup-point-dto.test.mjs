@@ -17,6 +17,15 @@ const EXPECTED_POINT_KEYS = [
   "carrierName",
 ];
 
+/** Carrier DTO keys — carrierName appended last (same resolve as points). */
+const EXPECTED_CARRIER_KEYS_MIN = ["providerKey", "status", "carrierName"];
+const EXPECTED_CARRIER_KEYS_WITH_LOCATION = [
+  "providerKey",
+  "status",
+  "resolvedLocation",
+  "carrierName",
+];
+
 /** Fake resolver — does not touch the real map (same pattern as offer-dto). */
 function fakeResolveCarrierName(providerKey) {
   return `NAME_FOR:${providerKey}`;
@@ -100,20 +109,22 @@ test("fat rawPoint and code never appear in serialized response", () => {
   assert.equal(response.points[0].carrierName, "NAME_FOR:yataxi");
 });
 
-test("failed carrier passes only providerKey and status", () => {
+test("failed carrier passes providerKey, status, and carrierName (appended)", () => {
   const response = mapPoints("Москва", {
     points: [],
     carriers: [{ providerKey: "beta", status: "failed" }],
   });
 
   assert.equal(response.carriers.length, 1);
-  assert.deepEqual(Object.keys(response.carriers[0]).sort(), [
-    "providerKey",
-    "status",
-  ]);
+  assert.deepEqual(Object.keys(response.carriers[0]), EXPECTED_CARRIER_KEYS_MIN);
+  assert.equal(
+    EXPECTED_CARRIER_KEYS_MIN[EXPECTED_CARRIER_KEYS_MIN.length - 1],
+    "carrierName",
+  );
   assert.deepEqual(response.carriers[0], {
     providerKey: "beta",
     status: "failed",
+    carrierName: "NAME_FOR:beta",
   });
 });
 
@@ -130,14 +141,18 @@ test("resolvedLocation kept when present, omitted when absent", () => {
     ],
   });
 
+  assert.deepEqual(Object.keys(response.carriers[0]), EXPECTED_CARRIER_KEYS_WITH_LOCATION);
   assert.deepEqual(response.carriers[0], {
     providerKey: "alpha",
     status: "ok",
     resolvedLocation: { id: "geo-a", address: "Alpha City" },
+    carrierName: "NAME_FOR:alpha",
   });
+  assert.deepEqual(Object.keys(response.carriers[1]), EXPECTED_CARRIER_KEYS_MIN);
   assert.deepEqual(response.carriers[1], {
     providerKey: "beta",
     status: "city_not_resolved",
+    carrierName: "NAME_FOR:beta",
   });
   assert.equal("resolvedLocation" in response.carriers[1], false);
 });

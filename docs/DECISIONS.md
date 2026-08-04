@@ -20,6 +20,18 @@
 
 ---
 
+- **2026-08-04 · Partial PVZ load — amber caution under the list, not pointsError; CarrierDto.carrierName.**
+Почему: когда часть перевозчиков отдала пункты, а часть — failed /
+city_not_resolved / no_adapter, список непустой и красный `pointsError`
+молчит. Продавцу нужно одно статусное предупреждение с маскированными
+именами (`describePartialPickupPoints`), в семье
+`bg-amber-50 … text-amber-900 role="status"`. Пустой список по-прежнему
+говорит только через `describeEmptyPickupPoints` → `pointsError` — два
+канала никогда не вместе. status `ok` с нулём пунктов — не предупреждение
+(сеть честно пуста в городе). Имя только из server-resolved `carrierName`;
+пустой → «одного из перевозчиков», никогда `providerKey`.
+Отвергли: писать в `pointsError` (красный alert); fallback на providerKey;
+баннер на ok+0 points; отдельный визуальный стиль.
 - **2026-07-31 · postamat oversize — one muted line under parcel fields, not on each point.**
 Почему: Yandex other-day weight-limits (quoted): постамат ≤20 кг / сторона ≤40 см /
 сумма ≤118 см; «При нарушении … заказ может быть отменен на ЛЮБОМ ЭТАПЕ

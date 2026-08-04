@@ -26,6 +26,14 @@ export type CarrierDto = {
   providerKey: string;
   status: CarrierPointsStatus;
   resolvedLocation?: { id: string; address: string };
+  /**
+   * Masked seller-facing carrier name (e.g. «Перевозчик №2»).
+   * Always on the wire — same key set for every carrier. Resolved from
+   * providerKey via the same display-name function as point rows.
+   * A carrier that returned nothing has no point row; the browser names
+   * it only through this field.
+   */
+  carrierName: string;
 };
 
 export type PickupPointsResponse = {
@@ -75,11 +83,13 @@ export function toPickupPointsResponse(
             id: carrier.resolvedLocation.id,
             address: carrier.resolvedLocation.address,
           },
+          carrierName: resolveCarrierName(carrier.providerKey),
         };
       }
       return {
         providerKey: carrier.providerKey,
         status: carrier.status,
+        carrierName: resolveCarrierName(carrier.providerKey),
       };
     }),
   };
