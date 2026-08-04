@@ -20,6 +20,14 @@
 
 ---
 
+- **2026-08-04 · Offers fan-out — narrow to the chosen point's carrier (PVZ only).**
+Почему: пункт принадлежит одной сети; без сужения Яндекс зовут с кодом CDEK
+(глотаемый сбой выглядит «ок»), а CDEK котирует Яндекс-станцию и заказ
+несоздаваем. `narrowAdaptersToPointCarrier` ПОСЛЕ connected-filter; null/"" —
+legacy drafts без колонки, fan-out как раньше. Пустой после сужения — отдельный
+400 (не «подключите перевозчика»). Дверь не сужается.
+Отвергли: вшивать в selectOrderAdaptersForConnectedCarriers; один 400 на оба
+пустых списка.
 - **2026-08-04 · Shipment.pvzProviderKey — persist which carrier the chosen PVZ belongs to.**
 Почему: список ПВЗ теперь от нескольких сетей; пункт принадлежит ровно одной,
 а строка хранила только `pvzCode` (код CDEK ≠ id станции Яндекса). Nullable

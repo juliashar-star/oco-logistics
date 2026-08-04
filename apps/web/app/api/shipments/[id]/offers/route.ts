@@ -7,6 +7,7 @@ import {
 } from "@oco/core/carrier-adapter/order-adapters";
 import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import { selectOrderAdaptersForConnectedCarriers } from "@oco/core/carrier-adapter/select-order-adapters-for-connected-carriers";
+import { narrowAdaptersToPointCarrier } from "@oco/core/carrier-adapter/narrow-adapters-to-point-carrier";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
@@ -84,6 +85,7 @@ export const POST = withAuth<{ id: string }>(
         needsThermalBag: true,
         handoverMode: true,
         pvzCode: true,
+        pvzProviderKey: true,
         destCity: true,
         destAddress: true,
         destApartment: true,
@@ -122,6 +124,29 @@ export const POST = withAuth<{ id: string }>(
           {
             error:
               "Подключите перевозчика в настройках, чтобы рассчитать доставку",
+          },
+          { status: 400 },
+        );
+      }
+
+      // PVZ only: quote through the network that owns the chosen point.
+      // Door destinations are not narrowed. null/empty pvzProviderKey leaves
+      // the connected list intact (legacy drafts predate the column).
+      const forOffers =
+        row.pickupType === "PVZ"
+          ? narrowAdaptersToPointCarrier(selected, row.pvzProviderKey)
+          : selected;
+      const pointCarrierKey =
+        typeof row.pvzProviderKey === "string" ? row.pvzProviderKey.trim() : "";
+      if (
+        row.pickupType === "PVZ" &&
+        pointCarrierKey !== "" &&
+        forOffers.length === 0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Выбранный пункт принадлежит перевозчику, который не подключён. Выберите другой пункт выдачи.",
           },
           { status: 400 },
         );
@@ -176,7 +201,7 @@ export const POST = withAuth<{ id: string }>(
           recipientPhone: decrypted.recipientPhone,
         },
         company,
-        providerKey: selected[0].adapter.providerKey,
+        providerKey: forOffers[0].adapter.providerKey,
       });
 
       if (!built.ok) {
@@ -192,7 +217,7 @@ export const POST = withAuth<{ id: string }>(
       // Client DTO keeps adapterKey off the wire; serviceTitle is resolved here.
       const { offers: taggedOffers, adapters } = await listOffersForOrderAdapters(
         built.input,
-        selected,
+        forOffers,
       );
 
       if (
