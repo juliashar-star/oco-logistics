@@ -1843,3 +1843,11 @@ Docs ставят `warnings` и на create, и на info, и не говоря�
 совпадают — читаем оба, merge+dedupe (first-seen), иначе потеряли бы
 предупреждение молча. Отвергли: трогать `error_messages` / estimating_failed
 (другой механизм, уже cancel); форвард `message`; хранить текст провайдера.
+- **2026-08-04 · CDEK POST /v2/orders body — always from_location; recipient XOR point/address; items required.**
+Почему (measured на api.edu.cdek.ru): склад-* тариф 136 принимает
+  `from_location` вместо `shipment_point` и доходит до SUCCESSFUL + cdek_number;
+  `packages[].items` обязателен (400 без него); sender+point вместе →
+  `v2_shipment_address_multivalued`. Sender end не ветвится — handoverMode уже
+  в tariff_code. Recipient: `delivery_point` XOR `to_location`. Pure builder
+  only в этом слайсе; confirmOffer/registry не трогаем.
+  Отвергли: shipment_point в этом слайсе; оба конца как point+address.

@@ -7,6 +7,7 @@ import type {
   CarrierOrderItem,
   CarrierPickupPoint,
 } from "../types";
+import { buildCdekLocation } from "./build-cdek-location";
 import {
   type CdekCity,
   resolveCdekCities,
@@ -87,14 +88,15 @@ export async function getOffers(
     type: Number(creds.contractType),
     currency: 1,
     lang: "rus",
-    from_location: {
-      city: input.sender.city,
-      address: input.sender.addressString ?? input.sender.city,
-    },
-    to_location: {
-      city: input.recipient.city,
-      address: input.recipient.addressString ?? input.recipient.city,
-    },
+    // Same helper as buildCdekOrderBody — quote and order must agree on place.
+    from_location: buildCdekLocation(
+      input.sender.city,
+      input.sender.addressString,
+    ),
+    to_location: buildCdekLocation(
+      input.recipient.city,
+      input.recipient.addressString,
+    ),
     packages: [buildPackage(item)],
   };
 
