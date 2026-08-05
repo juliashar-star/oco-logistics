@@ -16,6 +16,8 @@ export function describeSyncResult(data: unknown): string {
   const historyFailed = readCount(source.historyFailed);
   const notConnected = readCount(source.notConnected);
   const noAdapter = readCount(source.noAdapter);
+  const authFailed = readCount(source.authFailed);
+  const authFailedCarriers = readStringList(source.authFailedCarriers);
 
   const parts: string[] = [];
 
@@ -39,6 +41,22 @@ export function describeSyncResult(data: unknown): string {
   if (infoFailed > 0) {
     parts.push(`Не удалось получить трек-номер и ссылку: ${infoFailed}`);
   }
+  if (authFailedCarriers.length > 0) {
+    parts.push(
+      authFailedCarriers
+        .map(
+          (name) =>
+            `${name}: не удалось авторизоваться — проверьте доступы в настройках`,
+        )
+        .join("; "),
+    );
+  } else if (authFailed > 0) {
+    // Names come from providerSellerDisplayName; unresolved keys are filtered
+    // out. Still tell the seller something — never print providerKey.
+    parts.push(
+      "Не удалось авторизоваться у одного из перевозчиков — проверьте доступы в настройках",
+    );
+  }
 
   if (parts.length === 0) {
     return "Новых событий нет.";
@@ -49,4 +67,13 @@ export function describeSyncResult(data: unknown): string {
 
 function readCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
 }

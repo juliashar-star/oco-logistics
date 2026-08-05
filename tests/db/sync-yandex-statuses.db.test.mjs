@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { encryptCarrierCredentials } from "../../apps/web/lib/carrier-credentials.ts";
 import { syncYandexShipmentStatuses } from "../../apps/web/lib/shipments/sync-yandex-statuses.ts";
 import { STATUS_SYNC_ADAPTERS } from "../../packages/core/src/carrier-adapter/status-sync-adapters.ts";
+import { CarrierAuthError } from "../../packages/core/src/carrier-adapter/errors.ts";
 import { YandexAuthError } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
 import { mapYandexStatusToShipmentStatus } from "../../packages/core/src/carrier-adapter/yandex/map-status.ts";
+import { providerSellerDisplayName } from "../../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const ENV_KEY = "CARRIER_CREDENTIALS_ENCRYPTION_KEY";
@@ -160,7 +162,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0, authFailed: 0, authFailedCarriers: [] });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const events = await prisma.trackingEvent.findMany({
@@ -406,7 +408,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0, authFailed: 0, authFailedCarriers: [] });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const count = await prisma.trackingEvent.count({
@@ -442,7 +444,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0, authFailed: 0, authFailedCarriers: [] });
       assert.equal(getHistoryCalls, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "DELIVERED");
@@ -1014,34 +1016,169 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
     });
   });
 
-  test("(xix) getInfo YandexAuthError → whole sync rejects", async () => {
+  test("(xix) getInfo YandexAuthError → authFailed, sync completes (no throw)", async () => {
     await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
-      const { company } = await seedYandexShipment(
+      const { company, shipment } = await seedYandexShipment(
         "Auth Fail Co",
         `sync-authfail-${Date.now()}@example.com`,
       );
 
-      await assert.rejects(
-        () =>
-          syncYandexShipmentStatuses(prisma, company.id, adaptersWith({
-            getHistory: async () => ({
-              ok: true,
-              events: [
-                {
-                  statusCode: "CREATED",
-                  statusText: "Принят",
-                  eventAt: "2026-07-17T10:00:00.000Z",
-                },
-              ],
-            }),
-            getInfo: async () => {
-              throw new YandexAuthError("Yandex Delivery auth failed: HTTP 401");
-            },
-          })),
-        (err) => {
-          assert.ok(err instanceof YandexAuthError);
-          return true;
+      const result = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async () => ({
+            ok: true,
+            events: [
+              {
+                statusCode: "SORTING_CENTER_AT_START",
+                statusText: "В пути",
+                eventAt: "2026-07-17T12:00:00.000Z",
+              },
+            ],
+          }),
+          getInfo: async () => {
+            throw new YandexAuthError("Yandex Delivery auth failed: HTTP 401");
+          },
+        }),
+      );
+
+      // History already applied; info auth marks the provider (0 peers left).
+      assert.equal(result.updated, 1);
+      assert.equal(result.events, 1);
+      assert.equal(result.authFailed, 0);
+      assert.deepEqual(result.authFailedCarriers, [
+        providerSellerDisplayName(PROVIDER_YANDEX),
+      ]);
+      assert.equal(
+        JSON.stringify(result).includes(PROVIDER_YANDEX),
+        false,
+      );
+      const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
+      assert.equal(row?.status, "IN_TRANSIT");
+    });
+  });
+
+  // PIN inverted by S1b: CarrierAuthError is per-provider; other providers continue.
+  test("(xix-b) getHistory CarrierAuthError on first provider → authFailed, second still updated", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment: yandexShip } = await seedYandexShipment(
+        "Auth Abort Two Prov Co",
+        `sync-auth-abort-two-${Date.now()}@example.com`,
+      );
+      await prisma.carrierCredential.create({
+        data: {
+          companyId: company.id,
+          providerKey: "cdek",
+          credentialsEnc: encryptCarrierCredentials({
+            account: "cdek-account",
+            securePassword: "cdek-secret-must-not-leak",
+            contractType: "1",
+          }),
         },
+      });
+      const cdekShip = await prisma.shipment.create({
+        data: {
+          companyId: company.id,
+          weightG: 500,
+          lengthCm: 10,
+          widthCm: 10,
+          heightCm: 10,
+          destCity: "Москва",
+          recipientName: "Cdek Recipient",
+          recipientPhone: "+79007654321",
+          status: "CREATED",
+          providerKey: "cdek",
+          orderAdapterKey: "cdek:delivery",
+          providerOrderId: `cdek-req-${Date.now()}-${Math.random()}`,
+          idempotencyKey: `idem-cdek-${Date.now()}-${Math.random()}`,
+        },
+      });
+
+      /** @type {string[]} */
+      const historyProviders = [];
+      const result = await syncYandexShipmentStatuses(prisma, company.id, {
+        adapters: {
+          [ORDER_ADAPTER_NEXT_DAY]: {
+            orderAdapterKey: ORDER_ADAPTER_NEXT_DAY,
+            providerKey: PROVIDER_YANDEX,
+            getOrderHistory: async () => {
+              historyProviders.push(PROVIDER_YANDEX);
+              if (historyProviders.length === 1) {
+                throw new CarrierAuthError("yandex auth boom");
+              }
+              return {
+                ok: true,
+                events: [
+                  {
+                    statusCode: "SORTING_CENTER_AT_START",
+                    statusText: "В пути",
+                    eventAt: "2026-07-17T12:00:00.000Z",
+                  },
+                ],
+              };
+            },
+            getOrderInfo: EMPTY_INFO,
+            mapStatus: mapYandexStatusToShipmentStatus,
+          },
+          "cdek:delivery": {
+            orderAdapterKey: "cdek:delivery",
+            providerKey: "cdek",
+            getOrderHistory: async () => {
+              historyProviders.push("cdek");
+              if (historyProviders.length === 1) {
+                throw new CarrierAuthError("cdek auth boom");
+              }
+              return {
+                ok: true,
+                events: [
+                  {
+                    statusCode: "SORTING_CENTER_AT_START",
+                    statusText: "В пути",
+                    eventAt: "2026-07-17T12:00:00.000Z",
+                  },
+                ],
+              };
+            },
+            getOrderInfo: EMPTY_INFO,
+            mapStatus: mapYandexStatusToShipmentStatus,
+          },
+        },
+      });
+
+      assert.equal(historyProviders.length, 2);
+      assert.equal(result.authFailed, 1);
+      assert.equal(result.updated, 1);
+      assert.equal(result.events, 1);
+
+      const failedProvider = historyProviders[0];
+      const okProvider = historyProviders[1];
+      assert.deepEqual(result.authFailedCarriers, [
+        providerSellerDisplayName(failedProvider),
+      ]);
+      assert.equal(JSON.stringify(result).includes("yataxi"), false);
+      assert.equal(JSON.stringify(result).includes("cdek"), false);
+
+      const failedShip =
+        failedProvider === PROVIDER_YANDEX ? yandexShip : cdekShip;
+      const okShip = failedProvider === PROVIDER_YANDEX ? cdekShip : yandexShip;
+      assert.equal(okProvider === failedProvider, false);
+
+      const rowFailed = await prisma.shipment.findUnique({
+        where: { id: failedShip.id },
+      });
+      const rowOk = await prisma.shipment.findUnique({
+        where: { id: okShip.id },
+      });
+      assert.equal(rowFailed?.status, "CREATED");
+      assert.equal(rowOk?.status, "IN_TRANSIT");
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: failedShip.id } }),
+        0,
+      );
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: okShip.id } }),
+        1,
       );
     });
   });

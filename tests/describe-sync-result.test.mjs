@@ -58,6 +58,48 @@ test("historyFailed only → history wording", () => {
   );
 });
 
+test("authFailedCarriers one → named auth wording", () => {
+  assert.equal(
+    describeSyncResult({ authFailedCarriers: ["Перевозчик №2"] }),
+    "Перевозчик №2: не удалось авторизоваться — проверьте доступы в настройках.",
+  );
+});
+
+test("authFailedCarriers two → joined with semicolon", () => {
+  assert.equal(
+    describeSyncResult({
+      authFailedCarriers: ["Перевозчик №1", "Перевозчик №2"],
+    }),
+    "Перевозчик №1: не удалось авторизоваться — проверьте доступы в настройках; Перевозчик №2: не удалось авторизоваться — проверьте доступы в настройках.",
+  );
+});
+
+test("authFailed with empty carriers → generic unnamed line", () => {
+  assert.equal(
+    describeSyncResult({ authFailed: 2, authFailedCarriers: [] }),
+    "Не удалось авторизоваться у одного из перевозчиков — проверьте доступы в настройках.",
+  );
+});
+
+test("authFailed with names → named lines only, no generic", () => {
+  const text = describeSyncResult({
+    authFailed: 2,
+    authFailedCarriers: ["Перевозчик №1", "Перевозчик №2"],
+  });
+  assert.equal(
+    text,
+    "Перевозчик №1: не удалось авторизоваться — проверьте доступы в настройках; Перевозчик №2: не удалось авторизоваться — проверьте доступы в настройках.",
+  );
+  assert.equal(text.includes("одного из перевозчиков"), false);
+});
+
+test("authFailed 0 and no names → nothing auth-related", () => {
+  assert.equal(
+    describeSyncResult({ authFailed: 0, authFailedCarriers: [] }),
+    "Новых событий нет.",
+  );
+});
+
 test("noAdapter only → unsupported service wording", () => {
   assert.equal(
     describeSyncResult({ noAdapter: 2 }),
@@ -74,8 +116,9 @@ test("three counters at once → order and punctuation pinned", () => {
       notFound: 0,
       historyFailed: 5,
       infoFailed: 4,
+      authFailedCarriers: ["Перевозчик №2"],
     }),
-    "Обновлено заказов: 1 · новых событий: 2. Перевозчик не подключён — не обновлено заказов: 3. Не удалось получить историю статусов: 5. Не удалось получить трек-номер и ссылку: 4.",
+    "Обновлено заказов: 1 · новых событий: 2. Перевозчик не подключён — не обновлено заказов: 3. Не удалось получить историю статусов: 5. Не удалось получить трек-номер и ссылку: 4. Перевозчик №2: не удалось авторизоваться — проверьте доступы в настройках.",
   );
 });
 

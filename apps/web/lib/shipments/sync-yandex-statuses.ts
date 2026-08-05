@@ -11,6 +11,7 @@ import type {
 } from "@oco/core/carrier-adapter/types";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
+import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import type { StatusSyncAdapter } from "@oco/core/carrier-adapter/status-sync-adapters";
 
 import { formatDateMoscow } from "../date/format-date-moscow";
@@ -25,6 +26,7 @@ const ORDER_NOT_FOUND_LOG_MARKER =
 const INFO_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] INFO_FAILED";
 const HISTORY_FAILED_LOG_MARKER =
   "[syncYandexShipmentStatuses] HISTORY_FAILED";
+const AUTH_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] AUTH_FAILED";
 const INFO_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] INFO_NOT_FOUND";
 const UNMAPPED_STATUS_LOG_MARKER =
@@ -42,6 +44,13 @@ export type SyncYandexShipmentStatusesResult = {
   historyFailed: number;
   notConnected: number;
   noAdapter: number;
+  authFailed: number;
+  /**
+   * Masked seller-facing carrier names only (providerSellerDisplayName).
+   * providerKey is the carrier's identity — never put it in this response;
+   * the browser does not need it and must not see it.
+   */
+  authFailedCarriers: string[];
 };
 
 export type SyncYandexShipmentStatusesDeps = {
@@ -346,6 +355,8 @@ function emptyResult(): SyncYandexShipmentStatusesResult {
     historyFailed: 0,
     notConnected: 0,
     noAdapter: 0,
+    authFailed: 0,
+    authFailedCarriers: [],
   };
 }
 
@@ -355,7 +366,8 @@ function emptyResult(): SyncYandexShipmentStatusesResult {
  * credentials for one provider skip that provider's rows without aborting the
  * rest. Unknown orderAdapterKey increments noAdapter per row. A plain
  * getOrderHistory / getOrderInfo fault is per-shipment (historyFailed /
- * infoFailed); CarrierAuthError still aborts the whole run (S1b).
+ * infoFailed). CarrierAuthError marks that providerKey auth-failed, skips its
+ * remaining shipments without further carrier calls, and continues other providers.
  */
 export async function syncYandexShipmentStatuses(
   prisma: PrismaClient,
@@ -440,7 +452,10 @@ export async function syncYandexShipmentStatuses(
     historyFailed: 0,
     notConnected: 0,
     noAdapter: 0,
+    authFailed: 0,
   };
+  /** providerKeys that threw CarrierAuthError — skip their remaining work. */
+  const authFailedProviders = new Set<string>();
 
   for (const [orderAdapterKey, adapterShipments] of byOrderAdapter) {
     const adapter = deps.adapters[orderAdapterKey];
@@ -458,6 +473,11 @@ export async function syncYandexShipmentStatuses(
       continue;
     }
 
+    if (authFailedProviders.has(adapter.providerKey)) {
+      counters.authFailed += adapterShipments.length;
+      continue;
+    }
+
     const credsResult = await getCarrierCredentials(
       prisma,
       companyId,
@@ -472,7 +492,9 @@ export async function syncYandexShipmentStatuses(
       continue;
     }
 
-    for (const shipment of adapterShipments) {
+    for (let i = 0; i < adapterShipments.length; i += 1) {
+      const shipment = adapterShipments[i];
+
       let history;
       try {
         history = await adapter.getOrderHistory(
@@ -481,7 +503,15 @@ export async function syncYandexShipmentStatuses(
         );
       } catch (error) {
         if (error instanceof CarrierAuthError) {
-          throw error;
+          authFailedProviders.add(adapter.providerKey);
+          counters.authFailed += adapterShipments.length - i;
+          console.error(AUTH_FAILED_LOG_MARKER, {
+            companyId,
+            providerKey: adapter.providerKey,
+            shipmentId: shipment.id,
+            error,
+          });
+          break;
         }
         counters.historyFailed += 1;
         console.error(HISTORY_FAILED_LOG_MARKER, {
@@ -534,7 +564,16 @@ export async function syncYandexShipmentStatuses(
         );
       } catch (error) {
         if (error instanceof CarrierAuthError) {
-          throw error;
+          authFailedProviders.add(adapter.providerKey);
+          // Current row already got history; count only not-yet-processed peers.
+          counters.authFailed += adapterShipments.length - i - 1;
+          console.error(AUTH_FAILED_LOG_MARKER, {
+            companyId,
+            providerKey: adapter.providerKey,
+            shipmentId: shipment.id,
+            error,
+          });
+          break;
         }
         counters.infoFailed += 1;
         console.error(INFO_FAILED_LOG_MARKER, {
@@ -564,6 +603,11 @@ export async function syncYandexShipmentStatuses(
     }
   }
 
+  // Masked names only — providerKey stays off the wire (carrier identity).
+  const authFailedCarriers = [...authFailedProviders]
+    .map((key) => providerSellerDisplayName(key))
+    .filter((name): name is string => typeof name === "string" && name.length > 0);
+
   return {
     updated: counters.updated,
     events: counters.events,
@@ -572,5 +616,7 @@ export async function syncYandexShipmentStatuses(
     historyFailed: counters.historyFailed,
     notConnected: counters.notConnected,
     noAdapter: counters.noAdapter,
+    authFailed: counters.authFailed,
+    authFailedCarriers,
   };
 }
