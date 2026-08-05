@@ -121,7 +121,7 @@ test("shipmentLabelCell: null orderAdapterKey → next_day → download link", (
   );
 });
 
-test("shipmentLabelCell: Express → not_required, never a link", () => {
+test("shipmentLabelCell: Express → unavailable, never a link", () => {
   assert.deepEqual(
     shipmentLabelCell({
       id: "ship-ex",
@@ -130,7 +130,37 @@ test("shipmentLabelCell: Express → not_required, never a link", () => {
       providerKey: "yataxi",
       orderAdapterKey: "yataxi:express",
     }),
-    { kind: "not_required" },
+    { kind: "unavailable" },
+  );
+});
+
+test("shipmentLabelCell: CDEK created → unavailable (no generateLabels yet)", () => {
+  assert.deepEqual(
+    shipmentLabelCell({
+      id: "ship-cdek",
+      status: "CREATED",
+      labelUrl: null,
+      providerKey: "cdek",
+      orderAdapterKey: "cdek:delivery",
+    }),
+    { kind: "unavailable" },
+  );
+});
+
+test("shipmentLabelCell: draft (null key) → none, not unavailable", () => {
+  // A DRAFT has no orderAdapterKey yet (written only on CREATED), so
+  // orderAdapterSupportsLabel falls back to the default Yandex entry (true).
+  // DRAFT is outside the allow-list → none → «—». This is what the live
+  // list shows before a carrier order exists — NOT «Пока недоступна».
+  assert.deepEqual(
+    shipmentLabelCell({
+      id: "ship-draft",
+      status: "DRAFT",
+      labelUrl: null,
+      providerKey: null,
+      orderAdapterKey: null,
+    }),
+    { kind: "none" },
   );
 });
 

@@ -115,8 +115,8 @@ function renderLabelCell(shipment: ShipmentRow) {
       </a>
     );
   }
-  if (label.kind === "not_required") {
-    return <span className="text-sm text-slate-500">не требуется</span>;
+  if (label.kind === "unavailable") {
+    return <span className="text-sm text-slate-500">Пока недоступна</span>;
   }
   return "—";
 }

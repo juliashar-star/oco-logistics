@@ -46,7 +46,7 @@ export type ShipmentLabelCellRow = {
 export type ShipmentLabelCellDecision =
   | { kind: "external"; href: string }
   | { kind: "download"; href: string }
-  | { kind: "not_required" }
+  | { kind: "unavailable" }
   | { kind: "none" };
 
 /**
@@ -77,8 +77,12 @@ export function shipmentLabelCell(
     };
   }
 
+  // Adapter has no generateLabels yet (Express, courier, CDEK). We do not know
+  // whether the carrier NEEDS a printed form — only that we do not produce one.
+  // «unavailable», not «not_required»: the latter name would re-assert the very
+  // claim the seller-facing string was changed to withdraw. See ADR 2026-08-05.
   if (!supportsLabel) {
-    return { kind: "not_required" };
+    return { kind: "unavailable" };
   }
 
   return { kind: "none" };

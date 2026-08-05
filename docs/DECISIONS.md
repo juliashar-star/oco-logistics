@@ -1851,3 +1851,37 @@ Docs ставят `warnings` и на create, и на info, и не говоря�
   в tariff_code. Recipient: `delivery_point` XOR `to_location`. Pure builder
   only в этом слайсе; confirmOffer/registry не трогаем.
   Отвергли: shipment_point в этом слайсе; оба конца как point+address.
+
+## 2026-08-05 · ЭТИКЕТКА cell: «Пока недоступна» replaces «не требуется»; kind `not_required` → `unavailable`. PARTLY WITHDRAWS the 2026-07-29 «Express → muted «не требуется»» decision.
+
+The list cell rendered «не требуется» for every adapter without `generateLabels`.
+That string was reasoned about for Yandex Express ONLY (2026-07-29 ADR above);
+CDEK (`cdek:delivery`, no `generateLabels` yet) inherited it by falling into the
+same `!supportsLabel` branch, never as its own decision. «не требуется» asserts a
+printed form is not needed — and we cannot stand behind that claim for either
+carrier: nobody has verified whether a CDEK office drop-off requires a form.
+
+New string states only what we know — that we do not produce the form:
+«Пока недоступна». Deliberately NOT split into «not needed» vs «not built yet»
+(rejected option A): splitting would make us assert CDEK REQUIRES a form, which is
+unverified. One honest string stays true whichever way that question resolves;
+split the branch later, once a carrier has answered.
+
+Renamed the decision `kind` from `not_required` to `unavailable`. The old name
+encoded the withdrawn claim — a branch called "not required" rendering «Пока
+недоступна» would plant the assertion back for the next reader. `unavailable`
+describes what the seller sees, not why. Decision logic (which branch) unchanged;
+only the kind name and the rendered string moved.
+
+Corrected a factual error in the investigation report: a CDEK shipment shows the
+string only from CREATED onward, NOT before an order exists. `orderAdapterKey` is
+written only on CREATED (submit-order.ts); a DRAFT's null key falls back to the
+default Yandex entry (`supportsLabel` true) and, being outside the allow-list,
+resolves to `none` → «—». Pinned by a new draft-→-none test.
+
+Consumers audited: table cell (changed); pure fn + type in shipment-list-labels
+(changed); test (renamed + CDEK/draft cases added). Drawer renders no label cell;
+CSV export has no ЭТИКЕТКА column; direct-path success banner renders only
+`kind === "download"` (per 2026-07-30 ADR) — none touched.
+Отвергли: option A (separate `not_ready`/`not_required` kinds) — asserts a fact
+about CDEK we have not measured.
