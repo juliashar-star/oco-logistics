@@ -137,17 +137,23 @@ export async function submitOrder(
     }
 
     try {
+      // Calendar-day carriers (e.g. CDEK) send blank intervals and no offer
+      // expiry. Invalid Date must never reach Prisma: this write runs AFTER
+      // the carrier order exists, so a failed parse would orphan a live order.
+      // deliveryDayFrom/deliveryDayTo stay on the offer only — inventing a
+      // clock time to store a calendar day as DateTime is what the offer card
+      // refuses to do; leave plannedDeliveryDate null when intervals are blank.
       await prisma.shipment.updateMany({
         where: { id: shipmentId, companyId },
         data: {
           status: "CREATED",
           providerOrderId: requestId,
-          plannedDeliveryDate: new Date(offer.deliveryIntervalFrom),
+          plannedDeliveryDate: parseOptionalIsoDate(offer.deliveryIntervalFrom),
           plannedDeliveryDateTo: parseOptionalIsoDate(offer.deliveryIntervalTo),
           providerKey,
           orderAdapterKey,
           selectedOfferId: offer.offerId,
-          selectedOfferExpiresAt: new Date(offer.expiresAt),
+          selectedOfferExpiresAt: parseOptionalIsoDate(offer.expiresAt),
           // plannedCost is kopecks (docs/DATABASE.md; every reader divides by 100);
           // CarrierOffer.priceRub is rubles — raw would show 273.28 ₽ as 2,73 ₽.
           // plannedDeliveryDays left null: Yandex gives a date, not a day count.

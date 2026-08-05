@@ -309,6 +309,55 @@ describe("submitOrder", { concurrency: false }, () => {
     assert.equal(row.plannedDeliveryDateTo, null);
   });
 
+  test("(ii-d) CDEK-shaped blank intervals/expiry → CREATED, date columns null", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Cdek Blank Dates Co",
+      `submit-cdek-blank-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "cdek-request-blank-dates-1";
+    // Calendar-day quote: blank intervals + no expiry (deliveryDayFrom/To live
+    // on the offer only — not written into DateTime columns in this slice).
+    const cdekShapedOffer = {
+      ...OFFER,
+      offerId: "cdek:136",
+      expiresAt: "",
+      deliveryIntervalFrom: "",
+      deliveryIntervalTo: "",
+      deliveryDayFrom: "2026-07-16",
+      deliveryDayTo: "2026-07-18",
+    };
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: cdekShapedOffer,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "cdek",
+      orderAdapterKey: "cdek:delivery",
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { entity: { uuid: REQUEST_ID } },
+        warnings: [],
+      }),
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      requestId: REQUEST_ID,
+      status: "CREATED",
+      providerKey: "cdek",
+      orderAdapterKey: "cdek:delivery",
+      warnings: [],
+    });
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    assert.equal(row.providerOrderId, REQUEST_ID);
+    assert.equal(row.selectedOfferExpiresAt, null);
+    assert.equal(row.plannedDeliveryDate, null);
+    assert.equal(row.plannedDeliveryDateTo, null);
+  });
+
   test("(iii) YandexOfferExpiredError → DRAFT, submittingAt cleared", async () => {
     const { company, shipment } = await seedDraftShipment(
       "Expired Co",
