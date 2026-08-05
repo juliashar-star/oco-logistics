@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { CarrierCredentials } from "@oco/core/carrier-adapter/types";
 import { CarrierAuthError } from "../errors";
 
@@ -35,8 +37,15 @@ const tokenCache = new Map<string, CacheEntry>();
  */
 const inflight = new Map<string, Promise<string>>();
 
-function cacheKey(baseUrl: string, account: string): string {
-  return `${baseUrl}\u0000${account}`;
+export function cacheKey(
+  baseUrl: string,
+  account: string,
+  securePassword: string,
+): string {
+  // SHA-256 of the secret (never the raw secret) so a rotated password forces
+  // a fresh token fetch instead of reusing one minted from the previous secret.
+  const secretDigest = createHash("sha256").update(securePassword).digest("hex");
+  return `${baseUrl}\u0000${account}\u0000${secretDigest}`;
 }
 
 /**
@@ -99,7 +108,7 @@ export async function fetchCdekToken(
   creds: CdekCredentials,
   now: () => number = Date.now,
 ): Promise<string> {
-  const key = cacheKey(baseUrl, creds.account);
+  const key = cacheKey(baseUrl, creds.account, creds.securePassword);
   const cached = tokenCache.get(key);
   if (cached && now() < cached.expiresAtMs - 60_000) {
     return cached.token;
