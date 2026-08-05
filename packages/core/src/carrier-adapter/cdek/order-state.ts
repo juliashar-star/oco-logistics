@@ -11,14 +11,19 @@ export type CdekCreateState = {
 };
 
 /**
- * True when a lookup reply carries
- * requests[].errors[].code === "v2_entity_not_found_im_number".
+ * True when a lookup reply carries requests[].errors[].code === code
+ * (exact string match).
  *
- * WHY: CDEK answers «no order with this number» with HTTP 400, not 404, so a
- * naive `!response.ok` throw would turn «nothing exists yet, go ahead and
- * create» into a failure. Defensive about shape: any missing level → false.
+ * Callers must pass the FULL code — a prefix check would conflate
+ * "v2_entity_not_found" (uuid lookup) with "v2_entity_not_found_im_number"
+ * (number lookup), because the latter starts with the former.
+ *
+ * WHY the number-lookup caller exists: CDEK answers «no order with this
+ * number» with HTTP 400, not 404, so a naive `!response.ok` throw would turn
+ * «nothing exists yet, go ahead and create» into a failure. Defensive about
+ * shape: any missing level → false.
  */
-export function isCdekOrderNotFound(body: unknown): boolean {
+export function hasCdekErrorCode(body: unknown, code: string): boolean {
   if (body === null || typeof body !== "object") {
     return false;
   }
@@ -38,7 +43,7 @@ export function isCdekOrderNotFound(body: unknown): boolean {
       if (err === null || typeof err !== "object") {
         continue;
       }
-      if ((err as { code?: unknown }).code === "v2_entity_not_found_im_number") {
+      if ((err as { code?: unknown }).code === code) {
         return true;
       }
     }

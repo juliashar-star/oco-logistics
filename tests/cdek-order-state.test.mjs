@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  isCdekOrderNotFound,
+  hasCdekErrorCode,
   readCdekCreateState,
 } from "../packages/core/src/carrier-adapter/cdek/order-state.ts";
 
@@ -161,9 +161,15 @@ test("INVALID settled body → invalid, code only, no message text in result", (
   assert.equal(dumped.includes("message"), false);
 });
 
-test("not-found 400 body → isCdekOrderNotFound true; SUCCESSFUL → false", () => {
-  assert.equal(isCdekOrderNotFound(MEASURED_NOT_FOUND), true);
-  assert.equal(isCdekOrderNotFound(MEASURED_SUCCESSFUL_LOOKUP), false);
+test("not-found 400 body → hasCdekErrorCode im_number true; SUCCESSFUL → false", () => {
+  assert.equal(
+    hasCdekErrorCode(MEASURED_NOT_FOUND, "v2_entity_not_found_im_number"),
+    true,
+  );
+  assert.equal(
+    hasCdekErrorCode(MEASURED_SUCCESSFUL_LOOKUP, "v2_entity_not_found_im_number"),
+    false,
+  );
 });
 
 test("{} / null / no CREATE entry → pending; uuid from entity when present", () => {

@@ -6,8 +6,12 @@ import type {
   CarrierListPointsResult,
   CarrierOffer,
   CarrierOffersResult,
+  CarrierOrderHistoryResult,
+  CarrierOrderInfo,
+  CarrierOrderInfoResult,
   CarrierOrderItem,
   CarrierPickupPoint,
+  CarrierTrackingEvent,
 } from "../types";
 import { buildCdekLocation } from "./build-cdek-location";
 import { buildCdekOrderBody } from "./build-order-body";
@@ -24,7 +28,7 @@ import {
   normaliseForRegionCompare,
 } from "./map-pickup-points";
 import {
-  isCdekOrderNotFound,
+  hasCdekErrorCode,
   readCdekCreateState,
 } from "./order-state";
 import {
@@ -214,7 +218,7 @@ export async function confirmOffer(
     throw new Error("CDEK_ORDER_LOOKUP_UNREADABLE");
   }
 
-  if (!isCdekOrderNotFound(lookupBody)) {
+  if (!hasCdekErrorCode(lookupBody, "v2_entity_not_found_im_number")) {
     // Status only — never the body (may echo submitted fields / PII).
     throw new Error(`CDEK order lookup failed: HTTP ${lookupRes.status}`);
   }
@@ -290,6 +294,159 @@ export async function confirmOffer(
 
   // "invalid" — codes only, never provider message text.
   throwInvalid(lastState.errorCodes);
+}
+
+/**
+ * Shared GET /v2/orders/{uuid} for history and info. No cache — sync is manual;
+ * a cache would add staleness for a saving nobody can feel.
+ */
+async function fetchCdekOrderByUuid(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+  opLabel: string,
+): Promise<{ ok: false; reason: "order_not_found" } | { ok: true; body: unknown }> {
+  const creds = assertCdekCredentials(credentials);
+  const baseUrl = resolveBaseUrl("CDEK_BASE_URL");
+  const path = `/v2/orders/${encodeURIComponent(providerOrderId)}`;
+  const response = await cdekGet(baseUrl, creds, path);
+  const body = await readResponseBody(response);
+
+  // Exact code — not a prefix: "v2_entity_not_found_im_number" starts with
+  // "v2_entity_not_found"; conflating them would treat a missing im_number as
+  // a missing uuid (or the reverse).
+  if (hasCdekErrorCode(body, "v2_entity_not_found")) {
+    return { ok: false, reason: "order_not_found" };
+  }
+
+  // Malformed uuid (measured: HTTP 400, v2_invalid_format) is our own bug —
+  // not a missing order. Status only; never the body.
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`CDEK ${opLabel} failed: HTTP ${response.status}`);
+  }
+
+  return { ok: true, body };
+}
+
+/**
+ * Map one entity.statuses entry. Missing code / date_time → null (skip),
+ * same as mapYandexHistoryEntry. deleted === true → null (skip).
+ *
+ * WHY skip deleted: the CDEK spec says deleted can only be true on a FINAL
+ * status, so a cancelled-out «Вручен» would otherwise mark the shipment
+ * delivered forever.
+ */
+function mapCdekStatusEntry(raw: unknown): CarrierTrackingEvent | null {
+  if (raw === null || typeof raw !== "object") {
+    return null;
+  }
+  const entry = raw as Record<string, unknown>;
+  if (entry.deleted === true) {
+    return null;
+  }
+
+  const statusCode =
+    typeof entry.code === "string" ? entry.code.trim() : "";
+  const eventAt =
+    typeof entry.date_time === "string" ? entry.date_time.trim() : "";
+  if (!statusCode || !eventAt) {
+    return null;
+  }
+
+  const statusText = typeof entry.name === "string" ? entry.name : "";
+  return {
+    statusCode,
+    statusText,
+    eventAt,
+    // Status entry ONLY — never the parent entity (recipient PD lives there).
+    raw: entry,
+  };
+}
+
+/**
+ * GET /v2/orders/{uuid} → status timeline.
+ * Does not sort — the sync sorts ascending by eventAt itself.
+ * Not registered in STATUS_SYNC_ADAPTERS yet (S4).
+ */
+export async function getOrderHistory(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierOrderHistoryResult> {
+  const fetched = await fetchCdekOrderByUuid(
+    providerOrderId,
+    credentials,
+    "get order history",
+  );
+  if (!fetched.ok) {
+    return fetched;
+  }
+
+  const body = fetched.body;
+  const entity =
+    body !== null && typeof body === "object"
+      ? (body as { entity?: unknown }).entity
+      : undefined;
+  const statuses =
+    entity !== null && typeof entity === "object"
+      ? (entity as { statuses?: unknown }).statuses
+      : undefined;
+
+  if (!Array.isArray(statuses)) {
+    throw new Error(
+      "CDEK get order history failed: malformed response (statuses missing or not an array)",
+    );
+  }
+
+  const events = statuses
+    .map(mapCdekStatusEntry)
+    .filter((event): event is CarrierTrackingEvent => event !== null);
+
+  return { ok: true, events };
+}
+
+/**
+ * GET /v2/orders/{uuid} → tracking number only.
+ * Not registered in STATUS_SYNC_ADAPTERS yet (S4).
+ *
+ * trackingUrl is NOT set: CDEK's order response has no tracking link, and the
+ * CarrierOrderInfo contract forbids rebuilding one from an id.
+ *
+ * plannedDeliveryFrom/To are NOT set: entity.planned_delivery_date is a
+ * CALENDAR DATE and appears only after warehouse acceptance; feeding a
+ * date-only value into an ISO datetime field would invent a time of day and
+ * would also fire spurious delivery-date-changed events.
+ */
+export async function getOrderInfo(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierOrderInfoResult> {
+  const fetched = await fetchCdekOrderByUuid(
+    providerOrderId,
+    credentials,
+    "get order info",
+  );
+  if (!fetched.ok) {
+    return fetched;
+  }
+
+  const body = fetched.body;
+  const entity =
+    body !== null &&
+    typeof body === "object" &&
+    (body as { entity?: unknown }).entity !== null &&
+    typeof (body as { entity?: unknown }).entity === "object"
+      ? ((body as { entity: Record<string, unknown> }).entity)
+      : null;
+
+  const info: CarrierOrderInfo = {};
+  const cdekNumber =
+    entity !== null && typeof entity.cdek_number === "string"
+      ? entity.cdek_number
+      : "";
+  if (cdekNumber.length > 0) {
+    info.trackingNumber = cdekNumber;
+  }
+
+  return { ok: true, info };
 }
 
 /**
