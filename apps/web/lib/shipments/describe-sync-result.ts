@@ -13,6 +13,7 @@ export function describeSyncResult(data: unknown): string {
   const events = readCount(source.events);
   const notFound = readCount(source.notFound);
   const infoFailed = readCount(source.infoFailed);
+  const historyFailed = readCount(source.historyFailed);
   const notConnected = readCount(source.notConnected);
   const noAdapter = readCount(source.noAdapter);
 
@@ -31,6 +32,9 @@ export function describeSyncResult(data: unknown): string {
   }
   if (notFound > 0) {
     parts.push(`Не найдено у перевозчика — не обновлено заказов: ${notFound}`);
+  }
+  if (historyFailed > 0) {
+    parts.push(`Не удалось получить историю статусов: ${historyFailed}`);
   }
   if (infoFailed > 0) {
     parts.push(`Не удалось получить трек-номер и ссылку: ${infoFailed}`);

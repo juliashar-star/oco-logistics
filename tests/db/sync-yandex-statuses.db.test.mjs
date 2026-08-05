@@ -160,7 +160,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 1, events: 2, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const events = await prisma.trackingEvent.findMany({
@@ -406,7 +406,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 1, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "IN_TRANSIT");
       const count = await prisma.trackingEvent.count({
@@ -442,7 +442,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
         getInfo: EMPTY_INFO,
       }));
 
-      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, notConnected: 0, noAdapter: 0 });
+      assert.deepEqual(result, { updated: 0, events: 0, notFound: 0, infoFailed: 0, historyFailed: 0, notConnected: 0, noAdapter: 0 });
       assert.equal(getHistoryCalls, 0);
       const row = await prisma.shipment.findUnique({ where: { id: shipment.id } });
       assert.equal(row?.status, "DELIVERED");
@@ -931,6 +931,86 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       const rowB = await prisma.shipment.findUnique({ where: { id: shipB.id } });
       assert.equal(rowB?.trackNumber, "TRACK-B");
       assert.equal(rowB?.trackingUrl, "https://example.test/track/b");
+    });
+  });
+
+  // PIN inverted by S1a: getOrderHistory plain Error is per-shipment;
+  // CarrierAuthError still aborts (covered by xix).
+  test("(xviii-b) getHistory plain Error on first → historyFailed 1, second still updated", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const { company, shipment: shipA } = await seedYandexShipment(
+        "History Abort Co",
+        `sync-hist-abort-${Date.now()}@example.com`,
+      );
+      const shipB = await prisma.shipment.create({
+        data: {
+          companyId: company.id,
+          weightG: 500,
+          lengthCm: 10,
+          widthCm: 10,
+          heightCm: 10,
+          destCity: "Москва",
+          recipientName: "Recipient B",
+          recipientPhone: "+79007654321",
+          status: "CREATED",
+          providerKey: PROVIDER_YANDEX,
+          providerOrderId: `req-hist-b-${Date.now()}-${Math.random()}`,
+          idempotencyKey: `idem-hist-b-${Date.now()}-${Math.random()}`,
+        },
+      });
+
+      /** @type {string[]} */
+      const historyCallOrder = [];
+      const result = await syncYandexShipmentStatuses(
+        prisma,
+        company.id,
+        adaptersWith({
+          getHistory: async (providerOrderId) => {
+            historyCallOrder.push(providerOrderId);
+            if (historyCallOrder.length === 1) {
+              throw new Error("provider history boom");
+            }
+            return {
+              ok: true,
+              events: [
+                {
+                  statusCode: "SORTING_CENTER_AT_START",
+                  statusText: "В пути",
+                  eventAt: "2026-07-17T12:00:00.000Z",
+                },
+              ],
+            };
+          },
+          getInfo: EMPTY_INFO,
+        }),
+      );
+
+      assert.equal(result.historyFailed, 1);
+      assert.equal(result.updated, 1);
+      assert.equal(result.events, 1);
+      assert.equal(historyCallOrder.length, 2);
+
+      const firstId =
+        historyCallOrder[0] === shipA.providerOrderId ? shipA.id : shipB.id;
+      const secondId =
+        historyCallOrder[0] === shipA.providerOrderId ? shipB.id : shipA.id;
+
+      const rowFirst = await prisma.shipment.findUnique({
+        where: { id: firstId },
+      });
+      const rowSecond = await prisma.shipment.findUnique({
+        where: { id: secondId },
+      });
+      assert.equal(rowFirst?.status, "CREATED");
+      assert.equal(rowSecond?.status, "IN_TRANSIT");
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: firstId } }),
+        0,
+      );
+      assert.equal(
+        await prisma.trackingEvent.count({ where: { shipmentId: secondId } }),
+        1,
+      );
     });
   });
 

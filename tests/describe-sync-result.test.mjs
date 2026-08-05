@@ -10,6 +10,7 @@ test("all zeros → exactly no new events", () => {
       events: 0,
       notFound: 0,
       infoFailed: 0,
+      historyFailed: 0,
       notConnected: 0,
     }),
     "Новых событий нет.",
@@ -50,6 +51,13 @@ test("infoFailed only → track/link wording", () => {
   );
 });
 
+test("historyFailed only → history wording", () => {
+  assert.equal(
+    describeSyncResult({ historyFailed: 1 }),
+    "Не удалось получить историю статусов: 1.",
+  );
+});
+
 test("noAdapter only → unsupported service wording", () => {
   assert.equal(
     describeSyncResult({ noAdapter: 2 }),
@@ -64,9 +72,10 @@ test("three counters at once → order and punctuation pinned", () => {
       events: 2,
       notConnected: 3,
       notFound: 0,
+      historyFailed: 5,
       infoFailed: 4,
     }),
-    "Обновлено заказов: 1 · новых событий: 2. Перевозчик не подключён — не обновлено заказов: 3. Не удалось получить трек-номер и ссылку: 4.",
+    "Обновлено заказов: 1 · новых событий: 2. Перевозчик не подключён — не обновлено заказов: 3. Не удалось получить историю статусов: 5. Не удалось получить трек-номер и ссылку: 4.",
   );
 });
 

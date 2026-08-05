@@ -23,6 +23,8 @@ const NO_ADAPTER_LOG_MARKER = "[syncYandexShipmentStatuses] NO_ADAPTER";
 const ORDER_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] ORDER_NOT_FOUND";
 const INFO_FAILED_LOG_MARKER = "[syncYandexShipmentStatuses] INFO_FAILED";
+const HISTORY_FAILED_LOG_MARKER =
+  "[syncYandexShipmentStatuses] HISTORY_FAILED";
 const INFO_NOT_FOUND_LOG_MARKER =
   "[syncYandexShipmentStatuses] INFO_NOT_FOUND";
 const UNMAPPED_STATUS_LOG_MARKER =
@@ -37,6 +39,7 @@ export type SyncYandexShipmentStatusesResult = {
   events: number;
   notFound: number;
   infoFailed: number;
+  historyFailed: number;
   notConnected: number;
   noAdapter: number;
 };
@@ -340,6 +343,7 @@ function emptyResult(): SyncYandexShipmentStatusesResult {
     events: 0,
     notFound: 0,
     infoFailed: 0,
+    historyFailed: 0,
     notConnected: 0,
     noAdapter: 0,
   };
@@ -347,11 +351,11 @@ function emptyResult(): SyncYandexShipmentStatusesResult {
 
 /**
  * Sync shipment statuses from carrier history/info into TrackingEvent + Shipment.
- * Inject adapters so db tests need no network (submitOrder precedent). Faults from
- * getOrderHistory propagate — a broken token is an incident, not a skip. getOrderInfo
- * faults (except CarrierAuthError) are per-row. Missing credentials for one provider
- * skip that provider's rows without aborting the rest. Unknown orderAdapterKey
- * (e.g. express before its status mapper lands) increments noAdapter per row.
+ * Inject adapters so db tests need no network (submitOrder precedent). Missing
+ * credentials for one provider skip that provider's rows without aborting the
+ * rest. Unknown orderAdapterKey increments noAdapter per row. A plain
+ * getOrderHistory / getOrderInfo fault is per-shipment (historyFailed /
+ * infoFailed); CarrierAuthError still aborts the whole run (S1b).
  */
 export async function syncYandexShipmentStatuses(
   prisma: PrismaClient,
@@ -433,6 +437,7 @@ export async function syncYandexShipmentStatuses(
     events: 0,
     notFound: 0,
     infoFailed: 0,
+    historyFailed: 0,
     notConnected: 0,
     noAdapter: 0,
   };
@@ -468,10 +473,24 @@ export async function syncYandexShipmentStatuses(
     }
 
     for (const shipment of adapterShipments) {
-      const history = await adapter.getOrderHistory(
-        shipment.providerOrderId,
-        credsResult.credentials,
-      );
+      let history;
+      try {
+        history = await adapter.getOrderHistory(
+          shipment.providerOrderId,
+          credsResult.credentials,
+        );
+      } catch (error) {
+        if (error instanceof CarrierAuthError) {
+          throw error;
+        }
+        counters.historyFailed += 1;
+        console.error(HISTORY_FAILED_LOG_MARKER, {
+          companyId,
+          shipmentId: shipment.id,
+          error,
+        });
+        continue;
+      }
 
       if (!history.ok) {
         // Provider not knowing an id we hold is our inconsistency, not evidence
@@ -550,6 +569,7 @@ export async function syncYandexShipmentStatuses(
     events: counters.events,
     notFound: counters.notFound,
     infoFailed: counters.infoFailed,
+    historyFailed: counters.historyFailed,
     notConnected: counters.notConnected,
     noAdapter: counters.noAdapter,
   };
