@@ -13,7 +13,7 @@ import {
   formatOfferDeliveryLine,
   formatOfferPickupLine,
 } from "@/lib/date/format-offer-lines";
-import { pickEarliestOfferExpiry } from "@/lib/date/pick-earliest-offer-expiry";
+import { pickSharedOfferExpiry } from "@/lib/date/pick-shared-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
 import { describePartialPickupPoints } from "@/lib/shipments/describe-partial-pickup-points";
 import {
@@ -1323,13 +1323,15 @@ export function NewOrderForm() {
               : "Получатель получит уведомление, когда заказ прибудет в пункт выдачи."}
           </p>
           {(() => {
-            const earliestExpiry = pickEarliestOfferExpiry(yandexOffers);
-            if (!earliestExpiry) {
+            // Only when every displayed offer shares one expiry — a mixed or
+            // expiry-less list (e.g. Yandex + CDEK on the door path) shows no line.
+            const sharedExpiry = pickSharedOfferExpiry(yandexOffers);
+            if (!sharedExpiry) {
               return null;
             }
             return (
               <p className="mt-2 text-sm text-slate-500">
-                Варианты действительны до {formatMoscowClockTime(earliestExpiry)}
+                Варианты действительны до {formatMoscowClockTime(sharedExpiry)}
               </p>
             );
           })()}
