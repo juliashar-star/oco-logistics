@@ -9,7 +9,10 @@ export const STATUS_LABELS: Record<ShipmentStatus, string> = {
   DELIVERED: "Доставлено",
   RETURNED: "Возврат",
   CANCELED: "Отменено",
-  PROBLEM: "Проблема",
+  // PROBLEM covers a lost parcel, a carrier rejection, and our own submit
+  // failure — all need the seller to act. «Проблема» names an alarm;
+  // «Требует внимания» names the action.
+  PROBLEM: "Требует внимания",
 };
 
 export const PICKUP_TYPE_LABELS: Record<PickupType, string> = {

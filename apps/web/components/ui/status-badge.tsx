@@ -19,6 +19,7 @@ const VARIANT_MAP: Record<string, string> = {
   error: "bg-error-soft text-error",
   ошибка: "bg-error-soft text-error",
   проблема: "bg-error-soft text-error",
+  "требует внимания": "bg-error-soft text-error",
   on_pickup: "bg-info-soft text-info",
   at_pvz: "bg-info-soft text-info",
   "на пвз": "bg-info-soft text-info",

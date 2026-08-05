@@ -44,7 +44,7 @@ const STATUS_OPTIONS: { value: ShipmentStatus | ""; label: string }[] = [
   { value: "DELIVERED", label: "Доставлено" },
   { value: "RETURNED", label: "Возврат" },
   { value: "CANCELED", label: "Отменено" },
-  { value: "PROBLEM", label: "Проблема" },
+  { value: "PROBLEM", label: STATUS_LABELS.PROBLEM },
 ];
 
 const STATUS_BADGE_CLASS: Record<ShipmentStatus, string> = {
