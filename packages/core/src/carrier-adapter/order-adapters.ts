@@ -1,5 +1,8 @@
 import type { CarrierAdapter } from "./types";
-import { getOffers as cdekGetOffers } from "./cdek/client";
+import {
+  confirmOffer as cdekConfirmOffer,
+  getOffers as cdekGetOffers,
+} from "./cdek/client";
 import { orderAdapterSellerTitle } from "./order-adapter-seller-titles";
 import { yandexAdapter } from "./yandex/adapter";
 import {
@@ -67,10 +70,6 @@ const expressCancelStub: CarrierAdapter["cancelOrder"] = async () => {
   throw new Error("Оформление этой услуги ещё не реализовано");
 };
 
-const cdekConfirmStub: CarrierAdapter["confirmOffer"] = async () => {
-  throw new Error("Оформление этой услуги ещё не реализовано");
-};
-
 const cdekCancelStub: CarrierAdapter["cancelOrder"] = async () => {
   throw new Error("Оформление этой услуги ещё не реализовано");
 };
@@ -130,7 +129,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // branch is what keeps all of them. Adding a capacity here would collapse
     // the whole CDEK list to its cheapest row.
     getOffers: cdekGetOffers,
-    confirmOffer: cdekConfirmStub,
+    confirmOffer: cdekConfirmOffer,
     cancelOrder: cdekCancelStub,
   },
 };

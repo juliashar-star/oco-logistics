@@ -165,10 +165,9 @@ export async function getOffers(
 /**
  * Confirm a chosen CDEK offer: lookup-by-im_number → create if absent → poll.
  *
- * Not wired into ORDER_ADAPTERS yet — the registry stub still throws. Call
- * this function directly (tests) until the registration slice.
- *
- * Optional 4th arg is for tests (no-op sleep / short poll budget).
+ * Wired into ORDER_ADAPTERS as cdek:delivery.confirmOffer. Optional 4th arg
+ * is for tests (no-op sleep / short poll budget); the adapter type only
+ * exposes the first three — callers that need options import this export.
  */
 export async function confirmOffer(
   offer: CarrierOffer,

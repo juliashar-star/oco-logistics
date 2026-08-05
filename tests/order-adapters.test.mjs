@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
 import { ORDER_ADAPTER_SELLER_TITLES } from "../packages/core/src/carrier-adapter/order-adapter-seller-titles.ts";
+import { confirmOffer as cdekConfirmOffer } from "../packages/core/src/carrier-adapter/cdek/client.ts";
 import { confirmExpressOffer } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
@@ -131,5 +132,18 @@ test("supportsThermalBag true on express/courier; absent on next_day", () => {
   assert.equal(
     ORDER_ADAPTERS["yataxi:next_day"].supportsThermalBag,
     undefined,
+  );
+});
+
+test("cdek:delivery confirmOffer is the same function reference as the client export; cancel stays stub", async () => {
+  const entry = ORDER_ADAPTERS["cdek:delivery"];
+  assert.ok(entry);
+  assert.equal(entry.confirmOffer, cdekConfirmOffer);
+  await assert.rejects(
+    () =>
+      entry.cancelOrder("cdek-uuid", /** @type {never} */ ({})),
+    (err) =>
+      err instanceof Error &&
+      err.message === "Оформление этой услуги ещё не реализовано",
   );
 });
