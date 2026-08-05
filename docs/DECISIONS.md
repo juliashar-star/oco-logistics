@@ -1630,6 +1630,8 @@ carries no provider text. Filename from shipment id; `Cache-Control: no-store` (
 
 ## 2026-07-29 · ЭТИКЕТКА cell via shipmentLabelCell; client-safe label support map
 
+**SUPERSEDED (частично)** (только строка «не требуется»): см. «2026-08-05 · ЭТИКЕТКА cell: «Пока недоступна» replaces «не требуется» …». Остальное в силе — порядок ветвей, allow-list статусов, client-safe support map и drift-тест не менялись.
+
 List cell no longer keys off labelUrl alone (APIShip-only). Decision in
 `shipmentLabelCell` (shipment-list-labels): legacy http(s) URL + allow-list →
 external link; providerKey set (proxy for carrier order) + supportsLabel +
