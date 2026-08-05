@@ -1,5 +1,10 @@
 import type { ShipmentStatus } from "@oco/apiship";
 import type { CarrierAdapter } from "./types";
+import {
+  getOrderHistory as cdekGetOrderHistory,
+  getOrderInfo as cdekGetOrderInfo,
+} from "./cdek/client";
+import { mapCdekStatusToShipmentStatus } from "./cdek/map-status";
 import { DEFAULT_ORDER_ADAPTER, ORDER_ADAPTERS } from "./order-adapters";
 import { yandexAdapter } from "./yandex/adapter";
 import {
@@ -50,5 +55,12 @@ export const STATUS_SYNC_ADAPTERS: Record<string, StatusSyncAdapter> = {
     getOrderHistory: getExpressOrderHistory,
     getOrderInfo: getExpressOrderInfo,
     mapStatus: mapClaimStatusToShipmentStatus,
+  },
+  "cdek:delivery": {
+    orderAdapterKey: ORDER_ADAPTERS["cdek:delivery"].key,
+    providerKey: ORDER_ADAPTERS["cdek:delivery"].providerKey,
+    getOrderHistory: cdekGetOrderHistory,
+    getOrderInfo: cdekGetOrderInfo,
+    mapStatus: mapCdekStatusToShipmentStatus,
   },
 };
