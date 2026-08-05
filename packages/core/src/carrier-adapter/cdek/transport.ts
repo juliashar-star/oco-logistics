@@ -10,6 +10,21 @@ export class CdekAuthError extends CarrierAuthError {
   }
 }
 
+/**
+ * A non-auth, non-ok CDEK HTTP reply. Stays a plain `Error` subclass with the
+ * SAME message text as before — the numeric status is carried as a property so
+ * callers can classify (e.g. retry a 5xx) without parsing the message. Never
+ * carries a response body.
+ */
+export class CdekHttpStatusError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "CdekHttpStatusError";
+    this.status = status;
+  }
+}
+
 type CdekCredentials = {
   account: string;
   securePassword: string;
@@ -137,7 +152,13 @@ export async function fetchCdekToken(
       throw new CdekAuthError(`CDEK auth failed: HTTP ${response.status}`);
     }
     if (!response.ok) {
-      throw new Error(`CDEK token request failed: HTTP ${response.status}`);
+      // Message stays byte-identical (a test pins it). The numeric status rides
+      // along as a property so callers classify on a number, not a regex over
+      // prose — still no body, only the status.
+      throw new CdekHttpStatusError(
+        `CDEK token request failed: HTTP ${response.status}`,
+        response.status,
+      );
     }
 
     const json = (await response.json()) as {
