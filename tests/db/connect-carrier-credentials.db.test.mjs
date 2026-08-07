@@ -210,6 +210,112 @@ describe("connectCarrierCredentials persistence", { concurrency: false }, () => 
     });
   });
 
+  /**
+   * The merge, against real storage. A connected seller retypes ONE field and
+   * leaves the rest empty; the untouched fields must survive.
+   */
+  test("connected, one field resubmitted, carrier accepts → row holds the merged bag", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const company = await seedCompany(
+        "Merge Co",
+        `connect-merge-${Date.now()}@example.com`,
+      );
+
+      await connectCarrierCredentials(
+        prisma,
+        {
+          companyId: company.id,
+          providerKey: PROVIDER_YANDEX,
+          credentials: BAG,
+        },
+        accepted,
+      );
+
+      // Only the token is retyped; platformStationId is left empty.
+      const result = await connectCarrierCredentials(
+        prisma,
+        {
+          companyId: company.id,
+          providerKey: PROVIDER_YANDEX,
+          credentials: { token: "yandex-token-retyped" },
+        },
+        accepted,
+      );
+      assert.deepEqual(result, { status: "stored" });
+
+      const rows = await prisma.carrierCredential.findMany({
+        where: { companyId: company.id },
+      });
+      assert.equal(rows.length, 1);
+      assert.deepEqual(decryptCarrierCredentials(rows[0].credentialsEnc), {
+        // Untouched, carried over from the stored bag…
+        platformStationId: BAG.platformStationId,
+        // …and the one field the seller actually retyped.
+        token: "yandex-token-retyped",
+      });
+    });
+  });
+
+  /**
+   * THE PROPERTY THAT MATTERS MOST: a mistyped token must not cost a seller a
+   * working connection. Compared on the raw ciphertext — encryption uses a fresh
+   * IV each time, so an identical string proves no write happened at all.
+   */
+  for (const [label, deps, expected] of [
+    ["rejects", rejected, { status: "rejected_by_carrier", reason: "invalid_auth" }],
+    ["is unavailable", unavailable, { status: "carrier_unavailable" }],
+  ]) {
+    test(`connected, one field resubmitted, carrier ${label} → the stored row is untouched`, async () => {
+      await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+        const company = await seedCompany(
+          `Keep ${label}`,
+          `connect-keep-${label.replace(/\s/g, "-")}-${Date.now()}@example.com`,
+        );
+
+        await connectCarrierCredentials(
+          prisma,
+          {
+            companyId: company.id,
+            providerKey: PROVIDER_YANDEX,
+            credentials: BAG,
+          },
+          accepted,
+        );
+        const before = await prisma.carrierCredential.findFirstOrThrow({
+          where: { companyId: company.id, providerKey: PROVIDER_YANDEX },
+        });
+
+        const result = await connectCarrierCredentials(
+          prisma,
+          {
+            companyId: company.id,
+            providerKey: PROVIDER_YANDEX,
+            credentials: { token: "mistyped-token" },
+          },
+          deps,
+        );
+        assert.deepEqual(result, expected);
+
+        const after = await prisma.carrierCredential.findFirstOrThrow({
+          where: { companyId: company.id, providerKey: PROVIDER_YANDEX },
+        });
+        assert.equal(after.id, before.id);
+        assert.equal(
+          after.credentialsEnc,
+          before.credentialsEnc,
+          "the ciphertext must be byte-identical — nothing was written",
+        );
+        assert.equal(
+          after.updatedAt.getTime(),
+          before.updatedAt.getTime(),
+          "updatedAt must not move when nothing was stored",
+        );
+        // The working connection still decrypts to what it was.
+        assert.deepEqual(decryptCarrierCredentials(after.credentialsEnc), BAG);
+      });
+    });
+  }
+
   test("reconnect with a new bag → still one row, new content, connectedAt unchanged", async () => {
     await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
       const company = await seedCompany(
