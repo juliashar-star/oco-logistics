@@ -36,7 +36,9 @@ export type ConnectResponse = {
 export const CREDENTIAL_FIELD_LABELS: Readonly<Record<string, string>> = {
   platformStationId: "идентификатор точки отгрузки",
   token: "токен доступа",
-  account: "идентификатор аккаунта",
+  // The OAuth client identifier we send with securePassword — an API login, not
+  // an account number. Reads correctly inside «Проверьте поле «…»».
+  account: "логин для доступа к API",
   securePassword: "пароль для доступа к API",
   contractType: "тип договора",
 };

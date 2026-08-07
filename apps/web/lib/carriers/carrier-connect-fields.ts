@@ -37,6 +37,8 @@ export type CarrierConnectFieldOption = {
 export type CarrierConnectField = {
   name: string;
   label: string;
+  /** One short line telling the seller where this value comes from. */
+  hint: string;
   kind: CarrierConnectFieldKind;
   /** Present if and only if kind === "choice". */
   options?: readonly CarrierConnectFieldOption[];
@@ -53,6 +55,35 @@ const FIELD_KINDS: Readonly<Record<string, CarrierConnectFieldKind>> = {
   account: "text",
   securePassword: "secret",
   contractType: "choice",
+};
+
+/**
+ * Where each value comes from, in one line.
+ *
+ * Chrome keeps offering its saved-password dropdown on the token field however
+ * the input is marked up, so the remaining lever is telling the seller what the
+ * field actually is: a value from THEIR carrier cabinet, never an OCO password.
+ *
+ * Names the cabinet and nothing more — no URLs, no menu paths. We have not
+ * verified either carrier's UI, and an invented click-path would be a fact we
+ * cannot stand behind.
+ */
+const FIELD_HINTS: Readonly<Record<string, string>> = {
+  // Grounded in what WE send: source.platform_station_id — the place a shipment
+  // is collected from. Says what the value is, not where a button lives; we have
+  // not seen Yandex's interface.
+  platformStationId:
+    "Указывает место, откуда забирают ваши посылки — его идентификатор есть в кабинете Яндекс Доставки.",
+  token:
+    "Токен для API из кабинета Яндекс Доставки; иногда его выдаёт менеджер после подписания договора. Это не пароль — ни от OCO, ни от любого другого сервиса.",
+  // Grounded in what WE send: `account` goes to CDEK as the client identifier of
+  // the OAuth request, paired with securePassword. No manager clause here — that
+  // belongs to the secret fields.
+  account:
+    "С ним OCO обращается к API СДЭК — вместе с паролем для интеграции. Есть в вашем кабинете СДЭК.",
+  securePassword:
+    "Отдельный пароль для интеграции из кабинета СДЭК — не тот, которым вы входите на сайт; иногда его выдаёт менеджер после подписания договора.",
+  contractType: "Какой из двух договоров вы заключили со СДЭК.",
 };
 
 /**
@@ -88,6 +119,13 @@ function describeField(
     );
   }
 
+  const hint = own(FIELD_HINTS, spec.name);
+  if (hint === undefined) {
+    throw new Error(
+      `CARRIER_CONNECT_FIELDS: ${providerKey}.${spec.name} has no hint`,
+    );
+  }
+
   const kind = own(FIELD_KINDS, spec.name);
   if (kind === undefined) {
     throw new Error(
@@ -105,7 +143,7 @@ function describeField(
   }
 
   if (kind !== "choice") {
-    return { name: spec.name, label, kind };
+    return { name: spec.name, label, hint, kind };
   }
 
   const optionLabels = own(FIELD_OPTION_LABELS, spec.name) ?? {};
@@ -119,7 +157,7 @@ function describeField(
     return { value, label: optionLabel };
   });
 
-  return { name: spec.name, label, kind, options };
+  return { name: spec.name, label, hint, kind, options };
 }
 
 function buildCarrierConnectFields(): Readonly<

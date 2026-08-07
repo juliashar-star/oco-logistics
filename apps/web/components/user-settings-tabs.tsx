@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CarrierConnectionsPanel } from "@/components/carrier-connections-panel";
 import { CompanySettingsForm } from "@/components/company-settings-form";
 import { SettingsBackupPanel } from "@/components/settings-backup-panel";
 import { UserPasswordForm } from "@/components/user-password-form";
@@ -100,12 +101,11 @@ export function UserSettingsTabs({
           <div role="tabpanel">
             <h3 className="font-medium text-slate-900">Подключение перевозчиков</h3>
             <p className="mt-1 mb-2 text-sm text-text-3">
-              Здесь вы подключите своих перевозчиков. Порядок подключения: Яндекс Доставка,
-              затем СДЭК, затем остальные.
+              Здесь вы подключите своих перевозчиков.
             </p>
-            <p className="text-sm text-text-3">
-              Форма подключения появится в ближайшем обновлении.
-            </p>
+            <div className="mt-4">
+              <CarrierConnectionsPanel />
+            </div>
           </div>
         )}
       </div>

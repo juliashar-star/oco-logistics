@@ -3,7 +3,10 @@ import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { decryptCarrierCredentials } from "../../apps/web/lib/carrier-credentials.ts";
-import { connectCarrierCredentials } from "../../apps/web/lib/carriers/connect-carrier-credentials.ts";
+import {
+  CARRIER_CREDENTIAL_FIELDS,
+  connectCarrierCredentials,
+} from "../../apps/web/lib/carriers/connect-carrier-credentials.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const ENV_KEY = "CARRIER_CREDENTIALS_ENCRYPTION_KEY";
@@ -146,6 +149,64 @@ describe("connectCarrierCredentials persistence", { concurrency: false }, () => 
         await prisma.carrierCredential.count({ where: { companyId: company.id } }),
         0,
       );
+    });
+  });
+
+  /**
+   * INVARIANT the «Подключение» tab relies on: isConnected ⇒ every field of the
+   * carrier's spec is present in the stored bag. The UI marks every field
+   * «сохранён» from isConnected alone and never decrypts.
+   *
+   * Rows inserted by hand-written SQL (or any path other than
+   * connectCarrierCredentials) bypass this — that is how every existing row was
+   * made. This test only pins what the service writes.
+   */
+  test("a bag stored by connectCarrierCredentials always contains every field of that carrier's spec", async () => {
+    await withEnv(ENV_KEY, TEST_ENCRYPTION_KEY, async () => {
+      const bags = {
+        yataxi: {
+          platformStationId: "station-complete",
+          token: "yandex-token-complete",
+        },
+        cdek: {
+          account: "acct-complete",
+          securePassword: "cdek-secret-complete",
+          contractType: "1",
+        },
+      };
+
+      for (const [providerKey, credentials] of Object.entries(bags)) {
+        const company = await seedCompany(
+          `Complete ${providerKey}`,
+          `connect-complete-${providerKey}-${Date.now()}@example.com`,
+        );
+        const result = await connectCarrierCredentials(
+          prisma,
+          { companyId: company.id, providerKey, credentials },
+          accepted,
+        );
+        assert.deepEqual(result, { status: "stored" }, providerKey);
+
+        const row = await prisma.carrierCredential.findFirstOrThrow({
+          where: { companyId: company.id, providerKey },
+        });
+        const stored = decryptCarrierCredentials(row.credentialsEnc);
+        const spec = CARRIER_CREDENTIAL_FIELDS[providerKey];
+        assert.ok(spec, `spec for ${providerKey}`);
+
+        for (const field of spec) {
+          const value = stored[field.name];
+          assert.equal(
+            typeof value,
+            "string",
+            `${providerKey}.${field.name} must be present as a string`,
+          );
+          assert.ok(
+            value.trim() !== "",
+            `${providerKey}.${field.name} must be non-blank`,
+          );
+        }
+      }
     });
   });
 

@@ -124,7 +124,7 @@ test("only choice fields carry options", () => {
 // ── nothing credential-shaped can travel
 
 test("the shape carries no credential value — keys are limited to descriptor metadata", () => {
-  const FIELD_KEYS = new Set(["name", "label", "kind", "options"]);
+  const FIELD_KEYS = new Set(["name", "label", "hint", "kind", "options"]);
   const OPTION_KEYS = new Set(["value", "label"]);
   const CARRIER_KEYS = new Set([
     "providerKey",
@@ -188,6 +188,109 @@ test("DRIFT GUARD: descriptors cover exactly the service's fields, in order", ()
     Object.keys(CARRIER_CONNECT_FIELDS).sort(),
     [...ALL_KEYS].sort(),
   );
+});
+
+test("DRIFT GUARD: every field the service requires carries a hint, as it carries a label and a kind", () => {
+  for (const [providerKey, spec] of Object.entries(CARRIER_CREDENTIAL_FIELDS)) {
+    const described = Object.fromEntries(
+      CARRIER_CONNECT_FIELDS[providerKey].map((f) => [f.name, f]),
+    );
+    for (const field of spec) {
+      const hint = described[field.name].hint;
+      assert.equal(typeof hint, "string", `${providerKey}.${field.name}`);
+      assert.ok(
+        hint.trim().length > 0,
+        `${providerKey}.${field.name} has an empty hint — a seller would see a blank line`,
+      );
+      assert.notEqual(hint, field.name, `${providerKey}.${field.name} shows its raw key`);
+    }
+  }
+});
+
+test("hints name a cabinet and never invent a URL or a menu path", () => {
+  // We have verified neither carrier's UI, so a click-path would be a fact we
+  // cannot stand behind. The secret hints must also disown OCO's own password.
+  for (const fields of Object.values(CARRIER_CONNECT_FIELDS)) {
+    for (const field of fields) {
+      assert.ok(
+        !/https?:\/\//i.test(field.hint),
+        `${field.name}: hint must not contain a URL`,
+      );
+      assert.ok(
+        /кабинет/i.test(field.hint) || field.kind === "choice",
+        `${field.name}: hint must say which cabinet the value comes from`,
+      );
+    }
+  }
+
+  const byName = Object.fromEntries(
+    Object.values(CARRIER_CONNECT_FIELDS)
+      .flat()
+      .map((f) => [f.name, f]),
+  );
+  assert.ok(
+    /не пароль/i.test(byName.token.hint) && /OCO/.test(byName.token.hint),
+    "the Yandex token hint must say it is not an OCO password",
+  );
+  assert.ok(
+    /не тот/i.test(byName.securePassword.hint),
+    "the CDEK API password hint must distinguish it from the website login",
+  );
+
+  // A seller hunting for a self-service button may be hunting for something that
+  // does not exist: these credentials can be issued by a manager once the
+  // contract is signed. Every secret field must say so.
+  for (const fields of Object.values(CARRIER_CONNECT_FIELDS)) {
+    for (const field of fields) {
+      if (field.kind !== "secret") continue;
+      assert.ok(
+        /менеджер/i.test(field.hint),
+        `${field.name}: hint must allow for the credential being issued by a manager`,
+      );
+    }
+  }
+});
+
+/**
+ * "Restates its label", defined so it can be tested: take the hint's FIRST
+ * clause — up to the first `.` `;` `:` or `—` — drop filler (prepositions,
+ * possessives, «кабинет», the carriers' names), and compare what is left with
+ * the label treated the same way. If nothing survives beyond the label itself,
+ * the opening told the seller only what they had already read.
+ *
+ * Only the first clause: a hint MAY end by naming the cabinet, and several do.
+ */
+const HINT_FILLER = new Set([
+  "из", "в", "во", "с", "со", "и", "на", "к",
+  "ваш", "ваша", "ваше", "ваши", "вашего", "вашей", "вашем", "ваших",
+  "кабинет", "кабинета", "кабинете",
+  "яндекс", "яндекса", "доставка", "доставки", "сдэк",
+]);
+
+function firstClause(text) {
+  const stop = text.search(/[.;:—]/);
+  return stop === -1 ? text : text.slice(0, stop);
+}
+
+function significantWords(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 0 && !HINT_FILLER.has(word))
+    .join(" ");
+}
+
+test("DRIFT GUARD: a hint adds information — it never merely restates its label", () => {
+  for (const [providerKey, fields] of Object.entries(CARRIER_CONNECT_FIELDS)) {
+    for (const field of fields) {
+      assert.notEqual(
+        significantWords(firstClause(field.hint)),
+        significantWords(field.label),
+        `${providerKey}.${field.name}: the hint opens by repeating its label («${field.label}») and adds nothing the seller could act on`,
+      );
+    }
+  }
 });
 
 test("DRIFT GUARD: a choice field's options match the adapter's allowed values exactly", () => {

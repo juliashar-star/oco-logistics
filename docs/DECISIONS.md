@@ -1887,3 +1887,13 @@ CSV export has no ЭТИКЕТКА column; direct-path success banner renders on
 `kind === "download"` (per 2026-07-30 ADR) — none touched.
 Отвергли: option A (separate `not_ready`/`not_required` kinds) — asserts a fact
 about CDEK we have not measured.
+
+## 2026-08-07 · «Подключение» tab: presence markers from isConnected, no decrypt
+
+Connected carriers show every field always (no settled/collapsed card). Each
+field is marked «сохранён» from `isConnected` alone — connectCarrierCredentials
+refuses a partial bag, so a connected row implies every spec field is stored.
+No decrypt on GET; no value, length or mask reaches the browser. Completeness:
+not connected → all fields required; connected → at least one typed field
+(empty keeps stored; merge is a later slice).
+Отвергли: decrypting to learn which fields exist; a presence-only loader.
