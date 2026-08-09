@@ -31,6 +31,24 @@
   --r: 12px;
   --r-sm: 8px;
   --r-lg: 16px;
+
+  /* --- Public site (useoco.ru) brand tokens -------------------------------
+     ADDITIVE ONLY. Separate names from the cabinet's tokens above, which are
+     untouched: the cabinet keeps its teal --primary family, the public site
+     uses these. Nothing here is referenced by a cabinet screen. */
+  --ink: #101214;
+  --paper: #FCFBF9;
+  --line: #EAE7E1;
+  --muted: #6B7075;
+  --accent: #0B6E68;
+
+  /* Module tones — labels, rules and hairlines only, NEVER a button surface.
+     They identify a section; a filled button in these would read as a second
+     accent and compete with --accent. */
+  --module-01: #0B6E68;
+  --module-02: #B0573A;
+  --module-03: #6B3F5E;
+  --module-04: #7A6A1F;
 }
 
 [data-mode="dark"] {
@@ -49,6 +67,30 @@
 .text-body     { font-size: 15px; font-weight: 400; line-height: 1.6; }
 .text-caption  { font-size: 13px; font-weight: 500; line-height: 1.4; }
 .text-mono     { font-family: var(--font-mono), monospace; font-size: 14px; }
+
+/* --- Public site type scale -----------------------------------------------
+   `site-` prefix so nothing can collide with the cabinet's .text-* utilities
+   above, which keep their own sizes and weights.
+
+   Weight is BAKED INTO each size rather than offered as a free modifier, so
+   "never 300 below 15px" holds by construction: 300 exists only on .site-46,
+   and there is no .site-w-300 to misapply. 400 and 500 are safe at any size,
+   so those two are available as modifiers.
+
+   600 and 700 are deliberately absent. On the public site hierarchy comes from
+   size and space, not weight; a heavy face reads as the cabinet's dense,
+   functional voice on a page meant to be calm. The cabinet's own bold styles
+   are untouched — this rule governs .site-* only. */
+.site-46 { font-size: 46px; line-height: 1.08; font-weight: 300; letter-spacing: -0.02em; }
+.site-24 { font-size: 24px; line-height: 1.25; font-weight: 400; letter-spacing: -0.01em; }
+.site-16 { font-size: 16px; line-height: 1.6;  font-weight: 400; }
+.site-14 { font-size: 14px; line-height: 1.55; font-weight: 400; }
+.site-12 { font-size: 12px; line-height: 1.45; font-weight: 500; }
+.site-11 { font-size: 11px; line-height: 1.4;  font-weight: 500; }
+
+/* Allowed at every size in the scale. No 300 modifier — see above. */
+.site-w-400 { font-weight: 400; }
+.site-w-500 { font-weight: 500; }
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;

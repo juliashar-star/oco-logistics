@@ -9,7 +9,7 @@ const onest = Onest({
 });
 
 const mono = JetBrains_Mono({
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic"],
   variable: "--font-mono",
   display: "swap",
 });

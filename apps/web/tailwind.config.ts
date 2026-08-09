@@ -54,6 +54,18 @@ export default {
         text: "var(--text)",
         "text-2": "var(--text-2)",
         "text-3": "var(--text-3)",
+        // Public site (useoco.ru). New names only — every cabinet colour above
+        // is untouched, and `extend` merges, so none of them changes.
+        ink: "var(--ink)",
+        paper: "var(--paper)",
+        line: "var(--line)",
+        muted: "var(--muted)",
+        accent: "var(--accent)",
+        // Section tones: labels, rules, hairlines. Never a button surface.
+        "module-01": "var(--module-01)",
+        "module-02": "var(--module-02)",
+        "module-03": "var(--module-03)",
+        "module-04": "var(--module-04)",
       },
       borderRadius: {
         DEFAULT: "var(--r)",
