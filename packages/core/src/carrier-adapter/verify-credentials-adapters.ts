@@ -40,7 +40,6 @@ export type VerifyCredentialsVerdict =
 export type VerifyRejectedReason =
   | "invalid_auth"
   | "invalid_source_station"
-  | "request_rejected"
   | "malformed_credentials";
 
 /**
@@ -50,8 +49,12 @@ export type VerifyRejectedReason =
 export type VerifyOutcome =
   | { kind: "ok" }
   | { kind: "auth_failed" }
-  | { kind: "validation_failed" }
-  | { kind: "request_rejected" }
+  /**
+   * HTTP 400 with whatever `code` the body carried (null when absent or the
+   * body was unreadable). The CODE is reported here, not judged — judging it is
+   * the mapper's job.
+   */
+  | { kind: "bad_request"; code: string | null }
   | { kind: "server_error" }
   | { kind: "malformed_credentials" }
   | { kind: "config_error" }
@@ -60,12 +63,24 @@ export type VerifyOutcome =
 /**
  * PURE verdict mapping — the decision, testable without a network.
  *
+ * Refuse only what has been MEASURED to mean bad credentials:
+ *
  * ok                    → accepted (INCLUDING a 200 with an empty option list;
  *                         the verdict is never derived from whether options came back)
  * auth_failed (401/403) → rejected/invalid_auth
- * validation_failed     → rejected/invalid_source_station (400 "validation_error")
- * request_rejected      → rejected/request_rejected (any other 400 — the carrier
- *                         refused the request; we do NOT name a field we cannot identify)
+ * bad_request "validation_error"
+ *                       → rejected/invalid_source_station (measured 05.08: a wrong
+ *                         source platform_station_id answers exactly this)
+ * bad_request any other code, or none readable
+ *                       → ACCEPTED. This deliberately inverts «a guard built on a
+ *                         fallback does not guard»: nobody can enumerate a carrier's
+ *                         error codes in advance, and failing closed on an unknown
+ *                         code locks a valid seller out of a working carrier, while
+ *                         failing open at worst stores credentials the carrier will
+ *                         reject later at order time.
+ *                         Measured 09.08: valid stored credentials answered 400
+ *                         "pickups_not_configured" while the same credentials were
+ *                         producing working Express offers on the same screen.
  * malformed_credentials → rejected/malformed_credentials
  * server_error (5xx)    → unavailable (callers retry BEFORE mapping; see below)
  * config_error          → unavailable (OUR base URL is unset — nothing is wrong
@@ -80,10 +95,12 @@ export function verdictForOutcome(
       return { status: "accepted" };
     case "auth_failed":
       return { status: "rejected", reason: "invalid_auth" };
-    case "validation_failed":
-      return { status: "rejected", reason: "invalid_source_station" };
-    case "request_rejected":
-      return { status: "rejected", reason: "request_rejected" };
+    case "bad_request":
+      // The one 400 code measured to mean bad credentials is refused; every
+      // other 400 is accepted, for the reason in this function's header.
+      return outcome.code === "validation_error"
+        ? { status: "rejected", reason: "invalid_source_station" }
+        : { status: "accepted" };
     case "malformed_credentials":
       return { status: "rejected", reason: "malformed_credentials" };
     case "server_error":
@@ -260,13 +277,12 @@ async function verifyYandexCredentials(
     }
     if (response.status === 400) {
       // Read ONE code string and discard everything else — the body never
-      // reaches a verdict, a log or an error. Measured: a wrong source
-      // platform_station_id answers 400 code "validation_error". Any other
-      // code, a missing code, or an unparseable body means the carrier refused
-      // the request for a reason we cannot attribute to a field.
-      const code = await readErrorCode(response);
+      // reaches a verdict, a log or an error. The code is REPORTED, not judged:
+      // verdictForOutcome decides what it means, so the rule lives in one pure
+      // place instead of in this branch.
       return {
-        kind: code === "validation_error" ? "validation_failed" : "request_rejected",
+        kind: "bad_request",
+        code: await readErrorCode(response),
       } as VerifyOutcome;
     }
     return { kind: "transport_error" } as VerifyOutcome;

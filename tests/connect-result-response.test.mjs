@@ -10,7 +10,6 @@ import { CARRIER_CREDENTIAL_FIELDS } from "../apps/web/lib/carriers/connect-carr
 const REJECTED_REASONS = [
   "invalid_auth",
   "invalid_source_station",
-  "request_rejected",
   "malformed_credentials",
 ];
 

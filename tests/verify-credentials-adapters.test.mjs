@@ -84,13 +84,6 @@ test("verdictForOutcome: auth_failed → rejected/invalid_auth", () => {
   });
 });
 
-test("verdictForOutcome: validation_failed → rejected/invalid_source_station", () => {
-  assert.deepEqual(verdictForOutcome({ kind: "validation_failed" }), {
-    status: "rejected",
-    reason: "invalid_source_station",
-  });
-});
-
 test("verdictForOutcome: malformed_credentials → rejected/malformed_credentials", () => {
   assert.deepEqual(verdictForOutcome({ kind: "malformed_credentials" }), {
     status: "rejected",
@@ -104,11 +97,31 @@ test("verdictForOutcome: server_error → unavailable", () => {
   });
 });
 
-test("verdictForOutcome: request_rejected → rejected/request_rejected", () => {
-  assert.deepEqual(verdictForOutcome({ kind: "request_rejected" }), {
-    status: "rejected",
-    reason: "request_rejected",
-  });
+test("verdictForOutcome: bad_request «validation_error» → rejected/invalid_source_station", () => {
+  assert.deepEqual(
+    verdictForOutcome({ kind: "bad_request", code: "validation_error" }),
+    { status: "rejected", reason: "invalid_source_station" },
+  );
+});
+
+test("verdictForOutcome: bad_request «pickups_not_configured» → ACCEPTED", () => {
+  // Measured 09.08: valid stored credentials answered exactly this while the
+  // same pair produced working Express offers.
+  assert.deepEqual(
+    verdictForOutcome({ kind: "bad_request", code: "pickups_not_configured" }),
+    { status: "accepted" },
+  );
+});
+
+test("verdictForOutcome: bad_request with an unknown or unreadable code → ACCEPTED", () => {
+  // Failing closed on a code nobody enumerated would lock a valid seller out.
+  for (const code of ["some_future_code", "", null]) {
+    assert.deepEqual(
+      verdictForOutcome({ kind: "bad_request", code }),
+      { status: "accepted" },
+      String(code),
+    );
+  }
 });
 
 test("verdictForOutcome: config_error → unavailable, never rejected", () => {
@@ -125,7 +138,10 @@ test("verdictForOutcome: transport_error → unavailable", () => {
 });
 
 test("verdictForOutcome: the station reason differs from the auth reason", () => {
-  const station = verdictForOutcome({ kind: "validation_failed" });
+  const station = verdictForOutcome({
+    kind: "bad_request",
+    code: "validation_error",
+  });
   const auth = verdictForOutcome({ kind: "auth_failed" });
   assert.equal(station.status, "rejected");
   assert.equal(auth.status, "rejected");
@@ -442,29 +458,49 @@ test("cdek token error: message text is unchanged and status rides as a property
   }
 });
 
-// ── Finding 3: not every 400 is a bad station.
+// ── Only a MEASURED code means bad credentials. Each test names the wire
+// outcome it stands for, so a reader can tell what was measured from what was
+// guessed.
 
-test("yandex verify: 400 with a DIFFERENT code → rejected/request_rejected", async () => {
+test("yandex verify wire: 400 «pickups_not_configured» → ACCEPTED, not a rejection", async () => {
+  // MEASURED 09.08 with the stored, valid credentials — five runs of six — while
+  // the same pair produced working Express offers on the same screen. Refusing
+  // this would deny a seller a carrier that works.
   await withEnv("YANDEX_DELIVERY_BASE_URL", YANDEX_BASE_URL, async () => {
     const mock = installFetchMock(() =>
-      jsonResponse(400, { code: "bad_request", message: "leak-me" }),
+      jsonResponse(400, {
+        code: "pickups_not_configured",
+        message: "Pickups are not configured for the warehouse",
+      }),
     );
     try {
       const verdict =
         await VERIFY_CREDENTIALS_ADAPTERS.yataxi.verifyCredentials(YANDEX_CREDS);
-      assert.deepEqual(verdict, {
-        status: "rejected",
-        reason: "request_rejected",
-      });
-      assert.ok(!JSON.stringify(verdict).includes("leak-me"));
-      assert.equal(mock.calls.length, 1);
+      assert.deepEqual(verdict, { status: "accepted" });
+      assert.equal(mock.calls.length, 1, "an answer, so no retry");
     } finally {
       mock.restore();
     }
   });
 });
 
-test("yandex verify: 400 with a non-JSON body → rejected/request_rejected", async () => {
+test("yandex verify wire: 400 with an unknown code → ACCEPTED, and no provider text escapes", async () => {
+  await withEnv("YANDEX_DELIVERY_BASE_URL", YANDEX_BASE_URL, async () => {
+    const mock = installFetchMock(() =>
+      jsonResponse(400, { code: "some_future_code", message: "leak-me" }),
+    );
+    try {
+      const verdict =
+        await VERIFY_CREDENTIALS_ADAPTERS.yataxi.verifyCredentials(YANDEX_CREDS);
+      assert.deepEqual(verdict, { status: "accepted" });
+      assert.ok(!JSON.stringify(verdict).includes("leak-me"));
+    } finally {
+      mock.restore();
+    }
+  });
+});
+
+test("yandex verify wire: 400 with a non-JSON body → ACCEPTED", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", YANDEX_BASE_URL, async () => {
     const mock = installFetchMock(
       () => new Response("<html>gateway leak-me</html>", { status: 400 }),
@@ -472,10 +508,7 @@ test("yandex verify: 400 with a non-JSON body → rejected/request_rejected", as
     try {
       const verdict =
         await VERIFY_CREDENTIALS_ADAPTERS.yataxi.verifyCredentials(YANDEX_CREDS);
-      assert.deepEqual(verdict, {
-        status: "rejected",
-        reason: "request_rejected",
-      });
+      assert.deepEqual(verdict, { status: "accepted" });
       assert.ok(!JSON.stringify(verdict).includes("leak-me"));
     } finally {
       mock.restore();
@@ -483,16 +516,13 @@ test("yandex verify: 400 with a non-JSON body → rejected/request_rejected", as
   });
 });
 
-test("yandex verify: 400 with no code field → rejected/request_rejected", async () => {
+test("yandex verify wire: 400 with no code field → ACCEPTED", async () => {
   await withEnv("YANDEX_DELIVERY_BASE_URL", YANDEX_BASE_URL, async () => {
     const mock = installFetchMock(() => jsonResponse(400, { message: "no code here" }));
     try {
       const verdict =
         await VERIFY_CREDENTIALS_ADAPTERS.yataxi.verifyCredentials(YANDEX_CREDS);
-      assert.deepEqual(verdict, {
-        status: "rejected",
-        reason: "request_rejected",
-      });
+      assert.deepEqual(verdict, { status: "accepted" });
     } finally {
       mock.restore();
     }

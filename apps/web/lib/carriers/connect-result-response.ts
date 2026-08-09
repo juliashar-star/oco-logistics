@@ -129,8 +129,6 @@ function rejectionMessage(reason: VerifyRejectedReason): string {
       // Ends with something the seller can DO when the identifier is right —
       // our internal uncertainty about the cause is not actionable for them.
       return "Перевозчик отклонил запрос. Вероятная причина — идентификатор точки отгрузки, проверьте его. Если идентификатор верный, попробуйте позже или обратитесь в поддержку.";
-    case "request_rejected":
-      return "Перевозчик отклонил запрос. Проверьте данные подключения.";
     case "malformed_credentials":
       return "Не хватает данных для подключения. Заполните все поля.";
   }

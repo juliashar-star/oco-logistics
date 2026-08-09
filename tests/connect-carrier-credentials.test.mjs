@@ -440,7 +440,6 @@ test("rejected verdict → rejected_by_carrier, reason carried through UNCHANGED
   for (const reason of [
     "invalid_auth",
     "invalid_source_station",
-    "request_rejected",
     "malformed_credentials",
   ]) {
     const result = await connectCarrierCredentials(
