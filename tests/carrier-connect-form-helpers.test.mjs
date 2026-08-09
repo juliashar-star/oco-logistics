@@ -5,6 +5,8 @@ import { capitalizeFieldLabel } from "../apps/web/lib/carriers/capitalize-field-
 import { isCarrierFormComplete } from "../apps/web/lib/carriers/is-carrier-form-complete.ts";
 import { shouldAcceptFieldValue } from "../apps/web/lib/carriers/should-accept-field-value.ts";
 import { CARRIER_CONNECT_FIELDS } from "../apps/web/lib/carriers/carrier-connect-fields.ts";
+import { pickSuppliedCredentials } from "../apps/web/lib/carriers/pick-supplied-credentials.ts";
+import { connectSuccessMessage } from "../apps/web/lib/carriers/connect-success-message.ts";
 
 // ── capitalizeFieldLabel
 
@@ -36,6 +38,71 @@ test("capitalizeFieldLabel: every real label survives and gains a capital", () =
       assert.equal(shown.charAt(0), field.label.charAt(0).toUpperCase(), field.name);
     }
   }
+});
+
+// ── pickSuppliedCredentials — what actually leaves the browser
+//
+// An untouched field must be ABSENT from the body, not an empty string: the
+// service merges the submission over the stored bag, so a blank would be a
+// supplied value there and could overwrite a working credential.
+
+test("pickSuppliedCredentials: nothing typed → an empty body", () => {
+  assert.deepEqual(pickSuppliedCredentials({}), {});
+  assert.deepEqual(pickSuppliedCredentials({ token: "", account: "" }), {});
+});
+
+test("pickSuppliedCredentials: one field typed → only that field", () => {
+  assert.deepEqual(
+    pickSuppliedCredentials({ platformStationId: "", token: "tok" }),
+    { token: "tok" },
+  );
+});
+
+test("pickSuppliedCredentials: all fields typed → all of them", () => {
+  assert.deepEqual(
+    pickSuppliedCredentials({
+      account: "acct",
+      securePassword: "secret",
+      contractType: "1",
+    }),
+    { account: "acct", securePassword: "secret", contractType: "1" },
+  );
+});
+
+test("pickSuppliedCredentials: a whitespace-only value is not a value", () => {
+  assert.deepEqual(
+    pickSuppliedCredentials({ token: "   ", account: "\t\n" }),
+    {},
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      pickSuppliedCredentials({ token: "  " }),
+      "token",
+    ),
+    false,
+    "the key must be absent, not present-and-blank",
+  );
+});
+
+test("pickSuppliedCredentials: a value is sent exactly as typed, not trimmed", () => {
+  // Trimming is a decision about the seller's secret; only blankness is judged.
+  assert.deepEqual(pickSuppliedCredentials({ token: " tok " }), {
+    token: " tok ",
+  });
+});
+
+// ── connectSuccessMessage — the two outcomes are different events
+
+test("connectSuccessMessage: a carrier that was NOT connected → first connection", () => {
+  assert.equal(connectSuccessMessage(false), "Перевозчик подключён.");
+});
+
+test("connectSuccessMessage: a carrier that WAS connected → credentials updated", () => {
+  assert.equal(connectSuccessMessage(true), "Данные обновлены.");
+});
+
+test("connectSuccessMessage: the two cases never read the same", () => {
+  assert.notEqual(connectSuccessMessage(true), connectSuccessMessage(false));
 });
 
 // ── shouldAcceptFieldValue — the focus gate

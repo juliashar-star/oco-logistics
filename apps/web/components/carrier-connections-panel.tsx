@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { capitalizeFieldLabel } from "@/lib/carriers/capitalize-field-label";
+import { connectSuccessMessage } from "@/lib/carriers/connect-success-message";
 import { isCarrierFormComplete } from "@/lib/carriers/is-carrier-form-complete";
+import { pickSuppliedCredentials } from "@/lib/carriers/pick-supplied-credentials";
 import { shouldAcceptFieldValue } from "@/lib/carriers/should-accept-field-value";
 import type { CarrierConnectField } from "@/lib/carriers/carrier-connect-fields";
 
@@ -65,12 +67,50 @@ function forCarrier<T>(
     : {};
 }
 
+/** Per-card outcome of the last submit. Keyed by providerKey — never shared. */
+type CardFeedback = { kind: "success" | "error"; text: string };
+
+type ConnectionsFetch =
+  | { ok: true; carriers: CarrierConnection[] }
+  | { ok: false; error: string };
+
+/** One place that talks to the connections endpoint, used by load AND re-fetch. */
+async function fetchConnections(): Promise<ConnectionsFetch> {
+  try {
+    const response = await fetch("/api/carriers/connections");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          typeof data.error === "string"
+            ? data.error
+            : "Не удалось загрузить перевозчиков.",
+      };
+    }
+    return {
+      ok: true,
+      carriers: Array.isArray(data.carriers) ? data.carriers : [],
+    };
+  } catch {
+    return { ok: false, error: "Не удалось связаться с сервером." };
+  }
+}
+
 export function CarrierConnectionsPanel() {
   const [carriers, setCarriers] = useState<CarrierConnection[] | null>(null);
   const [values, setValues] = useState<FormValues>({});
   const [interacted, setInteracted] = useState<InteractedFields>({});
+  const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
+  const [feedback, setFeedback] = useState<Record<string, CardFeedback>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  /**
+   * providerKeys with a POST in flight. A ref, not state, because the guard has
+   * to be readable and writable in the SAME tick as the click — see
+   * submitCarrier. `submitting` above mirrors this for the button's appearance.
+   */
+  const inFlight = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void loadConnections();
@@ -79,22 +119,110 @@ export function CarrierConnectionsPanel() {
   async function loadConnections() {
     setLoading(true);
     setError("");
+    const result = await fetchConnections();
+    if (result.ok) {
+      setCarriers(result.carriers);
+    } else {
+      setError(result.error);
+    }
+    setLoading(false);
+  }
+
+  /**
+   * Send only what the seller supplied, then take the new connected state from
+   * the server — never from an assumption.
+   */
+  async function submitCarrier(carrier: CarrierConnection) {
+    const providerKey = carrier.providerKey;
+
+    // THE guard, and it must be synchronous. `submitting` is state: reading it
+    // and calling setSubmitting are separated by a render, so two clicks in one
+    // frame both read `false` and both POST — two real carrier calls. The
+    // disabled attribute is no guard either; it only lands after that render.
+    // A ref is checked and set in the same tick, so the second click loses.
+    if (inFlight.current.has(providerKey)) {
+      return;
+    }
+    inFlight.current.add(providerKey);
+    // Read BEFORE the re-fetch, which is what flips it.
+    const wasConnected = carrier.isConnected;
+    const credentials = pickSuppliedCredentials(forCarrier(values, providerKey));
+
+    setSubmitting((previous) => ({ ...previous, [providerKey]: true }));
+    setFeedback((previous) => {
+      const next = { ...previous };
+      delete next[providerKey];
+      return next;
+    });
+
     try {
-      const response = await fetch("/api/carriers/connections");
+      const response = await fetch("/api/carriers/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerKey, credentials }),
+      });
       const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        setError(
-          typeof data.error === "string"
-            ? data.error
-            : "Не удалось загрузить перевозчиков.",
-        );
+        // The server's message is written for this screen and pinned by tests
+        // there — shown verbatim, never rewritten or prefixed. Typed values are
+        // left alone: a sandbox 503 must not cost a retyped token.
+        setFeedback((previous) => ({
+          ...previous,
+          [providerKey]: {
+            kind: "error",
+            text:
+              typeof data.error === "string"
+                ? data.error
+                : "Не удалось подключить перевозчика.",
+          },
+        }));
         return;
       }
-      setCarriers(Array.isArray(data.carriers) ? data.carriers : []);
+
+      // Stored. Clear the typed values AND the interaction marks: a mark left
+      // behind would let a later autofill through the focus gate on a field the
+      // seller never touched again.
+      setValues((previous) => ({ ...previous, [providerKey]: {} }));
+      setInteracted((previous) => ({ ...previous, [providerKey]: {} }));
+
+      const refreshed = await fetchConnections();
+      if (!refreshed.ok) {
+        // Do NOT claim success we cannot confirm, and do not mark the card
+        // optimistically — that would look identical whether or not the row
+        // exists. Say what is known: the save returned 200, the state did not.
+        setFeedback((previous) => ({
+          ...previous,
+          [providerKey]: {
+            kind: "error",
+            text: "Данные сохранены, но состояние подключений не обновилось. Обновите страницу.",
+          },
+        }));
+        return;
+      }
+
+      setCarriers(refreshed.carriers);
+      setFeedback((previous) => ({
+        ...previous,
+        [providerKey]: {
+          kind: "success",
+          text: connectSuccessMessage(wasConnected),
+        },
+      }));
     } catch {
-      setError("Не удалось связаться с сервером.");
+      setFeedback((previous) => ({
+        ...previous,
+        [providerKey]: {
+          kind: "error",
+          text: "Не удалось связаться с сервером.",
+        },
+      }));
     } finally {
-      setLoading(false);
+      // Both released together: the ref so a next click is allowed, the state
+      // so the button comes back. The ref is the guard, the state is only the
+      // appearance.
+      inFlight.current.delete(providerKey);
+      setSubmitting((previous) => ({ ...previous, [providerKey]: false }));
     }
   }
 
@@ -187,6 +315,14 @@ export function CarrierConnectionsPanel() {
           carrierValues,
           carrier.isConnected,
         );
+        // Per card, never shared between them.
+        const isSubmitting = submitting[carrier.providerKey] === true;
+        const cardFeedback = Object.prototype.hasOwnProperty.call(
+          feedback,
+          carrier.providerKey,
+        )
+          ? feedback[carrier.providerKey]
+          : undefined;
 
         return (
           <section
@@ -229,19 +365,38 @@ export function CarrierConnectionsPanel() {
               ))}
             </div>
 
+            {cardFeedback?.kind === "error" && (
+              <p
+                className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+              >
+                {cardFeedback.text}
+              </p>
+            )}
+
+            {cardFeedback?.kind === "success" && (
+              <p
+                className="mt-4 rounded-lg bg-success-soft px-3 py-2 text-sm text-success"
+                role="status"
+              >
+                {cardFeedback.text}
+              </p>
+            )}
+
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {/* Renders its real enabled/disabled state and does nothing
-                  else. Submitting is the next slice (connect form, part
-                  two): it will POST to /api/carriers/connect and surface
-                  that route's result. */}
               <button
                 type="button"
-                disabled={!isReady}
+                disabled={!isReady || isSubmitting}
+                onClick={() => void submitCarrier(carrier)}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 {/* «Сохранить», not «Заменить данные»: a seller may be changing
                     one field of three, and the rest stay as they are. */}
-                {carrier.isConnected ? "Сохранить" : "Подключить"}
+                {isSubmitting
+                  ? "Проверяем у перевозчика…"
+                  : carrier.isConnected
+                    ? "Сохранить"
+                    : "Подключить"}
               </button>
             </div>
           </section>
