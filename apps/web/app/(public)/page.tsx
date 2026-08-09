@@ -13,8 +13,34 @@ import { getCurrentUser } from "@/lib/auth/get-current-user";
  * contract and carries no parcel.
  */
 export default async function PublicHome() {
+  // SESSION FIRST, FLAG SECOND — do not swap these two blocks.
+  //
+  // Flag-off is precisely the state a deployed cabinet runs in, so this order
+  // decides what a real seller sees. Checking the flag first would send a
+  // logged-in seller who opens the root to the login screen instead of their
+  // own cabinet: they are already authenticated, and the landing's readiness
+  // has nothing to do with them. `redirect()` throws, so whichever check comes
+  // first wins outright.
+  //
+  // Logged in  → /dashboard, whatever the flag says.
+  // Anonymous  → the landing when the flag is on, /login when it is off.
   const user = await getCurrentUser();
   if (user) redirect("/dashboard");
+
+  // The landing is OFF by default and stays off until the publication gate
+  // below is satisfied. Three of its five points describe features that are not
+  // built; the only thing keeping those from being a public claim is that
+  // nobody sees the page — and that stops being true the day the cabinet is
+  // deployed, because this landing lives at «/» in the same app. A flag is what
+  // makes "unpublished" a property of the deployment rather than of luck.
+  //
+  // Same shape as ENABLE_CARRIER_COMPARISON_PAGE: server-side only, compared to
+  // the literal "true", so anything else — unset, empty, "1", "yes" — is off.
+  // Redirect rather than notFound(): «/» must lead somewhere useful, and an
+  // anonymous visitor's destination in this app is the login page.
+  if (process.env.ENABLE_PUBLIC_LANDING !== "true") {
+    redirect("/login");
+  }
 
   return (
     <main className="px-6 py-28 sm:px-10 sm:py-40">
@@ -56,10 +82,19 @@ export default async function PublicHome() {
  * DO NOT PUBLISH THIS PAGE UNTIL ALL THREE ITEMS BELOW ARE TRUE.
  * ============================================================================
  *
- * Three of the five points describe capabilities that DO NOT EXIST YET. That is
- * tolerable only because useoco.ru is unpublished. The moment this page is
- * reachable by a seller, each unmet item below is a claim we cannot back — the
- * same standard the cabinet applies to «пока недоступна» on the label column.
+ * Three of the five points describe capabilities that DO NOT EXIST YET. Each
+ * unmet item below is a claim we cannot back the moment a seller can read it —
+ * the same standard the cabinet applies to «пока недоступна» on the label
+ * column.
+ *
+ * WHAT ENFORCES THIS: `ENABLE_PUBLIC_LANDING`, read at the top of PublicHome
+ * and defaulting to OFF, so «/» redirects to /login until someone deliberately
+ * turns the landing on. That flag is the mechanism — not the fact that the site
+ * happens to be unvisited, which stops protecting anything the day the cabinet
+ * is deployed, since this page lives at «/» in the same app.
+ *
+ * SETTING THE FLAG TO true IS THE PUBLICATION EVENT. Do not set it in any
+ * deployed environment until all three items below are satisfied.
  *
  * Point 3 — «Видно, с кем стоит работать.»
  *   Claims ОСО shows how carriers differ on the seller's own directions.
@@ -85,10 +120,17 @@ export default async function PublicHome() {
  * ----------------------------------------------------------------------------
  * Also: the module-01…04 tones stay defined in globals.css and the Tailwind
  * config while nothing references them — see the «intentionally unused» note
- * there before deleting them as dead code. `accent` appears only in the
- * hairline. Bold openings are weight 500, never 600 or 700 (`strong` defaults
- * to bolder, so .site-w-500 overrides it). MODEL F: the seller's own contracts,
- * the seller's own money. «посредник» describes a role; no company is named.
+ * there before deleting them as dead code.
+ *
+ * `accent` renders in exactly four places on the public route, and nowhere
+ * else: the first dot of the mark and the focus rings in (public)/layout.tsx,
+ * and the «ЧТО ВЫ ПОЛУЧАЕТЕ» eyebrow plus the primary button's focus ring here.
+ * (The accent hairline this note used to describe was removed when the eyebrow
+ * took over as the section marker.)
+ *
+ * Bold openings are weight 500, never 600 or 700 (`strong` defaults to bolder,
+ * so .site-w-500 overrides it). MODEL F: the seller's own contracts, the
+ * seller's own money. «посредник» describes a role; no company is named.
  */
 /**
  * The five points, verbatim. Kept as data so the grid markup cannot creep into

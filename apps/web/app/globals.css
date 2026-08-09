@@ -79,9 +79,10 @@
    above, which keep their own sizes and weights.
 
    Weight is BAKED INTO each size rather than offered as a free modifier, so
-   "never 300 below 15px" holds by construction: 300 exists only on .site-46,
-   and there is no .site-w-300 to misapply. 400 and 500 are safe at any size,
-   so those two are available as modifiers.
+   "no light below display size" holds by construction: 300 exists only on the
+   DISPLAY classes — .site-46 and .site-60 — and there is no .site-w-300 to
+   misapply it anywhere else. 400 and 500 are safe at any size, so those two
+   are available as modifiers.
 
    600 and 700 are deliberately absent. On the public site hierarchy comes from
    size and space, not weight; a heavy face reads as the cabinet's dense,
