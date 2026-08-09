@@ -44,7 +44,13 @@
 
   /* Module tones — labels, rules and hairlines only, NEVER a button surface.
      They identify a section; a filled button in these would read as a second
-     accent and compete with --accent. */
+     accent and compete with --accent.
+
+     INTENTIONALLY UNUSED FOR NOW — do not delete as dead code. The public site
+     shows only the logistics module today, presented as a product rather than
+     as one of four colour-coded areas, so nothing references these yet. They
+     wait for the modules that ship. (--module-01 is the same value as --accent;
+     logistics uses --accent, which is what it means today.) */
   --module-01: #0B6E68;
   --module-02: #B0573A;
   --module-03: #6B3F5E;
@@ -82,6 +88,15 @@
    functional voice on a page meant to be calm. The cabinet's own bold styles
    are untouched — this rule governs .site-* only. */
 .site-46 { font-size: 46px; line-height: 1.08; font-weight: 300; letter-spacing: -0.02em; }
+
+/* One step above .site-46 — display only, and the ONLY other place weight 300
+   is allowed (the rule stays: no light below 15px). .site-46 is untouched.
+   Below the sm breakpoint it falls back to the 46px step: 60px on a 375px
+   screen wraps into a stack of near-empty lines. */
+.site-60 { font-size: 46px; line-height: 1.08; font-weight: 300; letter-spacing: -0.02em; }
+@media (min-width: 640px) {
+  .site-60 { font-size: 60px; line-height: 1.02; letter-spacing: -0.03em; }
+}
 .site-24 { font-size: 24px; line-height: 1.25; font-weight: 400; letter-spacing: -0.01em; }
 .site-16 { font-size: 16px; line-height: 1.6;  font-weight: 400; }
 .site-14 { font-size: 14px; line-height: 1.55; font-weight: 400; }
@@ -91,6 +106,13 @@
 /* Allowed at every size in the scale. No 300 modifier — see above. */
 .site-w-400 { font-weight: 400; }
 .site-w-500 { font-weight: 500; }
+
+/* JetBrains Mono for figures that must align (module numbers).
+   A utility rather than extending Tailwind's `font-mono`: the cabinet already
+   uses `font-mono` in dashboard-stats and shipments-page, and repointing that
+   key at var(--font-mono) would change how those screens render. Size stays
+   with the .site-* scale, so this sets family only. */
+.site-mono { font-family: var(--font-mono), monospace; }
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;

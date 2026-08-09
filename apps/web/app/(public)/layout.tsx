@@ -21,18 +21,50 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-5xl items-center px-6 py-5">
-          <Link
-            href="/"
-            className="site-12 uppercase tracking-[0.18em] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
-          >
-            ОСО
-          </Link>
+    // Ground and card are both L1 tokens, nothing new: `line` is the neutral one
+    // step darker than `paper`, so the card reads as lifted without inventing a
+    // grey. The shadow is the minimum that keeps the edge from vibrating against
+    // the ground — no gradient, no backdrop-filter.
+    <div className="min-h-screen bg-line">
+      <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-8">
+        <div className="rounded-lg bg-paper text-ink shadow-sm">
+          <header className="border-b border-line">
+            {/* justify-between, so nav items can be added later without the
+                mark moving. Only real destinations belong on the right — a nav
+                item leading to a page that does not exist is worse than none. */}
+            <div className="flex items-center justify-between gap-6 px-6 py-5 sm:px-10">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+              >
+                {/* точка — маршрут — точка. Decorative: the link is named by
+                    «ОСО» alone, so the device is hidden from assistive tech.
+                    Deliberately NOT animated — the route-drawing motion is its
+                    own decision and needs the reduced-motion question settled
+                    first. Drawn in markup: no image, no external asset. */}
+                <span aria-hidden="true" className="flex items-center gap-1.5">
+                  <span className="block h-1.5 w-1.5 rounded-full bg-accent" />
+                  <span className="block h-px w-6 bg-muted" />
+                  <span className="block h-1.5 w-1.5 rounded-full bg-ink" />
+                </span>
+                <span className="site-12 uppercase tracking-[0.28em] text-ink">
+                  ОСО
+                </span>
+              </Link>
+
+              <nav>
+                <Link
+                  href="/login"
+                  className="site-12 text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+                >
+                  Войти
+                </Link>
+              </nav>
+            </div>
+          </header>
+          {children}
         </div>
-      </header>
-      {children}
+      </div>
     </div>
   );
 }
