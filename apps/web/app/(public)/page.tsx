@@ -1,7 +1,76 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PROVIDER_SELLER_DISPLAY_NAMES } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
+
+/**
+ * Metadata for the PUBLIC page only. The root layout keeps the cabinet's own
+ * («OCO Logistics» / «Веб-кабинет…»), which is right for the cabinet and wrong
+ * for a brand that has never heard of ОСО — that description would have been
+ * what a pasted link showed.
+ *
+ * The Cyrillic mark, because that is what the site itself says in its header.
+ *
+ * NO IMAGE. There is no opengraph-image and inventing one is a separate
+ * decision; a card with title and description and no picture is honest, whereas
+ * a broken image reference is not. `metadataBase` is set anyway — without it
+ * Next cannot resolve any relative URL, including the canonical below.
+ */
+/**
+ * A canonical or an og:url pointing at localhost is worse than useless: it is
+ * the address a share card would send a buyer to. NEXT_PUBLIC_APP_URL is the
+ * app's own origin and is `http://localhost:3000` in every dev .env, so it is
+ * used only when it is NOT a local host — same hostname test the CSP already
+ * makes in lib/security/csp.ts. Otherwise the public site's real address.
+ */
+function resolveSiteUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!configured) {
+    return "https://useoco.ru";
+  }
+  try {
+    const { hostname } = new URL(configured);
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "https://useoco.ru";
+    }
+    return configured;
+  } catch {
+    return "https://useoco.ru";
+  }
+}
+
+const SITE_URL = resolveSiteUrl();
+
+// Shorter than the h1 on purpose. A title appears where we control the
+// presentation least — a search result, a browser tab, a pasted link — so
+// surviving truncation is worth more than matching the h1, which nobody ever
+// sees beside it. openGraph.title and twitter.title both follow this constant.
+const TITLE = "ОСО — платформа для независимого канала продаж";
+const DESCRIPTION =
+  "Все ваши перевозчики в одном окне: сравнить условия, оформить отправление, отследить путь. Договоры и тарифы остаются вашими, деньги идут напрямую перевозчику.";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "/",
+    siteName: "ОСО",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    // "summary", not "summary_large_image": the large card is a picture frame,
+    // and we have no picture to put in it.
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+};
 
 /**
  * The first screen. A brand that has never heard of ОСО should know what this
@@ -100,12 +169,17 @@ export default async function PublicHome() {
  * SETTING THE FLAG TO true IS THE PUBLICATION EVENT. Do not set it in any
  * deployed environment until all three items below are satisfied.
  *
+ * THE SAME FLAG ALSO GOVERNS INDEXING (app/robots.ts): off disallows crawlers
+ * outright, on allows them. One switch for both, deliberately — publication and
+ * indexability must not be able to drift apart, and an unmet claim that no
+ * crawler can reach is still an unmet claim the moment the page is live.
+ *
  * Point 3 — «Видно, с кем стоит работать.»
  *   Claims ОСО shows how carriers differ on the seller's own directions.
  *   BEFORE PUBLISHING: the carrier-comparison page must be LIVE — served, not
  *   404 behind ENABLE_CARRIER_COMPARISON_PAGE — together with its methodology
  *   page, so a reader can check where the comparison comes from.
- *   SAME ITEM, SECOND SENTENCE: «ЕСЛИ ДОГОВОРА ЕЩЁ НЕТ» opens with «Сначала
+ *   SAME ITEM, SECOND SENTENCE: «ЕСЛИ ДОГОВОРОВ С ПЕРЕВОЗЧИКАМИ ЕЩЁ НЕТ» opens with «Сначала
  *   посмотрите в ОСО, чем перевозчики отличаются на ваших направлениях», which
  *   rests on exactly this capability. If the item is unmet, that sentence goes
  *   with point 3 — it is not a separate claim that survives on its own.
@@ -130,16 +204,11 @@ export default async function PublicHome() {
  * config while nothing references them — see the «intentionally unused» note
  * there before deleting them as dead code.
  *
- * `accent` renders in exactly seven places on the public route, and nowhere
- * else — EYEBROWS, LINKS AND FOCUS RINGS ONLY:
- *   (public)/layout.tsx — the mark's first dot, and two focus rings (the mark
- *     link and the header «Войти»).
- *   here — the primary button's focus ring, and the three section eyebrows:
- *     «ЧТО ВЫ ПОЛУЧАЕТЕ», «ДЛЯ КОГО», «ЕСЛИ ДОГОВОРА ЕЩЁ НЕТ».
- * Keep this list current: it was wrong twice before, and a stale note here is
- * what makes someone "restore" a colour rule that no longer exists.
- * (No accent in the dark band — it measures 3.08:1 on ink, and the obvious use
- * there would draw the unbuilt cheaper/faster highlight.)
+ * There was an inventory of every `accent` use here. It is gone: hand-kept, it
+ * drifted four times, and `grep -rn accent app/(public)` answers the same
+ * question without being able to go stale. Please do not restore it.
+ * (The one accent fact worth keeping, because it is a measurement rather than a
+ * list: accent is 3.08:1 on ink, so it is never used in the dark band.)
  *
  * Bold openings are weight 500, never 600 or 700 (`strong` defaults to bolder,
  * so .site-w-500 overrides it). MODEL F: the seller's own contracts, the
@@ -225,7 +294,8 @@ function LogisticsValue() {
  * registry's REAL displayName for any key it cannot mask, which on a public page
  * is exactly the leak we must not risk. A row whose key has no mask is dropped.
  *
- * THE FIGURES ARE ILLUSTRATIVE and marked «Пример» beside the panel. They show
+ * THE FIGURES ARE ILLUSTRATIVE and marked «Пример» by the table's own caption,
+ * inside the panel's box — not beside it. They show
  * the SHAPE of the comparison — several answers for one parcel, side by side —
  * and must never read as our prices or as any carrier's tariff.
  *
@@ -288,26 +358,49 @@ function OffersPreview() {
       </p>
 
       <div className="mt-10 max-w-3xl">
-        {/* One quiet word, and the panel's accessible caption. Quiet by scale
-            and tracking, not by low contrast: `muted` would be 3.75:1 here. */}
-        <p className="site-11 uppercase tracking-[0.18em] text-line" id="preview-note">
-          Пример
-        </p>
+        {/* The scroll box is focusable ON PURPOSE. Without tabindex a keyboard
+            user in Firefox or Safari cannot scroll an overflow container that
+            holds no focusable element, so on a genuinely narrow screen the last
+            column would be unreachable. Its focus ring is `paper` rather than
+            `accent`: accent measures 3.08:1 on ink, and a focus indicator that
+            faint would look like a rendering fault rather than a state.
 
-        <div className="mt-3 overflow-x-auto rounded border border-muted">
-          <table className="w-full border-collapse text-left" aria-describedby="preview-note">
+            NO role="region" AND NO aria-labelledby, deliberately — do not add
+            them back as an "accessibility improvement". Naming this box meant
+            naming it after the caption, so a screen-reader user entering the
+            preview heard «Пример» twice: once for the region, once for the
+            table. A focusable scroll container with no landmark role is the
+            standard shape; the table's own <caption> does the naming, and
+            nothing has to be invented to label the wrapper.
+
+            The caption's `id` went with them: a hook nothing points at is an
+            invitation to rewire naming to it and bring the double announcement
+            back. */}
+        <div
+          tabIndex={0}
+          className="mt-3 overflow-x-auto rounded border border-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+        >
+          <table className="w-full border-collapse text-left">
+            {/* The example marker as the table's own caption: bound to the
+                figures structurally and sitting inside the panel's box, so a
+                reader scrolling into the numbers cannot pass it. Same wording,
+                same quiet scale — quiet by size and tracking, not by low
+                contrast, since `muted` would be 3.75:1 on this ground. */}
+            <caption className="caption-top site-11 px-2 py-3 text-left uppercase tracking-[0.18em] text-line sm:px-4">
+              Пример
+            </caption>
             <thead>
               <tr className="border-b border-muted">
-                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                <th scope="col" className="site-11 px-2 py-3 sm:px-4 uppercase tracking-[0.14em] text-line">
                   Перевозчик
                 </th>
-                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                <th scope="col" className="site-11 px-2 py-3 sm:px-4 uppercase tracking-[0.14em] text-line">
                   Цена
                 </th>
-                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                <th scope="col" className="site-11 px-2 py-3 sm:px-4 uppercase tracking-[0.14em] text-line">
                   Срок
                 </th>
-                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                <th scope="col" className="site-11 px-2 py-3 sm:px-4 uppercase tracking-[0.14em] text-line">
                   Получение
                 </th>
               </tr>
@@ -318,18 +411,22 @@ function OffersPreview() {
                   key={`${row.providerKey}-${index}`}
                   className="border-b border-muted last:border-b-0"
                 >
-                  <td className="site-14 whitespace-nowrap px-4 py-3">{row.name}</td>
+                  <td className="site-14 whitespace-nowrap px-2 py-3 sm:px-4">{row.name}</td>
                   {/* Mono so the columns align down the panel — the utility
                       added in L4 finally has its consumer. */}
-                  <td className="site-mono site-14 whitespace-nowrap px-4 py-3">
+                  <td className="site-mono site-14 whitespace-nowrap px-2 py-3 sm:px-4">
                     {row.price}
                   </td>
-                  <td className="site-mono site-14 whitespace-nowrap px-4 py-3 text-line">
+                  <td className="site-mono site-14 whitespace-nowrap px-2 py-3 sm:px-4 text-line">
                     {row.term}
                   </td>
-                  <td className="site-14 whitespace-nowrap px-4 py-3 text-line">
-                    {row.handover}
-                  </td>
+                  {/* The one column with long text, and the one that forced the
+                      overflow. Letting it wrap means the table usually fits, so
+                      on most screens there is nothing to scroll past — and the
+                      caption above cannot be scrolled out of view. The other
+                      three stay nowrap: a carrier label must not break
+                      mid-name, and a price or a term is short anyway. */}
+                  <td className="site-14 px-2 py-3 sm:px-4 text-line">{row.handover}</td>
                 </tr>
               ))}
             </tbody>
