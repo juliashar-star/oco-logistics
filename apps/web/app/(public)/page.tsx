@@ -75,6 +75,8 @@ export default async function PublicHome() {
 
       <LogisticsValue />
       <OffersPreview />
+      <WhoItIsFor />
+      <NoContractYet />
     </main>
   );
 }
@@ -103,6 +105,10 @@ export default async function PublicHome() {
  *   BEFORE PUBLISHING: the carrier-comparison page must be LIVE — served, not
  *   404 behind ENABLE_CARRIER_COMPARISON_PAGE — together with its methodology
  *   page, so a reader can check where the comparison comes from.
+ *   SAME ITEM, SECOND SENTENCE: «ЕСЛИ ДОГОВОРА ЕЩЁ НЕТ» opens with «Сначала
+ *   посмотрите в ОСО, чем перевозчики отличаются на ваших направлениях», which
+ *   rests on exactly this capability. If the item is unmet, that sentence goes
+ *   with point 3 — it is not a separate claim that survives on its own.
  *
  * Point 4 — «На каждую отправку — расчёт и подсказка.»
  *   The quote fan-out exists, but the sentence also promises «Нужно дешевле —
@@ -124,11 +130,16 @@ export default async function PublicHome() {
  * config while nothing references them — see the «intentionally unused» note
  * there before deleting them as dead code.
  *
- * `accent` renders in exactly four places on the public route, and nowhere
- * else: the first dot of the mark and the focus rings in (public)/layout.tsx,
- * and the «ЧТО ВЫ ПОЛУЧАЕТЕ» eyebrow plus the primary button's focus ring here.
- * (The accent hairline this note used to describe was removed when the eyebrow
- * took over as the section marker.)
+ * `accent` renders in exactly seven places on the public route, and nowhere
+ * else — EYEBROWS, LINKS AND FOCUS RINGS ONLY:
+ *   (public)/layout.tsx — the mark's first dot, and two focus rings (the mark
+ *     link and the header «Войти»).
+ *   here — the primary button's focus ring, and the three section eyebrows:
+ *     «ЧТО ВЫ ПОЛУЧАЕТЕ», «ДЛЯ КОГО», «ЕСЛИ ДОГОВОРА ЕЩЁ НЕТ».
+ * Keep this list current: it was wrong twice before, and a stale note here is
+ * what makes someone "restore" a colour rule that no longer exists.
+ * (No accent in the dark band — it measures 3.08:1 on ink, and the obvious use
+ * there would draw the unbuilt cheaper/faster highlight.)
  *
  * Bold openings are weight 500, never 600 or 700 (`strong` defaults to bolder,
  * so .site-w-500 overrides it). MODEL F: the seller's own contracts, the
@@ -325,6 +336,63 @@ function OffersPreview() {
           </table>
         </div>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Two quiet sections after the dark block, both single paragraphs.
+ *
+ * NOT grids. Two numbered grids in a row would make the page monotonous, and
+ * these two are deliberately calmer than «ЧТО ВЫ ПОЛУЧАЕТЕ»: one widens the
+ * audience, the other answers an objection.
+ *
+ * The second is SUBORDINATE to the first, achieved with rhythm and scale — a
+ * tighter top margin binding it to what it answers, a narrower measure, and
+ * body text one step down — never with a dimmer colour. `muted` is the only
+ * quiet token on paper and it has to keep carrying body text legibly; dimming
+ * further would mean a colour that is not in the set.
+ *
+ * MODEL F: the contract is concluded «напрямую с перевозчиком», and ОСО neither
+ * concludes it, holds it, nor helps with it. No date, no duration, no claim
+ * about how long any carrier takes. Neither section has a link or an action.
+ */
+function WhoItIsFor() {
+  return (
+    <section
+      aria-labelledby="who-its-for"
+      className="mt-24 border-t border-line pt-12 sm:mt-32"
+    >
+      <h2
+        id="who-its-for"
+        className="site-11 uppercase tracking-[0.18em] text-accent"
+      >
+        ДЛЯ КОГО
+      </h2>
+
+      <p className="site-16 mt-6 max-w-3xl text-muted">
+        ОСО подходит всем, кто отправляет регулярно — неважно, откуда приходит заказ: с вашего сайта, из маркетплейса, из переписки в мессенджере или от оптового клиента. Бренды, интернет-магазины, производственные компании, фулфилмент-операторы. Отправления идут по вашим договорам с перевозчиками — а если договора пока нет, его заключают напрямую с перевозчиком, и он сразу становится вашим активом.
+      </p>
+    </section>
+  );
+}
+
+function NoContractYet() {
+  return (
+    // Bound to the section above by a tighter margin and no rule of its own:
+    // it reads as the answer to a question that section raises, not as a new
+    // claim of equal weight.
+    <section aria-labelledby="no-contract-yet" className="mt-12 sm:mt-14">
+      <h2
+        id="no-contract-yet"
+        className="site-11 uppercase tracking-[0.18em] text-accent"
+      >
+        ЕСЛИ ДОГОВОРОВ С ПЕРЕВОЗЧИКАМИ ЕЩЁ НЕТ
+      </h2>
+
+      <p className="site-14 mt-4 max-w-2xl text-muted">
+        Сначала посмотрите в ОСО, чем перевозчики отличаются на ваших направлениях, и решите, с кем заключать договор. Договор заключается напрямую с перевозчиком. Перевозчик выдаёт доступы для интеграции, вы добавляете их в настройках ОСО, и он появляется в общем списке ваших перевозчиков. Начать можно с одного перевозчика, остальных подключить позже.
+      </p>
     </section>
   );
 }
