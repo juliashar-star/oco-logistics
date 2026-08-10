@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PROVIDER_SELLER_DISPLAY_NAMES } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 
 /**
@@ -73,6 +74,7 @@ export default async function PublicHome() {
       </div>
 
       <LogisticsValue />
+      <OffersPreview />
     </main>
   );
 }
@@ -197,6 +199,132 @@ function LogisticsValue() {
       <p className="site-16 mt-12 max-w-2xl border-t border-line pt-6">
         Договоры, тарифы и накопленная история остаются вашими.
       </p>
+    </section>
+  );
+}
+
+/**
+ * The one block that SHOWS the product rather than describing it: a mock of the
+ * offers panel, on a dark band inside the card.
+ *
+ * CARRIER NAMES ARE MASKED, read from the cabinet's own PROVIDER_SELLER_DISPLAY_NAMES
+ * rather than written here — public carrier naming is on hold pending legal
+ * advice, and a name typed into this file would sit outside that decision. The
+ * MAP is used, not providerSellerDisplayName(): that helper falls back to the
+ * registry's REAL displayName for any key it cannot mask, which on a public page
+ * is exactly the leak we must not risk. A row whose key has no mask is dropped.
+ *
+ * THE FIGURES ARE ILLUSTRATIVE and marked «Пример» beside the panel. They show
+ * the SHAPE of the comparison — several answers for one parcel, side by side —
+ * and must never read as our prices or as any carrier's tariff.
+ *
+ * CONTRAST, measured against #101214 rather than guessed:
+ *   paper  18.15:1  primary text
+ *   line   15.21:1  secondary text and the example marker
+ *   muted   3.75:1  FAILS normal text on ink — do not use it in this band,
+ *                   however much it is the right grey on paper
+ *   accent  3.08:1  fails too, and see below
+ *
+ * NO ACCENT HERE, for two reasons. It is illegible on ink at 3.08:1; and the
+ * obvious use — tinting the cheapest row — would draw the «дешевле / быстрее»
+ * highlight that does NOT exist yet (publication gate, point 4). Showing it
+ * would be the exact claim the gate is there to prevent.
+ *
+ * NOTHING IS INTERACTIVE: no buttons, no inputs, no hover affordance. The panel
+ * illustrates; it must not pretend to work.
+ */
+const PREVIEW_ROWS = [
+  { providerKey: "yataxi", price: "420 ₽", term: "2 дня", handover: "Курьером" },
+  { providerKey: "yataxi", price: "350 ₽", term: "3 дня", handover: "В пункт выдачи" },
+  { providerKey: "cdek", price: "390 ₽", term: "2 дня", handover: "Курьером" },
+  { providerKey: "cdek", price: "310 ₽", term: "4 дня", handover: "В пункт выдачи" },
+] as const;
+
+function maskedCarrierName(providerKey: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(
+    PROVIDER_SELLER_DISPLAY_NAMES,
+    providerKey,
+  )
+    ? PROVIDER_SELLER_DISPLAY_NAMES[providerKey]
+    : undefined;
+}
+
+function OffersPreview() {
+  const rows = PREVIEW_ROWS.map((row) => ({
+    ...row,
+    name: maskedCarrierName(row.providerKey),
+  })).filter((row): row is typeof row & { name: string } => row.name !== undefined);
+
+  return (
+    // Full-bleed inside the card: the negative margins cancel <main>'s padding,
+    // so the band spans the card edge to edge. Only the existing pair inverted —
+    // ink ground, paper text. No new colour.
+    <section
+      aria-labelledby="offers-preview"
+      className="-mx-6 mt-24 bg-ink px-6 py-16 text-paper sm:-mx-10 sm:mt-32 sm:px-10 sm:py-20"
+    >
+      <p className="site-11 uppercase tracking-[0.18em] text-line">
+        ЧТО ВИДИТ ПРОДАВЕЦ
+      </p>
+
+      <h2 id="offers-preview" className="site-24 site-w-500 mt-4 max-w-3xl">
+        Один запрос — ответы всех ваших перевозчиков рядом
+      </h2>
+
+      <p className="site-16 mt-4 max-w-2xl text-line">
+        Так выглядит расчёт одной посылки: цена, срок и способ получения от
+        каждого — в одном списке.
+      </p>
+
+      <div className="mt-10 max-w-3xl">
+        {/* One quiet word, and the panel's accessible caption. Quiet by scale
+            and tracking, not by low contrast: `muted` would be 3.75:1 here. */}
+        <p className="site-11 uppercase tracking-[0.18em] text-line" id="preview-note">
+          Пример
+        </p>
+
+        <div className="mt-3 overflow-x-auto rounded border border-muted">
+          <table className="w-full border-collapse text-left" aria-describedby="preview-note">
+            <thead>
+              <tr className="border-b border-muted">
+                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                  Перевозчик
+                </th>
+                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                  Цена
+                </th>
+                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                  Срок
+                </th>
+                <th scope="col" className="site-11 px-4 py-3 uppercase tracking-[0.14em] text-line">
+                  Получение
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr
+                  key={`${row.providerKey}-${index}`}
+                  className="border-b border-muted last:border-b-0"
+                >
+                  <td className="site-14 whitespace-nowrap px-4 py-3">{row.name}</td>
+                  {/* Mono so the columns align down the panel — the utility
+                      added in L4 finally has its consumer. */}
+                  <td className="site-mono site-14 whitespace-nowrap px-4 py-3">
+                    {row.price}
+                  </td>
+                  <td className="site-mono site-14 whitespace-nowrap px-4 py-3 text-line">
+                    {row.term}
+                  </td>
+                  <td className="site-14 whitespace-nowrap px-4 py-3 text-line">
+                    {row.handover}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
   );
 }
