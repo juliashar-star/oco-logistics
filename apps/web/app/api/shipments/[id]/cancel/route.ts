@@ -93,20 +93,67 @@ export const POST = withAuth<{ id: string }>(
       );
 
       if (!cancelResult.ok) {
-        // Carrier not recognising an id we hold is OUR inconsistency, not
-        // evidence about the order — do not change the row's status.
+        // EXPLICIT CHAIN, not a fallthrough. NOTHING IS WRITTEN on any branch
+        // here and no carrier is called again: the adapter already learned what
+        // is possible and stopped. A TrackingEvent would record our own refusal
+        // as if it were something the carrier reported about the parcel.
+        const { reason } = cancelResult;
+
+        if (reason === "order_not_found") {
+          // Carrier not recognising an id we hold is OUR inconsistency, not
+          // evidence about the order — do not change the row's status.
+          console.error(
+            "[shipments/cancel] ORDER_NOT_FOUND",
+            JSON.stringify({
+              shipmentId: row.id,
+              providerOrderId: row.providerOrderId,
+            }),
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Перевозчик не знает этот заказ. Мы уже разбираемся.",
+            },
+            { status: 500 },
+          );
+        }
+
+        if (reason === "cancel_not_free") {
+          return NextResponse.json(
+            {
+              error:
+                "Бесплатно отменить этот заказ уже нельзя. Дальнейшая отмена возможна только на стороне перевозчика и будет платной.",
+            },
+            { status: 409 },
+          );
+        }
+
+        if (reason === "cancel_unavailable") {
+          return NextResponse.json(
+            {
+              error:
+                "Этот заказ уже нельзя отменить — обратитесь в поддержку перевозчика.",
+            },
+            { status: 409 },
+          );
+        }
+
+        // UNREACHABLE TODAY, and that is the point. Adding a member to
+        // CarrierCancelOrderResult without handling it here breaks the build on
+        // this line instead of letting the new reason inherit whichever branch
+        // happened to sit last. Proven by temporarily adding a fourth member
+        // and watching typecheck fail — do not delete this to silence an error;
+        // add the branch the compiler is asking for.
+        const _exhaustive: never = reason;
         console.error(
-          "[shipments/cancel] ORDER_NOT_FOUND",
+          "[shipments/cancel] UNHANDLED_CANCEL_REASON",
           JSON.stringify({
             shipmentId: row.id,
-            providerOrderId: row.providerOrderId,
+            reason: _exhaustive,
           }),
         );
         return NextResponse.json(
-          {
-            error:
-              "Перевозчик не знает этот заказ. Мы уже разбираемся.",
-          },
+          { error: "Не удалось отменить заказ. Попробуйте позже." },
           { status: 500 },
         );
       }

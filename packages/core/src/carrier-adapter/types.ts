@@ -341,7 +341,17 @@ export type CarrierCancelResult = {
 
 export type CarrierCancelOrderResult =
   | { ok: true; result: CarrierCancelResult }
-  | { ok: false; reason: "order_not_found" };
+  /** We hold an id the carrier does not recognise — our inconsistency, and it
+   *  says nothing about the order. */
+  | { ok: false; reason: "order_not_found" }
+  /** For the seller: cancelling is still possible at the carrier, but only for
+   *  money — so ОСО will not do it on their behalf. */
+  | { ok: false; reason: "cancel_not_free" }
+  /** For the seller: nothing can be done at the carrier any more; the parcel is
+   *  past the point where this API can stop it. */
+  | { ok: false; reason: "cancel_unavailable" };
+// CDEK will use these same two reasons — they describe what is possible for the
+// seller, not how any one carrier words it.
 
 /**
  * A shipping label / ярлык as raw bytes (Yandex other-day generate-labels
