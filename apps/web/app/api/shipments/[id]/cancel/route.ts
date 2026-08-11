@@ -4,6 +4,7 @@ import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import { resolveOrderAdapterStrict } from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
+import { resolveCancelTrackingEvent } from "@/lib/shipments/cancel-tracking-event";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 
 const TERMINAL_STATUSES = ["DELIVERED", "RETURNED", "CANCELED"] as const;
@@ -174,18 +175,28 @@ export const POST = withAuth<{ id: string }>(
       // twice, at two different moments, and that is the truth the timeline
       // should show. (findUnique/upsert on eventAt=new Date() was dead: the
       // key is always fresh, unlike sync where eventAt comes from Yandex.)
-      const statusCode = result.reason ?? result.providerStatus;
-      const statusText =
-        result.description ?? result.reason ?? result.providerStatus;
-      await prisma.trackingEvent.create({
-        data: {
-          shipmentId: row.id,
-          statusCode,
-          statusText,
-          eventAt: new Date(),
-          rawResponse: result as unknown as Prisma.InputJsonValue,
-        },
-      });
+      //
+      // The resolution moved out to a pure function so it can be unit-tested;
+      // null means the carrier gave us nothing nameable and there is no event
+      // worth writing. The cancellation still SUCCEEDED — only our record of it
+      // is missing — so the seller gets the same response either way.
+      const event = resolveCancelTrackingEvent(result);
+      if (event === null) {
+        console.error(
+          "[shipments/cancel] NO_TRACKING_EVENT_CODE",
+          JSON.stringify({ shipmentId: row.id }),
+        );
+      } else {
+        await prisma.trackingEvent.create({
+          data: {
+            shipmentId: row.id,
+            statusCode: event.statusCode,
+            statusText: event.statusText,
+            eventAt: new Date(),
+            rawResponse: result as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
 
       return NextResponse.json({
         ok: true,

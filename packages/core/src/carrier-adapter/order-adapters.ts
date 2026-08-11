@@ -6,6 +6,7 @@ import {
 import { orderAdapterSellerTitle } from "./order-adapter-seller-titles";
 import { yandexAdapter } from "./yandex/adapter";
 import {
+  cancelExpressOrder,
   confirmExpressOffer,
   getExpressOffers,
 } from "./yandex/express-client";
@@ -66,10 +67,6 @@ export type OrderAdapter = {
   getHandoverAct?: CarrierAdapter["getHandoverAct"];
 };
 
-const expressCancelStub: CarrierAdapter["cancelOrder"] = async () => {
-  throw new Error("Оформление этой услуги ещё не реализовано");
-};
-
 const cdekCancelStub: CarrierAdapter["cancelOrder"] = async () => {
   throw new Error("Оформление этой услуги ещё не реализовано");
 };
@@ -102,8 +99,10 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     confirmOffer: (offer, input, credentials) =>
       confirmExpressOffer(offer, input, credentials, "express"),
     // Cancelling an ACCEPTED order can be PAID, so exposing it to a seller
-    // without warning is a product decision, not a mapping.
-    cancelOrder: expressCancelStub,
+    // without warning is a product decision, not a mapping. That is now the
+    // reason cancelExpressOrder is conservative rather than the reason there is
+    // no cancel: it asks cancel-info first and refuses anything but "free".
+    cancelOrder: cancelExpressOrder,
     // No generateLabels / getHandoverAct — Express claims/* has neither.
   },
   "yataxi:courier": {
@@ -118,7 +117,8 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
       getExpressOffers(input, credentials, "courier"),
     confirmOffer: (offer, input, credentials) =>
       confirmExpressOffer(offer, input, credentials, "courier"),
-    cancelOrder: expressCancelStub,
+    // Same free-only rule as express — see the comment on that entry.
+    cancelOrder: cancelExpressOrder,
   },
   "cdek:delivery": {
     key: "cdek:delivery",

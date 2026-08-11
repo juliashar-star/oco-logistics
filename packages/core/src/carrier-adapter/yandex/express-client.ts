@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { CarrierQuoteChangedError } from "@oco/core/carrier-adapter/errors";
 import type {
+  CarrierCancelOrderResult,
   CarrierConfirmResult,
   CarrierConfirmWarning,
   CarrierCreateOrderInput,
@@ -17,6 +18,7 @@ import {
   type ExpressTaxiClass,
   type ExpressTaxiClassLimits,
 } from "./express-taxi-class-limits";
+import { mapCancelState } from "./map-cancel-state";
 import { claimStatusTextRu } from "./map-claim-status";
 import {
   mergeClaimWarnings,
@@ -459,6 +461,13 @@ export async function getExpressOffers(
 const ACCEPT_LANGUAGE_RU = { "Accept-Language": "ru" } as const;
 
 const CLAIMS_PATH = "/b2b/cargo/integration/v2/claims";
+
+/**
+ * Grep anchor: the cancellation SUCCEEDED but we could not read the resulting
+ * status. Distinct from any confirm-path marker — this one never means the
+ * seller's cancel failed.
+ */
+const CANCEL_POST_INFO_LOG_MARKER = "[cancelExpressOrder] post-cancel info unreadable";
 
 export type ConfirmExpressOfferOptions = {
   /** Delay between claims/info polls. Default ~1s (measured estimate ~1.2s). */
@@ -907,4 +916,169 @@ export async function getExpressOrderInfo(
   _credentials: CarrierCredentials,
 ): Promise<CarrierOrderInfoResult> {
   return { ok: true, info: {} };
+}
+
+/**
+ * Cancel an Express claim on the seller's behalf — FREE CANCELLATIONS ONLY.
+ *
+ * `providerOrderId` IS the claim id: confirmExpressOffer returns the claims id
+ * as `requestId` and submit-order stores that in Shipment.providerOrderId.
+ *
+ * This is the conservative sibling of the stub it replaces. That stub existed
+ * because cancelling an ACCEPTED claim can be PAID, and exposing that to a
+ * seller without warning is a product decision rather than a mapping. Nothing
+ * about that changed: the function asks cancel-info first and REFUSES anything
+ * that is not free, so ОСО never spends the seller's money on their behalf.
+ *
+ * Sequence, and none of it may be reordered:
+ *   1. claims/info      — the claim version, which cancel requires
+ *   2. claims/cancel-info — is a free cancellation still on the table
+ *   3. claims/cancel    — only when the answer was exactly "free"
+ *   4. claims/info      — what actually happened (see the comment there)
+ */
+export async function cancelExpressOrder(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierCancelOrderResult> {
+  const creds = assertYandexCredentials(credentials);
+  const baseUrl = resolveBaseUrl("YANDEX_EXPRESS_BASE_URL");
+  const claimId = providerOrderId;
+
+  // NaN fallback on purpose: readClaimVersion returns the fallback when the
+  // body carries no usable version, so a non-finite result here means we truly
+  // could not read one. cancel REQUIRES version, and a guessed version would
+  // either fail with old_version or, worse, cancel against a stale view of the
+  // claim. Throw rather than invent.
+  const before = await fetchClaimsInfo({
+    baseUrl,
+    creds,
+    claimId,
+    versionFallback: Number.NaN,
+  });
+  if (!Number.isFinite(before.version)) {
+    throw new Error(
+      `Yandex Express cancel: claim version unreadable; claim id ${claimId}`,
+    );
+  }
+
+  const cancelInfoResponse = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/cancel-info?claim_id=${encodeURIComponent(claimId)}`,
+    {},
+    ACCEPT_LANGUAGE_RU,
+  );
+  const cancelInfoRaw = await readJsonBody(cancelInfoResponse);
+  if (cancelInfoResponse.status !== 200) {
+    throw new Error(
+      `Yandex Express claims/cancel-info failed: HTTP ${cancelInfoResponse.status}`,
+    );
+  }
+
+  // mapCancelState fails closed: anything we cannot read becomes "not_free",
+  // never "free". An unreadable answer is not permission to spend money.
+  const cancelState = mapCancelState(cancelInfoRaw);
+  if (cancelState === "not_free") {
+    return { ok: false, reason: "cancel_not_free" };
+  }
+  if (cancelState === "unavailable") {
+    return { ok: false, reason: "cancel_unavailable" };
+  }
+
+  // WRITTEN INLINE, NOT VIA cancelClaimFree, deliberately. That helper throws on
+  // any non-200 by design, because confirmExpressOffer uses it as recovery and a
+  // silent failure there would strand a live claim — it must stay loud. Here the
+  // opposite is true: a 409 is an ANSWER about what is possible, to be mapped
+  // into a reason the seller can read. Reusing the helper would force us to
+  // catch and re-parse an Error message, and changing it would make
+  // confirmExpressOffer's recovery quiet. Two call sites, two contracts.
+  //
+  // cancel_state is the literal "free" and nothing else may ever be sent here:
+  // "paid" is the enum member that spends the seller's money, and this function
+  // has already refused every path that would need it.
+  const cancelResponse = await yandexPost(
+    baseUrl,
+    creds,
+    `${CLAIMS_PATH}/cancel?claim_id=${encodeURIComponent(claimId)}`,
+    { version: before.version, cancel_state: "free" },
+    ACCEPT_LANGUAGE_RU,
+  );
+
+  if (cancelResponse.status === 409) {
+    const conflictRaw = await readJsonBody(cancelResponse);
+    const code =
+      conflictRaw !== null &&
+      typeof conflictRaw === "object" &&
+      "code" in conflictRaw &&
+      typeof (conflictRaw as { code: unknown }).code === "string"
+        ? (conflictRaw as { code: string }).code.trim()
+        : "";
+
+    // The doc's 409 list ends in «…» — it is EXPLICITLY incomplete, so only the
+    // three named codes are mapped and anything else faults. Guessing at an
+    // unknown conflict code would be inventing carrier behaviour.
+    if (code === "free_cancel_is_unavailable" || code === "state_mismatch") {
+      // The claim moved between cancel-info and cancel: free was true a moment
+      // ago and is not any more.
+      return { ok: false, reason: "cancel_not_free" };
+    }
+    if (code === "inappropriate_status") {
+      return { ok: false, reason: "cancel_unavailable" };
+    }
+    throw new Error(
+      `Yandex Express claims/cancel failed: HTTP 409 ${code || "code missing"}`,
+    );
+  }
+
+  if (cancelResponse.status !== 200) {
+    throw new Error(
+      `Yandex Express claims/cancel failed: HTTP ${cancelResponse.status}`,
+    );
+  }
+
+  // WHY A SECOND claims/info: the documentation has NO response block for
+  // claims/cancel at all — path, query, header, request body and 409 codes, and
+  // then it stops. So the cancel reply is not a source of a provider status, and
+  // inventing one is not an option. The resulting claim status is the only
+  // measured evidence of what happened (probe 27.07.2026: cancel → HTTP 200,
+  // final info status `cancelled`).
+  //
+  // ITS FAILURE IS DELIBERATELY SILENT: by this point the cancellation HAS
+  // succeeded, and turning a failed read into a thrown error would report a
+  // failure that did not happen and invite the seller to press cancel again. We
+  // do not retry, do not invent a status, and do not fall back to the PRE-cancel
+  // status — that one is true about a moment that has passed.
+  try {
+    const after = await fetchClaimsInfo({
+      baseUrl,
+      creds,
+      claimId,
+      versionFallback: before.version,
+    });
+    const status = after.status.trim();
+    if (status) {
+      const description = claimStatusTextRu(status);
+      return {
+        ok: true,
+        result: {
+          accepted: true,
+          providerStatus: status,
+          ...(description === null ? {} : { description }),
+        },
+      };
+    }
+    console.error(
+      CANCEL_POST_INFO_LOG_MARKER,
+      JSON.stringify({ claimId, reason: "status missing" }),
+    );
+  } catch {
+    // Status only — never the body: claims/info echoes recipient PII.
+    console.error(
+      CANCEL_POST_INFO_LOG_MARKER,
+      JSON.stringify({ claimId, reason: "info threw" }),
+    );
+  }
+
+  // The type's own docblock sanctions "" for «the provider returned none».
+  return { ok: true, result: { accepted: true, providerStatus: "" } };
 }

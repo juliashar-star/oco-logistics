@@ -4,7 +4,10 @@ import test from "node:test";
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
 import { ORDER_ADAPTER_SELLER_TITLES } from "../packages/core/src/carrier-adapter/order-adapter-seller-titles.ts";
 import { confirmOffer as cdekConfirmOffer } from "../packages/core/src/carrier-adapter/cdek/client.ts";
-import { confirmExpressOffer } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
+import {
+  cancelExpressOrder,
+  confirmExpressOffer,
+} from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
   for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
@@ -62,25 +65,18 @@ test("ORDER_ADAPTERS holds next_day, express and courier with distinct titles; e
     ORDER_ADAPTERS["yataxi:courier"].confirmOffer,
     confirmExpressOffer,
   );
-  await assert.rejects(
-    () =>
-      ORDER_ADAPTERS["yataxi:express"].cancelOrder(
-        "claim-id",
-        /** @type {never} */ ({}),
-      ),
-    (err) =>
-      err instanceof Error &&
-      err.message === "Оформление этой услуги ещё не реализовано",
+  // Both Express entries now cancel for real. Identity, not a typeof check:
+  // cancelOrder takes (providerOrderId, credentials) with no taxi class, so
+  // unlike getOffers / confirmOffer it needs no per-entry wrapper — and a
+  // wrapper appearing here would be a sign someone bound a class it must not
+  // depend on.
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:express"].cancelOrder,
+    cancelExpressOrder,
   );
-  await assert.rejects(
-    () =>
-      ORDER_ADAPTERS["yataxi:courier"].cancelOrder(
-        "claim-id",
-        /** @type {never} */ ({}),
-      ),
-    (err) =>
-      err instanceof Error &&
-      err.message === "Оформление этой услуги ещё не реализовано",
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:courier"].cancelOrder,
+    cancelExpressOrder,
   );
 });
 
