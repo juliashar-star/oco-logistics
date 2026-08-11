@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
-import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
+import { resolveOrderAdapterStrict } from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
@@ -51,7 +51,28 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    const orderAdapter = resolveOrderAdapter(row.orderAdapterKey);
+    // STRICT on purpose — the defaulting resolveOrderAdapter is wrong here.
+    // A row with a null or unrecognised orderAdapterKey cannot be attributed to
+    // a carrier, and defaulting would send the cancel to Yandex for an order
+    // that may live at another provider. Refuse instead: nothing is written and
+    // no carrier is called on this branch.
+    const orderAdapter = resolveOrderAdapterStrict(row.orderAdapterKey);
+    if (orderAdapter === null) {
+      console.error(
+        "[shipments/cancel] UNRESOLVABLE_ORDER_ADAPTER",
+        JSON.stringify({
+          shipmentId: row.id,
+          orderAdapterKey: row.orderAdapterKey,
+        }),
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Не удалось определить перевозчика по этому отправлению — отмена через ОСО недоступна.",
+        },
+        { status: 409 },
+      );
+    }
 
     try {
       const credsResult = await getCarrierCredentials(

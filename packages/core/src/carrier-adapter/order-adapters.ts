@@ -140,8 +140,16 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
  */
 export const DEFAULT_ORDER_ADAPTER = ORDER_ADAPTERS["yataxi:next_day"];
 
+/**
+ * OWN keys only. A plain `ORDER_ADAPTERS[key]` walks the prototype chain, so
+ * "constructor", "toString", "__proto__" and "valueOf" each returned a truthy
+ * Object.prototype member instead of undefined (measured). That defeated both
+ * callers at once: the strict lookup's `=== null` was false, and the defaulting
+ * one never reached its fallback because the member was not undefined. Fixed
+ * here rather than at either caller so there is one place to get it right.
+ */
 export function getOrderAdapter(key: string): OrderAdapter | undefined {
-  return ORDER_ADAPTERS[key];
+  return Object.hasOwn(ORDER_ADAPTERS, key) ? ORDER_ADAPTERS[key] : undefined;
 }
 
 /**
@@ -164,4 +172,19 @@ export function resolveOrderAdapter(
     return DEFAULT_ORDER_ADAPTER;
   }
   return found;
+}
+
+/**
+ * Same lookup, but NEVER defaulting — null for a null, empty or unknown key.
+ * A destructive call must not guess a carrier: defaulting here would send a
+ * cancel for an unidentifiable shipment to Yandex, which is a write to the
+ * wrong provider's account and cannot be undone by reading anything back.
+ */
+export function resolveOrderAdapterStrict(
+  adapterKey: string | null | undefined,
+): OrderAdapter | null {
+  if (adapterKey == null || adapterKey === "") {
+    return null;
+  }
+  return getOrderAdapter(adapterKey) ?? null;
 }
