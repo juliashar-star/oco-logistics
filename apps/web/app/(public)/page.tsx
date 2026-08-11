@@ -372,6 +372,29 @@ function LogisticsValue() {
  *
  * NOTHING IS INTERACTIVE: no buttons, no inputs, no hover affordance. The panel
  * illustrates; it must not pretend to work.
+ *
+ * THE «дешевле» MARKER, and why it sits in the CARRIER cell rather than beside
+ * the price where it reads most naturally. Four constraints had to hold at once:
+ * not accent, no new colour, no widening of the table, and it must reach
+ * assistive technology.
+ *   Beside the price is the better semantic home, and it is PROBABLY safe — but
+ *   only probably. That column's width is set by «310 ₽» in the 14px figure
+ *   face, and «дешевле» at 11px lands within a few pixels of it either way. I
+ *   cannot settle that without measuring a browser, and a marker that widens the
+ *   table breaks a HARD constraint.
+ *   The carrier cell needs no measurement: «Перевозчик №2» is thirteen
+ *   characters at 14px against seven at 11px, so no plausible font metric makes
+ *   the marker the wider of the two. The cell is `whitespace-nowrap`, the marker
+ *   is a block beneath the name, and the column keeps the width it already had.
+ * It is real text inside the row, so the row reads «Перевозчик №2, дешевле, 310
+ * ₽, 4 дня, В пункт выдачи» — the cue is in the content, not in a colour.
+ * `line` (15.21:1) is the band's secondary tone, already carrying the term
+ * column and the caption; `paper` would set the marker level with the carrier
+ * name it hangs under. WITHIN THESE FOUR CONSTRAINTS A COLOUR HIGHLIGHT IS
+ * IMPOSSIBLE BY CONSTRUCTION — accent is barred and no other tone may be added —
+ * so the mark is a labelled one, not a tinted one. That is a real limit, not an
+ * oversight: if the panel should ever actually glow, it needs a fifth token and
+ * a decision to go with it.
  */
 const PREVIEW_ROWS = [
   { providerKey: "yataxi", price: "420 ₽", term: "2 дня", handover: "Курьером" },
@@ -395,6 +418,17 @@ function OffersPreview() {
     name: maskedCarrierName(row.providerKey),
   })).filter((row): row is typeof row & { name: string } => row.name !== undefined);
 
+  // DERIVED, never hand-placed: the marker follows whichever row is actually
+  // cheapest, so editing a figure above cannot leave «дешевле» pointing at the
+  // wrong one. Computed AFTER the mask filter, because a row whose provider key
+  // has no mask is dropped and must not win. `parseInt` stops at the space
+  // before «₽», which is why these stay plain strings.
+  const cheapestIndex = rows.reduce(
+    (best, row, index) =>
+      parseInt(row.price, 10) < parseInt(rows[best].price, 10) ? index : best,
+    0,
+  );
+
   return (
     // Full-bleed inside the card: the negative margins cancel <main>'s padding,
     // so the band spans the card edge to edge. Only the existing pair inverted —
@@ -412,8 +446,7 @@ function OffersPreview() {
       </h2>
 
       <p className="site-16 mt-4 max-w-2xl text-line">
-        Так выглядит расчёт одной посылки: цена, срок и способ получения от
-        каждого — в одном списке.
+        Так выглядит расчёт одной посылки: цена, срок и способ получения от каждого — в одном списке. У одного перевозчика бывает несколько тарифов, поэтому он встречается в списке не один раз.
       </p>
 
       <div className="mt-10 max-w-3xl">
@@ -470,7 +503,17 @@ function OffersPreview() {
                   key={`${row.providerKey}-${index}`}
                   className="border-b border-muted last:border-b-0"
                 >
-                  <td className="site-14 whitespace-nowrap px-2 py-3 sm:px-4">{row.name}</td>
+                  <td className="site-14 whitespace-nowrap px-2 py-3 sm:px-4">
+                    {row.name}
+                    {/* The «дешевле» marker rides in the CARRIER cell, under the
+                        masked name — see the block comment above the component
+                        for why this cell and not the price cell. Real text in
+                        the row, so a screen reader reads «Перевозчик №N,
+                        дешевле, …» and the cue is never visual-only. */}
+                    {index === cheapestIndex ? (
+                      <span className="site-11 block text-line">дешевле</span>
+                    ) : null}
+                  </td>
                   {/* Mono so the columns align down the panel — the utility
                       added in L4 finally has its consumer. */}
                   <td className="site-mono site-14 whitespace-nowrap px-2 py-3 sm:px-4">
@@ -496,12 +539,37 @@ function OffersPreview() {
   );
 }
 
+/** The four audience labels, verbatim, kept out of the markup like POINTS. */
+const AUDIENCE_LABELS = [
+  "Бренды",
+  "Интернет-магазины",
+  "Производственные компании",
+  "Фулфилмент-операторы",
+] as const;
+
+/** The three steps, verbatim and in order — the order is the content here. */
+const CONNECT_STEPS = [
+  "Посмотрите в ОСО, чем перевозчики отличаются на ваших направлениях, и решите, с кем заключать договор.",
+  "Заключите договор напрямую с перевозчиком.",
+  "Добавьте выданные им доступы в настройках ОСО — перевозчик появится в общем списке ваших перевозчиков.",
+] as const;
+
 /**
- * Two quiet sections after the dark block, both single paragraphs.
+ * Two quiet sections after the dark block.
  *
- * NOT grids. Two numbered grids in a row would make the page monotonous, and
- * these two are deliberately calmer than «ЧТО ВЫ ПОЛУЧАЕТЕ»: one widens the
- * audience, the other answers an objection.
+ * NEITHER IS A GRID. A second two-column grid after «ЧТО ВЫ ПОЛУЧАЕТЕ» would
+ * make the page monotonous; these two stay calmer — one widens the audience,
+ * the other answers an objection. The steps below ARE numbered, but they run in
+ * a single column and their numerals sit two steps below the value block's, so
+ * the device is quoted rather than repeated.
+ *
+ * BOTH LISTS ARE REAL LISTS. The steps are an <ol> because the order is the
+ * content — you cannot add credentials before the contract exists — and the
+ * audience is a <ul> because those four are peers. In the steps the visible
+ * 01–03 are `aria-hidden`: the <ol> already conveys position, so leaving them
+ * exposed would have a screen reader announce the number twice. The audience
+ * row carries no separator character at all — spacing does that job; see the
+ * comment at the list itself for what was measured.
  *
  * The second is SUBORDINATE to the first, achieved with rhythm and scale — a
  * tighter top margin binding it to what it answers, a narrower measure, and
@@ -527,8 +595,28 @@ function WhoItIsFor() {
       </h2>
 
       <p className="site-16 mt-6 max-w-3xl text-muted">
-        ОСО подходит всем, кто отправляет регулярно — неважно, откуда приходит заказ: с вашего сайта, из маркетплейса, из переписки в мессенджере или от оптового клиента. Бренды, интернет-магазины, производственные компании, фулфилмент-операторы. Отправления идут по вашим договорам с перевозчиками — а если договора пока нет, его заключают напрямую с перевозчиком, и он сразу становится вашим активом.
+        ОСО подходит всем, кто отправляет регулярно — неважно, откуда приходит заказ: с вашего сайта, из маркетплейса, из переписки в мессенджере или от оптового клиента. Отправления идут по вашим договорам с перевозчиками — а если договора пока нет, его заключают напрямую с перевозчиком, и он сразу становится вашим активом.
       </p>
+
+      {/* SPACE SEPARATES THESE, NOT A GLYPH — do not put the «·» back.
+          MEASURED on a narrow screen: a separator that belongs to the item it
+          precedes wraps WITH that item and hangs at the start of the next line,
+          which happened before «Производственные компании» and before
+          «Фулфилмент-операторы». On a wide screen the same glyph in `line` was
+          barely visible, so it was earning nothing and costing that. Deleting it
+          removes the defect and the three `aria-hidden` spans together.
+
+          `gap-x-8` is 32px against a 14px word space of roughly 4px — eight
+          times the gap inside «Производственные компании», so four labels read
+          as four items and not as a sentence with wide tracking. `gap-y-3`
+          keeps the rows apart once it does wrap. */}
+      <ul className="mt-6 flex max-w-3xl flex-wrap gap-x-8 gap-y-3">
+        {AUDIENCE_LABELS.map((label) => (
+          <li key={label} className="site-14 text-ink">
+            {label}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -546,8 +634,22 @@ function NoContractYet() {
         ЕСЛИ ДОГОВОРОВ С ПЕРЕВОЗЧИКАМИ ЕЩЁ НЕТ
       </h2>
 
+      <ol className="mt-4 max-w-2xl space-y-3">
+        {CONNECT_STEPS.map((step, index) => (
+          <li key={step} className="flex items-baseline gap-3">
+            <span
+              aria-hidden="true"
+              className="site-mono site-12 shrink-0 text-muted"
+            >
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="site-14 text-muted">{step}</span>
+          </li>
+        ))}
+      </ol>
+
       <p className="site-14 mt-4 max-w-2xl text-muted">
-        Сначала посмотрите в ОСО, чем перевозчики отличаются на ваших направлениях, и решите, с кем заключать договор. Договор заключается напрямую с перевозчиком. Перевозчик выдаёт доступы для интеграции, вы добавляете их в настройках ОСО, и он появляется в общем списке ваших перевозчиков. Начать можно с одного перевозчика, остальных подключить позже.
+        Начать можно с одного перевозчика, остальных подключить позже.
       </p>
     </section>
   );
