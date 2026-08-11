@@ -113,11 +113,14 @@ export default async function PublicHome() {
   }
 
   return (
-    // TOP PADDING IS DELIBERATELY ASYMMETRIC. It used to be py-28 sm:py-40 —
+    // TOP PADDING IS DELIBERATELY ASYMMETRIC, and it is the one thing kept from
+    // the arrangement that put the panel up here. It used to be py-28 sm:py-40 —
     // 160px above the h1 on top of the card's own margin and the header, which
     // pushed «Создать аккаунт» past the fold on a laptop. The bottom keeps the
     // old value: that space separates the hero from what follows and costs
-    // nothing, because nobody waits to scroll INTO it.
+    // nothing, because nobody waits to scroll INTO it. This is independent of
+    // where the offers panel lives — do not restore the symmetric padding along
+    // with the dark band.
     <main className="px-6 pb-28 pt-12 sm:px-10 sm:pb-40 sm:pt-16">
       {/* Broken at a chosen point rather than by text-balance. The last two
           words are joined by a non-breaking space so no width can strand a
@@ -128,38 +131,27 @@ export default async function PublicHome() {
         которые строят независимый канал&nbsp;продаж
       </h1>
 
-      {/* The h1 keeps the full measure and its chosen break; the SPLIT starts
-          below it, because the empty half was never beside the heading — it was
-          beside the paragraph and the action, whose measures are deliberately
-          narrow. Two columns from `lg` only: at 1152px of card the pair is
-          about 512px each, which the panel fits, and below that they stack in
-          source order — paragraph, action, panel. */}
-      <div className="mt-10 grid gap-x-12 gap-y-12 sm:mt-12 lg:grid-cols-2 lg:items-start">
-        <div>
-          <p className="site-16 max-w-2xl text-muted">
-            Все ваши перевозчики — в одном окне: сравнить условия, оформить отправление, отследить путь и увидеть, как каждый справляется на ваших отправлениях. Договоры и тарифы остаются вашими, деньги идут напрямую перевозчику, данные покупателей — только вам.
-          </p>
+      <p className="site-16 mt-10 max-w-2xl text-muted sm:mt-12">
+        Все ваши перевозчики — в одном окне: сравнить условия, оформить отправление, отследить путь и увидеть, как каждый справляется на ваших отправлениях. Договоры и тарифы остаются вашими, деньги идут напрямую перевозчику, данные покупателей — только вам.
+      </p>
 
-          <div className="mt-14 flex flex-wrap items-center gap-x-8 gap-y-4 sm:mt-16">
-            <Link
-              href="/register"
-              className="site-14 rounded-full bg-ink px-7 py-3.5 text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
-            >
-              Создать аккаунт
-            </Link>
-            {/* One action here; «Войти» lives in the header. The flex row stays for
-                the informational secondary link that will sit beside it once there
-                is a page to point at. Its arrow-link styling was removed with the
-                link rather than left behind as unused code — the pattern was:
-                site-14 group inline-flex items-center gap-2 text-accent, with the
-                «→» in an aria-hidden span that translates on group-hover. */}
-          </div>
-        </div>
-
-        <OffersPreview />
+      <div className="mt-14 flex flex-wrap items-center gap-x-8 gap-y-4 sm:mt-16">
+        <Link
+          href="/register"
+          className="site-14 rounded-full bg-ink px-7 py-3.5 text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+        >
+          Создать аккаунт
+        </Link>
+        {/* One action here; «Войти» lives in the header. The flex row stays for
+            the informational secondary link that will sit beside it once there
+            is a page to point at. Its arrow-link styling was removed with the
+            link rather than left behind as unused code — the pattern was:
+            site-14 group inline-flex items-center gap-2 text-accent, with the
+            «→» in an aria-hidden span that translates on group-hover. */}
       </div>
 
       <LogisticsValue />
+      <OffersPreview />
       <WhoItIsFor />
       <NoContractYet />
       <Prices />
@@ -360,10 +352,7 @@ function LogisticsValue() {
 
 /**
  * The one block that SHOWS the product rather than describing it: a mock of the
- * offers panel, rendered as a dark card inside the light first screen. It used
- * to be a full-bleed band lower down the page with its own eyebrow and heading;
- * both were deleted when it moved, because a hero already has an h1 and a second
- * heading beside it competes with the one that matters.
+ * offers panel, on a dark band inside the card.
  *
  * CARRIER NAMES ARE MASKED, read from the cabinet's own PROVIDER_SELLER_DISPLAY_NAMES
  * rather than written here — public carrier naming is on hold pending legal
@@ -449,19 +438,27 @@ function OffersPreview() {
   );
 
   return (
-    // A PLAIN <div>, not a <section>, and not by oversight. The section's
-    // accessible name came from a heading this slice deletes, and no new string
-    // may be invented to replace it — and an unnamed <section> is not exposed
-    // as a region by ARIA anyway, so the element was doing nothing but claiming
-    // to. `bg-ink text-paper` MUST travel together: several cells below carry no
-    // colour of their own and inherit it, so ink without paper would render them
-    // ink-on-ink. Only the existing pair inverted; no new colour.
-    <div className="rounded-lg bg-ink px-6 py-8 text-paper sm:px-8 sm:py-10">
-      <p className="site-16 max-w-2xl text-line">
+    // Full-bleed inside the card: the negative margins cancel <main>'s padding,
+    // so the band spans the card edge to edge. Only the existing pair inverted —
+    // ink ground, paper text. No new colour.
+    <section
+      aria-labelledby="offers-preview"
+      className="-mx-6 mt-24 bg-ink px-6 py-16 text-paper sm:-mx-10 sm:mt-32 sm:px-10 sm:py-20"
+    >
+      <p className="site-11 uppercase tracking-[0.18em] text-line">
+        ЧТО ВИДИТ ПРОДАВЕЦ
+      </p>
+
+      <h2 id="offers-preview" className="site-24 site-w-500 mt-4 max-w-3xl">
+        Один запрос — ответы всех ваших перевозчиков рядом
+      </h2>
+
+      <p className="site-16 mt-4 max-w-2xl text-line">
         Так выглядит расчёт одной посылки: цена, срок и способ получения от каждого — в одном списке. У одного перевозчика бывает несколько тарифов, поэтому он встречается в списке не один раз.
       </p>
 
-      {/* The scroll box is focusable ON PURPOSE. Without tabindex a keyboard
+      <div className="mt-10 max-w-3xl">
+        {/* The scroll box is focusable ON PURPOSE. Without tabindex a keyboard
             user in Firefox or Safari cannot scroll an overflow container that
             holds no focusable element, so on a genuinely narrow screen the last
             column would be unreachable. Its focus ring is `paper` rather than
@@ -479,10 +476,10 @@ function OffersPreview() {
             The caption's `id` went with them: a hook nothing points at is an
             invitation to rewire naming to it and bring the double announcement
             back. */}
-      <div
-        tabIndex={0}
-        className="mt-6 overflow-x-auto rounded border border-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
-      >
+        <div
+          tabIndex={0}
+          className="mt-3 overflow-x-auto rounded border border-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+        >
           <table className="w-full border-collapse text-left">
             {/* The example marker as the table's own caption: bound to the
                 figures structurally and sitting inside the panel's box, so a
@@ -545,7 +542,8 @@ function OffersPreview() {
             </tbody>
           </table>
         </div>
-    </div>
+      </div>
+    </section>
   );
 }
 
