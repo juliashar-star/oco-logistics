@@ -1,5 +1,6 @@
 import type { CarrierAdapter } from "./types";
 import {
+  cancelCdekOrder,
   confirmOffer as cdekConfirmOffer,
   getOffers as cdekGetOffers,
 } from "./cdek/client";
@@ -67,10 +68,6 @@ export type OrderAdapter = {
   getHandoverAct?: CarrierAdapter["getHandoverAct"];
 };
 
-const cdekCancelStub: CarrierAdapter["cancelOrder"] = async () => {
-  throw new Error("Оформление этой услуги ещё не реализовано");
-};
-
 export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
   "yataxi:next_day": {
     key: "yataxi:next_day",
@@ -130,7 +127,12 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // the whole CDEK list to its cheapest row.
     getOffers: cdekGetOffers,
     confirmOffer: cdekConfirmOffer,
-    cancelOrder: cdekCancelStub,
+    // THE FREE/PAID RULE HERE IS OURS, not the carrier's. CDEK has no
+    // cancel-info: nothing in its API will say what an undo would cost. So
+    // cancelCdekOrder draws the line from the status boundary in «Приложение 1»
+    // — DELETE while the goods have not reached the sender's warehouse, and
+    // refuse otherwise rather than fall through to the chargeable refusal.
+    cancelOrder: cancelCdekOrder,
   },
 };
 

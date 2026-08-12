@@ -3,11 +3,15 @@ import test from "node:test";
 
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
 import { ORDER_ADAPTER_SELLER_TITLES } from "../packages/core/src/carrier-adapter/order-adapter-seller-titles.ts";
-import { confirmOffer as cdekConfirmOffer } from "../packages/core/src/carrier-adapter/cdek/client.ts";
+import {
+  cancelCdekOrder,
+  confirmOffer as cdekConfirmOffer,
+} from "../packages/core/src/carrier-adapter/cdek/client.ts";
 import {
   cancelExpressOrder,
   confirmExpressOffer,
 } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
+import { yandexAdapter } from "../packages/core/src/carrier-adapter/yandex/adapter.ts";
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
   for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
@@ -135,11 +139,26 @@ test("cdek:delivery confirmOffer is the same function reference as the client ex
   const entry = ORDER_ADAPTERS["cdek:delivery"];
   assert.ok(entry);
   assert.equal(entry.confirmOffer, cdekConfirmOffer);
-  await assert.rejects(
-    () =>
-      entry.cancelOrder("cdek-uuid", /** @type {never} */ ({})),
-    (err) =>
-      err instanceof Error &&
-      err.message === "Оформление этой услуги ещё не реализовано",
-  );
+  // CDEK cancels for real now — the last stub is gone. Identity, matching the
+  // Express entries: cancelOrder needs no per-entry wrapper.
+  assert.equal(entry.cancelOrder, cancelCdekOrder);
+});
+
+test("no ORDER_ADAPTERS entry is left throwing the not-implemented stub", () => {
+  // IDENTITY, not typeof: a stub is a function too, so a typeof check could
+  // never fail for the reason this test is named after. Every entry must BE one
+  // of the three real implementations — a reintroduced stub, or a new adapter
+  // wired to one, is a value that appears in none of them.
+  const REAL_CANCELS = new Map([
+    [yandexAdapter.cancelOrder, "yandexAdapter.cancelOrder"],
+    [cancelExpressOrder, "cancelExpressOrder"],
+    [cancelCdekOrder, "cancelCdekOrder"],
+  ]);
+
+  for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
+    assert.ok(
+      REAL_CANCELS.has(entry.cancelOrder),
+      `${key}.cancelOrder is not one of the real implementations (${[...REAL_CANCELS.values()].join(", ")}) — a stub or an unwired adapter?`,
+    );
+  }
 });

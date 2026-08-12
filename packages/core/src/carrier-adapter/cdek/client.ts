@@ -1,4 +1,5 @@
 import type {
+  CarrierCancelOrderResult,
   CarrierConfirmResult,
   CarrierCreateOrderInput,
   CarrierCredentials,
@@ -20,6 +21,7 @@ import {
   resolveCdekCities,
 } from "./cities";
 import { cdekDeliveryMode } from "./delivery-mode";
+import { mapCdekCancelWindow } from "./map-cancel-window";
 import { mapCdekTariffsToOffers } from "./map-cdek-tariffs";
 import {
   acceptsHandout,
@@ -33,6 +35,7 @@ import {
 } from "./order-state";
 import {
   assertCdekCredentials,
+  cdekDelete,
   cdekGet,
   cdekPost,
   resolveBaseUrl,
@@ -447,6 +450,128 @@ export async function getOrderInfo(
   }
 
   return { ok: true, info };
+}
+
+/** Grep anchor: the timeline could not be read, so no cancellation was attempted. */
+const CDEK_CANCEL_WINDOW_UNKNOWN_LOG_MARKER =
+  "[cancelCdekOrder] cancel window unreadable";
+
+/**
+ * DELETE /v2/orders/{uuid} — CDEK's real cancellation, and only while it is
+ * still free.
+ *
+ * `providerOrderId` IS the CDEK uuid: confirmOffer returns entity.uuid as
+ * requestId and submit-order stores that in Shipment.providerOrderId.
+ *
+ * THE FREE/PAID RULE HERE IS OURS. CDEK offers nothing like Express's
+ * cancel-info — there is no endpoint that will tell us what an undo would cost.
+ * So the decision is drawn from the status boundary in «Приложение 1» instead
+ * (see map-cancel-window.ts), and the chargeable alternative,
+ * POST /v2/orders/{uuid}/refusal, is deliberately NOT called from here: it is a
+ * paid return, not a cancellation, and spending the seller's money is not a
+ * mapping decision.
+ */
+export async function cancelCdekOrder(
+  providerOrderId: string,
+  credentials: CarrierCredentials,
+): Promise<CarrierCancelOrderResult> {
+  const fetched = await fetchCdekOrderByUuid(
+    providerOrderId,
+    credentials,
+    "cancel order",
+  );
+  if (!fetched.ok) {
+    return fetched;
+  }
+
+  const entity =
+    fetched.body !== null && typeof fetched.body === "object"
+      ? (fetched.body as { entity?: unknown }).entity
+      : undefined;
+  const statuses =
+    entity !== null && typeof entity === "object"
+      ? (entity as { statuses?: unknown }).statuses
+      : undefined;
+
+  const window = mapCdekCancelWindow(statuses);
+
+  if (window === "not_free") {
+    return { ok: false, reason: "cancel_not_free" };
+  }
+  if (window === "unavailable") {
+    return { ok: false, reason: "cancel_unavailable" };
+  }
+  if (window === "unknown") {
+    // A FAULT, NOT A REASON. A live order always carries at least one readable
+    // status, so "unknown" does not mean «this order cannot be cancelled» — it
+    // means we could not read its timeline. Returning cancel_unavailable here
+    // would tell the seller something we do not know, and returning
+    // cancel_not_free would invent a charge. Throwing surfaces it as a failure,
+    // which is what it is.
+    console.error(
+      CDEK_CANCEL_WINDOW_UNKNOWN_LOG_MARKER,
+      JSON.stringify({ providerOrderId }),
+    );
+    throw new Error("CDEK cancel order failed: cancel window unreadable");
+  }
+
+  const creds = assertCdekCredentials(credentials);
+  const baseUrl = resolveBaseUrl("CDEK_BASE_URL");
+  // No body: the spec gives DELETE none, and inventing one would be inventing a
+  // contract.
+  const response = await cdekDelete(
+    baseUrl,
+    creds,
+    `/v2/orders/${encodeURIComponent(providerOrderId)}`,
+  );
+  const body = await readResponseBody(response);
+
+  if (response.status < 200 || response.status >= 300) {
+    // Exact code, never a prefix — same rule as the read above.
+    if (hasCdekErrorCode(body, "v2_entity_not_found")) {
+      return { ok: false, reason: "order_not_found" };
+    }
+    // Status only; never the body, and never the uuid.
+    throw new Error(`CDEK cancel order failed: HTTP ${response.status}`);
+  }
+
+  // 202 MEANS ACCEPTED, NOT CANCELLED. The spec answers both undo methods with
+  // 202 and the requests[] envelope; confirmation that the order actually
+  // reached REMOVED arrives through the existing status sync, which already
+  // maps REMOVED → CANCELED. So we do NOT poll here, and we do not reuse the
+  // status read at the top — that one described a moment before the delete.
+  const deleteState = readDeleteRequestState(body);
+
+  return {
+    ok: true,
+    result: { accepted: true, providerStatus: deleteState },
+  };
+}
+
+/**
+ * requests[] entry with type === "DELETE" → its `state` string, or "" when the
+ * envelope carries no readable one. Never throws: by this point the delete has
+ * been accepted, and failing to read a bookkeeping field must not undo that.
+ */
+function readDeleteRequestState(body: unknown): string {
+  if (body === null || typeof body !== "object") {
+    return "";
+  }
+  const requests = (body as { requests?: unknown }).requests;
+  if (!Array.isArray(requests)) {
+    return "";
+  }
+  for (const entry of requests) {
+    if (entry === null || typeof entry !== "object") {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    if (row.type !== "DELETE") {
+      continue;
+    }
+    return typeof row.state === "string" ? row.state.trim() : "";
+  }
+  return "";
 }
 
 /**
