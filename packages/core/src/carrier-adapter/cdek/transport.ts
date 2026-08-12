@@ -183,22 +183,41 @@ export async function fetchCdekToken(
   return promise;
 }
 
-export async function cdekPost(
+/**
+ * The one place a CDEK request is made: token, headers, auth mapping.
+ *
+ * `jsonBody` is a THREE-STATE argument, and the distinction matters on the
+ * wire. Omitted → no body and no Content-Type, which is what GET and DELETE
+ * send. Present → JSON.stringify'd with `Content-Type: application/json`.
+ * Passing `undefined` as the value still counts as present, and
+ * JSON.stringify(undefined) is undefined, so fetch sends no body — the exact
+ * behaviour cdekPost had before this was factored, pinned by a test.
+ *
+ * extraHeaders spread FIRST so Authorization and Content-Type always win: a
+ * caller must not be able to send someone else's token.
+ */
+async function cdekRequest(
+  method: "GET" | "POST" | "DELETE",
   baseUrl: string,
   creds: CdekCredentials,
-  path: string,
-  body: unknown,
-  extraHeaders?: Record<string, string>,
+  pathWithQuery: string,
+  extraHeaders: Record<string, string> | undefined,
+  jsonBody?: { value: unknown },
 ): Promise<Response> {
   const token = await fetchCdekToken(baseUrl, creds);
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      ...extraHeaders,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+  const response = await fetch(`${baseUrl}${pathWithQuery}`, {
+    method,
+    headers: jsonBody
+      ? {
+          ...extraHeaders,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        }
+      : {
+          ...extraHeaders,
+          Authorization: `Bearer ${token}`,
+        },
+    ...(jsonBody ? { body: JSON.stringify(jsonBody.value) } : {}),
   });
 
   if (response.status === 401 || response.status === 403) {
@@ -208,24 +227,40 @@ export async function cdekPost(
   return response;
 }
 
+export async function cdekPost(
+  baseUrl: string,
+  creds: CdekCredentials,
+  path: string,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
+  return cdekRequest("POST", baseUrl, creds, path, extraHeaders, {
+    value: body,
+  });
+}
+
 export async function cdekGet(
   baseUrl: string,
   creds: CdekCredentials,
   pathWithQuery: string,
   extraHeaders?: Record<string, string>,
 ): Promise<Response> {
-  const token = await fetchCdekToken(baseUrl, creds);
-  const response = await fetch(`${baseUrl}${pathWithQuery}`, {
-    method: "GET",
-    headers: {
-      ...extraHeaders,
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  return cdekRequest("GET", baseUrl, creds, pathWithQuery, extraHeaders);
+}
 
-  if (response.status === 401 || response.status === 403) {
-    throw new CdekAuthError(`CDEK auth failed: HTTP ${response.status}`);
-  }
-
-  return response;
+/**
+ * DELETE /v2/orders/{uuid} is CDEK's real cancellation — the one that deletes
+ * rather than the chargeable refusal. The spec gives it NO request body, hence
+ * no jsonBody here: sending one would be inventing a contract.
+ *
+ * This helper only issues the verb. Whether a given order may be deleted is a
+ * separate decision (see map-cancel-window.ts) and is not this function's job.
+ */
+export async function cdekDelete(
+  baseUrl: string,
+  creds: CdekCredentials,
+  pathWithQuery: string,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
+  return cdekRequest("DELETE", baseUrl, creds, pathWithQuery, extraHeaders);
 }
