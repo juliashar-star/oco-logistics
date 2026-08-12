@@ -14,6 +14,10 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "../types";
+import {
+  OCO_CANCEL_REQUESTED,
+  OCO_CANCEL_REQUESTED_TEXT_RU,
+} from "../cancel-event-codes";
 import { buildCdekLocation } from "./build-cdek-location";
 import { buildCdekOrderBody } from "./build-order-body";
 import {
@@ -456,6 +460,7 @@ export async function getOrderInfo(
 const CDEK_CANCEL_WINDOW_UNKNOWN_LOG_MARKER =
   "[cancelCdekOrder] cancel window unreadable";
 
+
 /**
  * DELETE /v2/orders/{uuid} — CDEK's real cancellation, and only while it is
  * still free.
@@ -542,9 +547,28 @@ export async function cancelCdekOrder(
   // status read at the top — that one described a moment before the delete.
   const deleteState = readDeleteRequestState(body);
 
+  // TWO VOCABULARIES SHARE THE WORD «ACCEPTED», AND THE COLUMN CANNOT TELL THEM
+  // APART. The envelope's request state is ACCEPTED («предварительная валидация
+  // пройдена, запрос принят»), and CDEK order status 0 is ALSO ACCEPTED
+  // («Принят») — which mapCdekStatusToShipmentStatus maps to CREATED. The route
+  // writes `reason ?? providerStatus` into TrackingEvent.statusCode, so
+  // returning only providerStatus put the bare word "ACCEPTED" in a status
+  // column, where it reads as an order status that never happened. Measured on
+  // the live run.
+  //
+  // So `reason` carries OUR namespaced code — the same shape as
+  // OCO_DELIVERY_DATE_CHANGED — and wins the statusCode slot. It cannot collide:
+  // mapCdekStatusToShipmentStatus returns null for anything outside «Приложение
+  // 1», so this event never moves Shipment.status. The measured envelope state
+  // STAYS in providerStatus, unreplaced, and is visible in rawResponse.
   return {
     ok: true,
-    result: { accepted: true, providerStatus: deleteState },
+    result: {
+      accepted: true,
+      providerStatus: deleteState,
+      reason: OCO_CANCEL_REQUESTED,
+      description: OCO_CANCEL_REQUESTED_TEXT_RU,
+    },
   };
 }
 

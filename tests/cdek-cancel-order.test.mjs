@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cancelCdekOrder } from "../packages/core/src/carrier-adapter/cdek/client.ts";
+import {
+  OCO_CANCEL_REQUESTED,
+  OCO_CANCEL_REQUESTED_TEXT_RU,
+} from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
+import { mapCdekStatusToShipmentStatus } from "../packages/core/src/carrier-adapter/cdek/map-status.ts";
 import { CdekAuthError } from "../packages/core/src/carrier-adapter/cdek/transport.ts";
+import { resolveCancelTrackingEvent } from "../apps/web/lib/shipments/cancel-tracking-event.ts";
+
+const CANCEL_DESCRIPTION_RU = OCO_CANCEL_REQUESTED_TEXT_RU;
 
 const BASE = "https://api.edu.cdek.test";
 const CREDS = { account: "acct", securePassword: "pw", contractType: "1" };
@@ -110,7 +118,7 @@ test(
 );
 
 test(
-  "no DELETE state in the envelope → providerStatus is ''",
+  "no DELETE state in the envelope → providerStatus is '' but the reason survives",
   withCdek(
     (method) => {
       if (method === "GET") return Response.json(statusesBody([["ACCEPTED", T0]]), { status: 200 });
@@ -120,9 +128,87 @@ test(
       const result = await cancelCdekOrder(UUID, CREDS);
       assert.equal(result.ok, true);
       assert.equal(result.result.providerStatus, "");
+      assert.equal(result.result.reason, OCO_CANCEL_REQUESTED);
+
+      // THE BLANK-EVENT GUARD MUST NOT FIRE for a cancellation we actually
+      // performed. resolveCancelTrackingEvent returns null only when there is
+      // no code at all; the namespaced reason is exactly what keeps a real row
+      // in the timeline when the envelope told us nothing.
+      const event = resolveCancelTrackingEvent(result.result);
+      assert.notEqual(event, null);
+      assert.equal(event.statusCode, OCO_CANCEL_REQUESTED);
+      assert.equal(event.statusText, CANCEL_DESCRIPTION_RU);
     },
   ),
 );
+
+// ── the vocabulary collision this slice removes ────────────────────────────
+
+test(
+  "success carries the namespaced reason and the Russian description",
+  withCdek(
+    (method) => {
+      if (method === "GET") return Response.json(statusesBody([["CREATED", T0]]), { status: 200 });
+      return Response.json(
+        { requests: [{ type: "DELETE", state: "ACCEPTED" }] },
+        { status: 202 },
+      );
+    },
+    async () => {
+      const result = await cancelCdekOrder(UUID, CREDS);
+      assert.equal(result.result.reason, "OCO_CANCEL_REQUESTED");
+      assert.equal(result.result.description, CANCEL_DESCRIPTION_RU);
+      // The measured envelope state is KEPT, not replaced by our own word.
+      assert.equal(result.result.providerStatus, "ACCEPTED");
+    },
+  ),
+);
+
+test(
+  "the event written for a success is OUR code, never the bare envelope ACCEPTED",
+  withCdek(
+    (method) => {
+      if (method === "GET") return Response.json(statusesBody([["CREATED", T0]]), { status: 200 });
+      return Response.json(
+        { requests: [{ type: "DELETE", state: "ACCEPTED" }] },
+        { status: 202 },
+      );
+    },
+    async () => {
+      const result = await cancelCdekOrder(UUID, CREDS);
+      const event = resolveCancelTrackingEvent(result.result);
+      // This is the defect: "ACCEPTED" is also CDEK order status 0 «Принят»,
+      // so a bare providerStatus here read as an order status that never
+      // happened.
+      assert.notEqual(event.statusCode, "ACCEPTED");
+      assert.equal(event.statusCode, OCO_CANCEL_REQUESTED);
+      assert.equal(event.statusText, CANCEL_DESCRIPTION_RU);
+    },
+  ),
+);
+
+test("the seller-facing cancellation wording and code, character for character", () => {
+  // THE ONE PLACE THE LITERALS ARE WRITTEN OUT. Everywhere else — here and in
+  // the Express file — the tests import the constants and compare against them,
+  // which pins that producers agree but pins NOTHING about the wording itself:
+  // changing the sentence, or emptying it, would leave all of those green.
+  // This test is what makes the seller-facing text impossible to change
+  // silently. Keep it as the only copy: repeating the literal in other tests
+  // would give the next editor several places to update and one to forget.
+  assert.equal(OCO_CANCEL_REQUESTED, "OCO_CANCEL_REQUESTED");
+  assert.equal(
+    OCO_CANCEL_REQUESTED_TEXT_RU,
+    "Запрос на отмену отправлен перевозчику. Подтверждение придёт со следующим обновлением статуса.",
+  );
+});
+
+test("OCO_CANCEL_REQUESTED is outside «Приложение 1», so it never moves Shipment.status", () => {
+  // The namespacing is only worth anything if the status mapper does not know
+  // it — otherwise writing the event would change the shipment's status.
+  assert.equal(mapCdekStatusToShipmentStatus(OCO_CANCEL_REQUESTED), null);
+  // ...while the colliding word still maps, which is why it had to be avoided.
+  assert.equal(mapCdekStatusToShipmentStatus("ACCEPTED"), "CREATED");
+});
 
 // ── refusals: DELETE must never be issued ──────────────────────────────────
 

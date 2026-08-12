@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cancelExpressOrder } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
+import {
+  OCO_CANCEL_REQUESTED,
+  OCO_CANCEL_REQUESTED_TEXT_RU,
+} from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
 import { YandexAuthError } from "../packages/core/src/carrier-adapter/yandex/transport.ts";
+import { resolveCancelTrackingEvent } from "../apps/web/lib/shipments/cancel-tracking-event.ts";
 
 const CLAIM_ID = "claim-abc-123";
 const CREDS = { platformStationId: "station-1", token: "t" };
@@ -128,6 +133,15 @@ test(
       assert.equal(result.ok, true);
       assert.equal(result.result.description, "Отменено");
       assert.notEqual(result.result.description, "cancelled");
+
+      // THE NORMAL BRANCH CARRIES NO REASON, pinned so the asymmetry with the
+      // fallback stays deliberate. `reason` wins the statusCode slot in the
+      // route, so setting one here would bury the carrier's own resulting
+      // status — which, unlike CDEK's ACCEPTED, collides with nothing.
+      assert.equal(result.result.reason, undefined);
+      const event = resolveCancelTrackingEvent(result.result);
+      assert.equal(event.statusCode, "cancelled");
+      assert.equal(event.statusText, "Отменено");
     },
   ),
 );
@@ -244,9 +258,20 @@ test(
       assert.equal(result.ok, true);
       assert.equal(result.result.accepted, true);
       assert.equal(result.result.providerStatus, "");
-      assert.equal(result.result.description, undefined);
       // Exactly one cancel — the failed read must not trigger a retry.
       assert.equal(calls.filter((c) => isCancel(c.url)).length, 1);
+
+      // THE CANCELLATION HAPPENED, so the timeline must show it. Without a
+      // reason the route composes an empty statusCode and
+      // resolveCancelTrackingEvent drops the row entirely — the claim would be
+      // cancelled with nothing recorded against the shipment.
+      assert.equal(result.result.reason, OCO_CANCEL_REQUESTED);
+      assert.equal(result.result.description, OCO_CANCEL_REQUESTED_TEXT_RU);
+
+      const event = resolveCancelTrackingEvent(result.result);
+      assert.notEqual(event, null);
+      assert.equal(event.statusCode, OCO_CANCEL_REQUESTED);
+      assert.equal(event.statusText, OCO_CANCEL_REQUESTED_TEXT_RU);
     },
   ),
 );

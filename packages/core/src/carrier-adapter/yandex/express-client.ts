@@ -14,6 +14,10 @@ import type {
   CarrierOrderItem,
 } from "@oco/core/carrier-adapter/types";
 import {
+  OCO_CANCEL_REQUESTED,
+  OCO_CANCEL_REQUESTED_TEXT_RU,
+} from "../cancel-event-codes";
+import {
   EXPRESS_TAXI_CLASS_LIMITS,
   type ExpressTaxiClass,
   type ExpressTaxiClassLimits,
@@ -1057,6 +1061,13 @@ export async function cancelExpressOrder(
     });
     const status = after.status.trim();
     if (status) {
+      // NO `reason` ON THIS BRANCH, and the asymmetry with the fallback below is
+      // deliberate. Here providerStatus carries the carrier's OWN resulting
+      // status — `cancelled` or `cancelled_with_payment` — which is strictly
+      // more informative than a code of ours, and it collides with nothing: the
+      // claims vocabulary has no second meaning for those words the way CDEK's
+      // ACCEPTED does. Setting a reason here would win the statusCode slot in
+      // the route and hide the carrier's answer behind our own.
       const description = claimStatusTextRu(status);
       return {
         ok: true,
@@ -1079,6 +1090,23 @@ export async function cancelExpressOrder(
     );
   }
 
-  // The type's own docblock sanctions "" for «the provider returned none».
-  return { ok: true, result: { accepted: true, providerStatus: "" } };
+  // The type's own docblock sanctions "" for «the provider returned none», and
+  // providerStatus stays "" because we genuinely have no carrier status here.
+  //
+  // BUT THE EVENT MUST STILL BE WRITEABLE. The route composes
+  // `reason ?? providerStatus` into TrackingEvent.statusCode, and
+  // resolveCancelTrackingEvent drops a row with no code at all — so without a
+  // reason this branch would cancel the claim successfully and leave nothing in
+  // the seller's timeline. The cancellation happened; the timeline must say so.
+  // Same neutral code and wording CDEK uses: both mean «the request was sent,
+  // confirmation follows», and neither claims the order is cancelled.
+  return {
+    ok: true,
+    result: {
+      accepted: true,
+      providerStatus: "",
+      reason: OCO_CANCEL_REQUESTED,
+      description: OCO_CANCEL_REQUESTED_TEXT_RU,
+    },
+  };
 }
