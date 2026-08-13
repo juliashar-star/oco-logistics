@@ -20,6 +20,7 @@ const EXPECTED_SHIPMENT_LIST_KEYS = [
   "isAnonymized",
   "providerKey",
   "orderAdapterKey",
+  "hasCarrierOrder",
   "confirmWarnings",
   "carrier",
 ];
@@ -41,6 +42,7 @@ const SAMPLE_ROW = {
   isAnonymized: false,
   providerKey: "yataxi",
   orderAdapterKey: "yataxi:express",
+  providerOrderId: "req-abc-udp",
   confirmWarnings: /** @type {const} */ ([
     "REQUIREMENT_UNMET",
     "ADDRESS_NOT_FOUND",
@@ -75,6 +77,33 @@ test("confirmWarnings are plain string codes, not objects", () => {
 test("empty confirmWarnings stays an empty array", () => {
   const item = toShipmentListItem({ ...SAMPLE_ROW, confirmWarnings: [] });
   assert.deepEqual(item.confirmWarnings, []);
+});
+
+test("hasCarrierOrder is derived, and providerOrderId NEVER crosses the boundary", () => {
+  const item = toShipmentListItem(SAMPLE_ROW);
+  assert.equal(item.hasCarrierOrder, true);
+  // The id itself must not appear anywhere on the wire — not as a field, and
+  // not as a value hidden inside another one.
+  assert.equal("providerOrderId" in item, false);
+  assert.equal(JSON.stringify(item).includes("req-abc-udp"), false);
+});
+
+test("hasCarrierOrder follows the same blank rule as the cancel route", () => {
+  // The route's first precondition is `== null || trim() === ""`. These four
+  // must agree with it exactly, or the control and the server disagree about
+  // what «exists at the carrier» means.
+  for (const [label, providerOrderId, expected] of [
+    ["a real id", "req-abc-udp", true],
+    ["null", null, false],
+    ["empty string", "", false],
+    ["whitespace only", "   ", false],
+  ]) {
+    assert.equal(
+      toShipmentListItem({ ...SAMPLE_ROW, providerOrderId }).hasCarrierOrder,
+      expected,
+      label,
+    );
+  }
 });
 
 test("carrier is name-only", () => {

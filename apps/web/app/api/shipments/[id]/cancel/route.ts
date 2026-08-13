@@ -10,8 +10,7 @@ import {
   carrierNotConnectedMessage,
 } from "@/lib/shipments/carrier-connection-messages";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
-
-const TERMINAL_STATUSES = ["DELIVERED", "RETURNED", "CANCELED"] as const;
+import { isTerminalShipmentStatus } from "@/lib/shipments/terminal-shipment-statuses";
 
 export const POST = withAuth<{ id: string }>(
   async (_request, user, { params }) => {
@@ -47,9 +46,9 @@ export const POST = withAuth<{ id: string }>(
       );
     }
 
-    if (
-      (TERMINAL_STATUSES as readonly string[]).includes(row.status)
-    ) {
+    // Shared with shouldShowCancelControl so the button and this refusal cannot
+    // disagree about what «finished» means.
+    if (isTerminalShipmentStatus(row.status)) {
       return NextResponse.json(
         { error: "Заказ уже завершён" },
         { status: 409 },
