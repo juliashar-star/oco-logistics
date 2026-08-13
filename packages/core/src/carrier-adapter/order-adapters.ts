@@ -1,5 +1,11 @@
 import type { CarrierAdapter } from "./types";
 import {
+  FREE_CANCEL_BOUNDARY_UNKNOWN,
+  FREE_CANCEL_UNTIL_COURIER_PICKUP,
+  FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
+  type FreeCancelBoundary,
+} from "./free-cancel-boundaries";
+import {
   cancelCdekOrder,
   confirmOffer as cdekConfirmOffer,
   getOffers as cdekGetOffers,
@@ -52,6 +58,17 @@ export type OrderAdapter = {
    * documents no thermal / temperature / insulated-bag option at all.
    */
   supportsThermalBag?: boolean;
+  /**
+   * When free cancellation stops being possible for this SERVICE, as a neutral
+   * key — the words a seller reads are built in the UI layer, like
+   * supportsThermalBag and «без термосумки».
+   *
+   * Optional in the type, like the two fields above, but a consistency test
+   * asserts the KEY IS PRESENT on every entry: the resolver defaults an absent
+   * one to "unknown", so a new carrier that forgot it would quietly ship the
+   * vaguest warning instead of the true one, and nothing would say so.
+   */
+  freeCancelBoundary?: FreeCancelBoundary;
   getOffers: CarrierAdapter["getOffers"];
   confirmOffer: CarrierAdapter["confirmOffer"];
   cancelOrder: CarrierAdapter["cancelOrder"];
@@ -76,6 +93,12 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // No supportsThermalBag — other-day (request/*) documents no thermal
     // option (method index + create/calculate bodies). Marked on the card
     // when the seller asked for a bag; not hidden from the list.
+    //
+    // NOT MEASURED, and set explicitly rather than left absent. The request/*
+    // documentation names no point at which cancelling starts costing money,
+    // and we have run no probe for it — so the seller is told the boundary is
+    // unknown instead of being left to assume the Express rule applies.
+    freeCancelBoundary: FREE_CANCEL_BOUNDARY_UNKNOWN,
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
@@ -100,6 +123,10 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // reason cancelExpressOrder is conservative rather than the reason there is
     // no cancel: it asks cancel-info first and refuses anything but "free".
     cancelOrder: cancelExpressOrder,
+    // The same rule cancelExpressOrder enforces, said to the seller in advance:
+    // claims/cancel-info answers "free" only until the courier reaches the
+    // sender, and after that ОСО refuses rather than spend their money.
+    freeCancelBoundary: FREE_CANCEL_UNTIL_COURIER_PICKUP,
     // No generateLabels / getHandoverAct — Express claims/* has neither.
   },
   "yataxi:courier": {
@@ -116,6 +143,7 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
       confirmExpressOffer(offer, input, credentials, "courier"),
     // Same free-only rule as express — see the comment on that entry.
     cancelOrder: cancelExpressOrder,
+    freeCancelBoundary: FREE_CANCEL_UNTIL_COURIER_PICKUP,
   },
   "cdek:delivery": {
     key: "cdek:delivery",
@@ -133,6 +161,9 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // — DELETE while the goods have not reached the sender's warehouse, and
     // refuse otherwise rather than fall through to the chargeable refusal.
     cancelOrder: cancelCdekOrder,
+    // The «Приложение 1» boundary cancelCdekOrder already enforces, told to the
+    // seller before they commit rather than discovered when the button refuses.
+    freeCancelBoundary: FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
   },
 };
 

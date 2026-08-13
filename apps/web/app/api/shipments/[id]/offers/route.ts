@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { FREE_CANCEL_BOUNDARY_UNKNOWN } from "@oco/core/carrier-adapter/free-cancel-boundaries";
 import { listOffersForOrderAdapters } from "@oco/core/carrier-adapter/list-offers-for-order-adapters";
 import {
   ORDER_ADAPTERS,
@@ -23,6 +24,19 @@ function resolveOfferSupportsThermalBag(
   adapterKey: string | undefined,
 ): boolean {
   return resolveOrderAdapter(adapterKey).supportsThermalBag === true;
+}
+
+function resolveOfferFreeCancelBoundary(
+  adapterKey: string | undefined,
+): string {
+  // Absent → "unknown", never silence. An entry with no boundary is a carrier
+  // whose rule nobody has established, and the vaguest warning is the honest
+  // one. order-adapters.test.mjs asserts the key is present on every entry, so
+  // this default is a runtime safety net, not the intended path.
+  return (
+    resolveOrderAdapter(adapterKey).freeCancelBoundary ??
+    FREE_CANCEL_BOUNDARY_UNKNOWN
+  );
 }
 
 function resolveOfferCarrierName(adapterKey: string | undefined): string {
@@ -237,6 +251,7 @@ export const POST = withAuth<{ id: string }>(
             resolveOfferServiceTitle,
             resolveOfferSupportsThermalBag,
             resolveOfferCarrierName,
+            resolveOfferFreeCancelBoundary,
           ),
         );
       }
@@ -256,6 +271,7 @@ export const POST = withAuth<{ id: string }>(
             resolveOfferServiceTitle,
             resolveOfferSupportsThermalBag,
             resolveOfferCarrierName,
+            resolveOfferFreeCancelBoundary,
           ),
         );
       }

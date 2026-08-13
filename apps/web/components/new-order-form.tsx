@@ -43,6 +43,7 @@ import {
 import { confirmWarningMessage } from "@/lib/shipments/confirm-warning-message";
 import { parseSubmitConfirmWarnings } from "@/lib/shipments/parse-submit-confirm-warnings";
 import { parseSubmitSuccessLabelFields } from "@/lib/shipments/parse-submit-success-label-fields";
+import { offerFreeCancelNote } from "@/lib/shipments/offer-free-cancel-note";
 import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offer-lacks-thermal-bag";
 import type { CarrierConfirmWarning } from "@oco/core/carrier-adapter/types";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
@@ -1386,6 +1387,13 @@ export function NewOrderForm() {
                       без термосумки
                     </div>
                   ) : null}
+                  {/* UNCONDITIONAL, unlike the two lines above — see
+                      offerFreeCancelNote. The order is created by this very
+                      press, so the terms have to be here, and a card without
+                      the line would read as a promise of freer cancellation. */}
+                  <div className="mt-1 text-xs text-slate-500">
+                    {offerFreeCancelNote(offer.freeCancelBoundary)}
+                  </div>
                 </button>
               );
             })}

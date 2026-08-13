@@ -14,6 +14,7 @@
     "./carrier-adapter/carrier-contour": "./src/carrier-adapter/carrier-contour.ts",
     "./carrier-adapter/errors": "./src/carrier-adapter/errors.ts",
     "./carrier-adapter/cancel-event-codes": "./src/carrier-adapter/cancel-event-codes.ts",
+    "./carrier-adapter/free-cancel-boundaries": "./src/carrier-adapter/free-cancel-boundaries.ts",
     "./carrier-adapter/pickup-point-adapters": "./src/carrier-adapter/pickup-point-adapters.ts",
     "./carrier-adapter/verify-credentials-adapters": "./src/carrier-adapter/verify-credentials-adapters.ts",
     "./carrier-adapter/status-sync-adapters": "./src/carrier-adapter/status-sync-adapters.ts",

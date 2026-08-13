@@ -12,6 +12,17 @@ import {
   confirmExpressOffer,
 } from "../packages/core/src/carrier-adapter/yandex/express-client.ts";
 import { yandexAdapter } from "../packages/core/src/carrier-adapter/yandex/adapter.ts";
+import {
+  FREE_CANCEL_BOUNDARY_UNKNOWN,
+  FREE_CANCEL_UNTIL_COURIER_PICKUP,
+  FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
+} from "../packages/core/src/carrier-adapter/free-cancel-boundaries.ts";
+
+const KNOWN_FREE_CANCEL_BOUNDARIES = new Set([
+  FREE_CANCEL_UNTIL_COURIER_PICKUP,
+  FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
+  FREE_CANCEL_BOUNDARY_UNKNOWN,
+]);
 
 test("every ORDER_ADAPTERS key starts with its entry's providerKey and a colon", () => {
   for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
@@ -133,6 +144,55 @@ test("supportsThermalBag true on express/courier; absent on next_day", () => {
     ORDER_ADAPTERS["yataxi:next_day"].supportsThermalBag,
     undefined,
   );
+});
+
+test("every ORDER_ADAPTERS entry SETS freeCancelBoundary", () => {
+  // KEY PRESENCE, not the resolved value. The route defaults an absent boundary
+  // to "unknown", so asserting the resolved string would pass for an entry that
+  // never set one — the exact drift this test exists to catch. A new carrier
+  // must state its cancellation terms, even if the statement is «unknown»,
+  // because the card shows a sentence for every offer either way.
+  for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
+    assert.ok(
+      Object.hasOwn(entry, "freeCancelBoundary"),
+      `${key} must set freeCancelBoundary`,
+    );
+    assert.ok(
+      KNOWN_FREE_CANCEL_BOUNDARIES.has(entry.freeCancelBoundary),
+      `${key} has an unknown boundary value: ${entry.freeCancelBoundary}`,
+    );
+  }
+});
+
+test("the boundaries the four entries carry today", () => {
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:express"].freeCancelBoundary,
+    FREE_CANCEL_UNTIL_COURIER_PICKUP,
+  );
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:courier"].freeCancelBoundary,
+    FREE_CANCEL_UNTIL_COURIER_PICKUP,
+  );
+  assert.equal(
+    ORDER_ADAPTERS["cdek:delivery"].freeCancelBoundary,
+    FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
+  );
+  // Set on purpose, not forgotten: request/* documents no boundary and we have
+  // measured none.
+  assert.equal(
+    ORDER_ADAPTERS["yataxi:next_day"].freeCancelBoundary,
+    FREE_CANCEL_BOUNDARY_UNKNOWN,
+  );
+});
+
+test("no entry stores seller-facing wording instead of a key", () => {
+  for (const [key, entry] of Object.entries(ORDER_ADAPTERS)) {
+    assert.doesNotMatch(
+      entry.freeCancelBoundary,
+      /[А-Яа-яЁё]/,
+      `${key} stores Russian text where a key belongs`,
+    );
+  }
 });
 
 test("cdek:delivery confirmOffer is the same function reference as the client export; cancel stays stub", async () => {

@@ -32,6 +32,13 @@ export type OfferDto = {
    * itself never goes on the wire.
    */
   carrierName: string;
+  /**
+   * Neutral key for when free cancellation stops being possible.
+   * Resolved from the registry by adapterKey (same path as serviceTitle) —
+   * the browser must not know which adapter keys support what. A KEY, not a
+   * sentence: the wording is the UI layer's (offerFreeCancelNote).
+   */
+  freeCancelBoundary: string;
 };
 
 export type OffersResponse = {
@@ -52,6 +59,10 @@ export type ResolveOfferCarrierName = (
   adapterKey: string | undefined,
 ) => string;
 
+export type ResolveOfferFreeCancelBoundary = (
+  adapterKey: string | undefined,
+) => string;
+
 /**
  * Boundary map: CarrierOffersResult → browser-safe DTO.
  * Fields named explicitly — never `{ ...offer }` — so rawOffer cannot leak.
@@ -64,6 +75,7 @@ export function toOffersResponse(
   resolveServiceTitle: ResolveOfferServiceTitle,
   resolveSupportsThermalBag: ResolveOfferSupportsThermalBag,
   resolveCarrierName: ResolveOfferCarrierName,
+  resolveFreeCancelBoundary: ResolveOfferFreeCancelBoundary,
 ): OffersResponse {
   if (!result.ok) {
     return { ok: true, status: "no_delivery_options", offers: [] };
@@ -87,6 +99,7 @@ export function toOffersResponse(
       priceIsEstimate: offer.priceIsEstimate === true,
       serviceName: offer.serviceName ?? "",
       carrierName: resolveCarrierName(offer.adapterKey),
+      freeCancelBoundary: resolveFreeCancelBoundary(offer.adapterKey),
     })),
   };
 }

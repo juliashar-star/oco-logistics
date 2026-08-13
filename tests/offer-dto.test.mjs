@@ -18,6 +18,7 @@ const EXPECTED_OFFER_KEYS = [
   "priceIsEstimate",
   "serviceName",
   "carrierName",
+  "freeCancelBoundary",
 ];
 
 const SAMPLE_OFFER = {
@@ -63,12 +64,24 @@ function fakeResolveCarrierName(adapterKey) {
   return "Перевозчик №1";
 }
 
+/** Fake resolver — a neutral key, never a sentence and never a carrier name. */
+function fakeResolveFreeCancelBoundary(adapterKey) {
+  if (String(adapterKey).startsWith("cdek:")) {
+    return "until_warehouse_intake";
+  }
+  if (adapterKey === "yataxi:express" || adapterKey === "yataxi:courier") {
+    return "until_courier_pickup";
+  }
+  return "unknown";
+}
+
 function mapOffers(result) {
   return toOffersResponse(
     result,
     fakeResolveServiceTitle,
     fakeResolveSupportsThermalBag,
     fakeResolveCarrierName,
+    fakeResolveFreeCancelBoundary,
   );
 }
 
@@ -151,6 +164,31 @@ test("supportsThermalBag comes from the resolver; adapterKey stays off the wire"
   assert.equal(response.offers[0].supportsThermalBag, false);
   assert.equal(response.offers[1].supportsThermalBag, true);
   assert.equal("adapterKey" in response.offers[0], false);
+});
+
+test("freeCancelBoundary comes from the resolver; adapterKey stays off the wire", () => {
+  const nextDay = { ...SAMPLE_OFFER, offerId: "a", adapterKey: "yataxi:next_day" };
+  const express = { ...SAMPLE_OFFER, offerId: "b", adapterKey: "yataxi:express" };
+  const cdek = { ...SAMPLE_OFFER, offerId: "c", adapterKey: "cdek:delivery" };
+
+  const response = mapOffers({ ok: true, offers: [nextDay, express, cdek] });
+
+  assert.equal(response.offers[0].freeCancelBoundary, "unknown");
+  assert.equal(response.offers[1].freeCancelBoundary, "until_courier_pickup");
+  assert.equal(response.offers[2].freeCancelBoundary, "until_warehouse_intake");
+  assert.equal("adapterKey" in response.offers[0], false);
+});
+
+test("the boundary on the wire is a key, never the seller-facing sentence", () => {
+  // The DTO carries a code and the wording is built in the UI layer — the same
+  // split as supportsThermalBag / «без термосумки». A Russian sentence here
+  // would mean the server had started deciding what the card says.
+  const response = mapOffers({ ok: true, offers: [SAMPLE_OFFER] });
+  const boundary = response.offers[0].freeCancelBoundary;
+
+  assert.equal(typeof boundary, "string");
+  assert.doesNotMatch(boundary, /[А-Яа-яЁё]/);
+  assert.doesNotMatch(boundary, /\s/);
 });
 
 test("Yandex-shaped offer: day fields absent → \"\", estimate absent → false", () => {
