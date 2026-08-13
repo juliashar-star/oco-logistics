@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
+import {
+  carrierAuthErrorMessage,
+  carrierNotConnectedMessage,
+} from "@/lib/shipments/carrier-connection-messages";
 import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
 import type { CarrierOffer } from "@oco/core/carrier-adapter/types";
 import { withAuth } from "@/lib/auth/with-auth";
@@ -164,7 +168,7 @@ export const POST = withAuth<{ id: string }>(
       );
       if (!credsResult.ok) {
         return NextResponse.json(
-          { error: "Яндекс Доставка не подключена" },
+          { error: carrierNotConnectedMessage(orderAdapter.providerKey) },
           { status: 400 },
         );
       }
@@ -286,10 +290,7 @@ export const POST = withAuth<{ id: string }>(
         }
         if (result.reason === "auth") {
           return NextResponse.json(
-            {
-              error:
-                "Не удалось авторизоваться в Яндекс Доставке. Проверьте подключение.",
-            },
+            { error: carrierAuthErrorMessage(orderAdapter.providerKey) },
             { status: 400 },
           );
         }
@@ -311,11 +312,10 @@ export const POST = withAuth<{ id: string }>(
       );
     } catch (error) {
       if (error instanceof CarrierAuthError) {
+        // Named from the adapter actually called — CarrierAuthError is the base
+        // of both YandexAuthError and CdekAuthError.
         return NextResponse.json(
-          {
-            error:
-              "Не удалось авторизоваться в Яндекс Доставке. Проверьте подключение.",
-          },
+          { error: carrierAuthErrorMessage(orderAdapter.providerKey) },
           { status: 400 },
         );
       }

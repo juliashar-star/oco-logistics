@@ -5,6 +5,10 @@ import { resolveOrderAdapterStrict } from "@oco/core/carrier-adapter/order-adapt
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { resolveCancelTrackingEvent } from "@/lib/shipments/cancel-tracking-event";
+import {
+  carrierAuthErrorMessage,
+  carrierNotConnectedMessage,
+} from "@/lib/shipments/carrier-connection-messages";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 
 const TERMINAL_STATUSES = ["DELIVERED", "RETURNED", "CANCELED"] as const;
@@ -83,7 +87,7 @@ export const POST = withAuth<{ id: string }>(
       );
       if (!credsResult.ok) {
         return NextResponse.json(
-          { error: "Яндекс Доставка не подключена" },
+          { error: carrierNotConnectedMessage(orderAdapter.providerKey) },
           { status: 400 },
         );
       }
@@ -206,11 +210,11 @@ export const POST = withAuth<{ id: string }>(
       });
     } catch (error) {
       if (error instanceof CarrierAuthError) {
+        // Named from the adapter we actually called: CarrierAuthError is the
+        // base of both YandexAuthError and CdekAuthError, so a hardcoded name
+        // told half the sellers to check a connection they do not have.
         return NextResponse.json(
-          {
-            error:
-              "Не удалось авторизоваться в Яндекс Доставке. Проверьте подключение.",
-          },
+          { error: carrierAuthErrorMessage(orderAdapter.providerKey) },
           { status: 400 },
         );
       }
