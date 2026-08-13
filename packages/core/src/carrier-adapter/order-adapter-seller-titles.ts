@@ -27,7 +27,22 @@ export function orderAdapterSellerTitle(
   if (adapterKey == null || adapterKey === "") {
     return ORDER_ADAPTER_SELLER_TITLES[DEFAULT_ORDER_ADAPTER_KEY]!;
   }
-  const found = ORDER_ADAPTER_SELLER_TITLES[adapterKey];
+  // OWN keys only. A plain index walks the prototype chain, so "constructor",
+  // "toString" and friends resolved to a truthy Object.prototype member, the
+  // `=== undefined` check below never fired, and this returned a function where
+  // a title belongs. Same guard as getOrderAdapter.
+  // .call, not Object.hasOwn: this file ships in the browser bundle, and a
+  // missing ES2022 method (Safari 15.4+) is a TypeError that kills the bundle,
+  // not a degraded lookup — so the older form costs nothing and risks nothing.
+  // Server code keeps Object.hasOwn (order-adapters.ts), client code uses .call
+  // (pickup-point-adapters.ts, verify-credentials-adapters.ts): the repo's own
+  // split, not a mixture.
+  const found = Object.prototype.hasOwnProperty.call(
+    ORDER_ADAPTER_SELLER_TITLES,
+    adapterKey,
+  )
+    ? ORDER_ADAPTER_SELLER_TITLES[adapterKey]
+    : undefined;
   if (found === undefined) {
     console.error(
       "[order-adapter-seller-titles] UNKNOWN_ORDER_ADAPTER_KEY",

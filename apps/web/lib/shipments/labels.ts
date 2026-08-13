@@ -34,5 +34,10 @@ export function formatReturnReason(code: string | null | undefined): string {
     return "";
   }
   const trimmed = code.trim();
-  return REASON_LABELS[trimmed] ?? trimmed;
+  // OWN keys only: an unguarded index returned an Object.prototype member for
+  // "constructor" / "__proto__", the `?? trimmed` fallback never fired, and it
+  // reached both the shipments table and the CSV export.
+  return Object.prototype.hasOwnProperty.call(REASON_LABELS, trimmed)
+    ? REASON_LABELS[trimmed]
+    : trimmed;
 }

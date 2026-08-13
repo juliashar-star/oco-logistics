@@ -19,7 +19,14 @@ export const PROVIDER_SELLER_DISPLAY_NAMES: Readonly<Record<string, string>> = {
 export function providerSellerDisplayName(
   providerKey: string,
 ): string | undefined {
-  const masked = PROVIDER_SELLER_DISPLAY_NAMES[providerKey];
+  // OWN keys only. Unguarded, a prototype name came back as a truthy member and
+  // callers rendered it where a masked carrier name belongs.
+  const masked = Object.prototype.hasOwnProperty.call(
+    PROVIDER_SELLER_DISPLAY_NAMES,
+    providerKey,
+  )
+    ? PROVIDER_SELLER_DISPLAY_NAMES[providerKey]
+    : undefined;
   if (masked !== undefined) return masked;
   return CARRIER_REGISTRY.find((c) => c.providerKey === providerKey)?.displayName;
 }

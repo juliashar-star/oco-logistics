@@ -44,7 +44,15 @@ export function orderAdapterSupportsLabel(
   if (adapterKey == null || adapterKey === "") {
     return ORDER_ADAPTER_LABEL_SUPPORT[DEFAULT_ORDER_ADAPTER_KEY]!;
   }
-  const found = ORDER_ADAPTER_LABEL_SUPPORT[adapterKey];
+  // OWN keys only — see orderAdapterSellerTitle. A prototype member is truthy,
+  // so an unguarded index made this report «has a label» for a key that is not
+  // an adapter at all.
+  const found = Object.prototype.hasOwnProperty.call(
+    ORDER_ADAPTER_LABEL_SUPPORT,
+    adapterKey,
+  )
+    ? ORDER_ADAPTER_LABEL_SUPPORT[adapterKey]
+    : undefined;
   if (found === undefined) {
     console.error(
       "[order-adapter-label-support] UNKNOWN_ORDER_ADAPTER_KEY",

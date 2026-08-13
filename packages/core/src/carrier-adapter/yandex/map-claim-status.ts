@@ -134,5 +134,16 @@ export function claimStatusTextRu(status: string): string | null {
   if (!normalized) {
     return null;
   }
-  return CLAIM_STATUS_TEXT_RU[normalized] ?? null;
+  // OWN keys only — and here the guard is MANDATORY, not merely correct, which
+  // is what separates this lookup from the four others fixed alongside it.
+  // Their keys are ours: an adapter key or a provider key we wrote and stored.
+  // THIS ONE'S ARGUMENT COMES OUT OF THE CARRIER'S RESPONSE BODY — claims/info
+  // `status`, a string we neither choose nor validate — so «a prototype name
+  // would have to be passed deliberately» is not an argument that holds. Without
+  // the guard the returned Object.prototype member became TrackingEvent
+  // .statusText (express-client.ts: `label ?? status`) and the cancel result's
+  // description, both of which are stored and shown to the seller.
+  return Object.hasOwn(CLAIM_STATUS_TEXT_RU, normalized)
+    ? CLAIM_STATUS_TEXT_RU[normalized]
+    : null;
 }
