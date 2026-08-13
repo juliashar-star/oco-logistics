@@ -15,6 +15,8 @@ import type {
   CarrierTrackingEvent,
 } from "../types";
 import {
+  OCO_CANCEL_ALREADY_REQUESTED,
+  OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
   OCO_CANCEL_REQUESTED,
   OCO_CANCEL_REQUESTED_TEXT_RU,
 } from "../cancel-event-codes";
@@ -34,8 +36,10 @@ import {
   normaliseForRegionCompare,
 } from "./map-pickup-points";
 import {
+  findRequestByType,
   hasCdekErrorCode,
   readCdekCreateState,
+  readPendingDeleteState,
 } from "./order-state";
 import {
   assertCdekCredentials,
@@ -498,6 +502,28 @@ export async function cancelCdekOrder(
       ? (entity as { statuses?: unknown }).statuses
       : undefined;
 
+  // ALREADY QUEUED? Checked BEFORE the window rule, because the two disagree by
+  // design. MEASURED 13.08 on edu: a day after our DELETE the order was
+  // untouched — statuses[] still ended at CREATED, so mapCdekCancelWindow said
+  // "deletable" — while requests[] carried { type: "DELETE", state: "ACCEPTED" }.
+  // The window rule reads the PARCEL; this reads what we already ASKED. Letting
+  // the window answer first would send a duplicate DELETE on every press.
+  //
+  // No extra call: requests[] is in the body we just read.
+  const pendingDelete = readPendingDeleteState(fetched.body);
+  if (pendingDelete !== null) {
+    return {
+      ok: true,
+      result: {
+        accepted: true,
+        // The carrier's own word for the queued request, not one of ours.
+        providerStatus: pendingDelete,
+        reason: OCO_CANCEL_ALREADY_REQUESTED,
+        description: OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
+      },
+    };
+  }
+
   const window = mapCdekCancelWindow(statuses);
 
   if (window === "not_free") {
@@ -578,24 +604,15 @@ export async function cancelCdekOrder(
  * been accepted, and failing to read a bookkeeping field must not undo that.
  */
 function readDeleteRequestState(body: unknown): string {
-  if (body === null || typeof body !== "object") {
+  // Same walker the create reader and the already-pending check use — one way
+  // to read requests[], not three.
+  const deleteRequest = findRequestByType(body, "DELETE");
+  if (deleteRequest === null) {
     return "";
   }
-  const requests = (body as { requests?: unknown }).requests;
-  if (!Array.isArray(requests)) {
-    return "";
-  }
-  for (const entry of requests) {
-    if (entry === null || typeof entry !== "object") {
-      continue;
-    }
-    const row = entry as Record<string, unknown>;
-    if (row.type !== "DELETE") {
-      continue;
-    }
-    return typeof row.state === "string" ? row.state.trim() : "";
-  }
-  return "";
+  return typeof deleteRequest.state === "string"
+    ? deleteRequest.state.trim()
+    : "";
 }
 
 /**

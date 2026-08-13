@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { cancelCdekOrder } from "../packages/core/src/carrier-adapter/cdek/client.ts";
 import {
+  OCO_CANCEL_ALREADY_REQUESTED,
+  OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
   OCO_CANCEL_REQUESTED,
   OCO_CANCEL_REQUESTED_TEXT_RU,
 } from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
@@ -142,6 +144,158 @@ test(
   ),
 );
 
+// ── a DELETE already in flight must not be sent twice ──────────────────────
+
+/** The measured 13.08 shape: order untouched, our DELETE still queued. */
+const pendingDeleteBody = (state) => ({
+  entity: {
+    uuid: UUID,
+    statuses: [
+      { code: "CREATED", date_time: T1, name: "CREATED" },
+      { code: "ACCEPTED", date_time: T0, name: "ACCEPTED" },
+    ],
+  },
+  requests: [
+    { type: "DELETE", state, date_time: "2026-08-12T18:18:23+0000" },
+    { type: "CREATE", state: "SUCCESSFUL", date_time: "2026-08-05T09:07:59+0000" },
+  ],
+});
+
+for (const state of ["ACCEPTED", "WAITING"]) {
+  test(
+    `a DELETE already ${state} → no second DELETE, the already-requested code`,
+    withCdek(
+      (method) => {
+        if (method === "GET") return Response.json(pendingDeleteBody(state), { status: 200 });
+        return Response.json({}, { status: 202 });
+      },
+      async (calls) => {
+        const result = await cancelCdekOrder(UUID, CREDS);
+        assert.equal(result.ok, true);
+        assert.equal(result.result.accepted, true);
+        assert.equal(result.result.reason, OCO_CANCEL_ALREADY_REQUESTED);
+        assert.equal(result.result.description, OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU);
+        // The carrier's own word for the queued request, not one of ours.
+        assert.equal(result.result.providerStatus, state);
+        assertNoDelete(calls);
+        // Read only — the GET and nothing else.
+        assert.deepEqual(calls.map((c) => c.method), ["GET"]);
+      },
+    ),
+  );
+}
+
+test(
+  "the already-requested event is distinct from a fresh request in the timeline",
+  withCdek(
+    (method) => {
+      if (method === "GET") return Response.json(pendingDeleteBody("ACCEPTED"), { status: 200 });
+      return Response.json({}, { status: 202 });
+    },
+    async () => {
+      const result = await cancelCdekOrder(UUID, CREDS);
+      const event = resolveCancelTrackingEvent(result.result);
+      assert.equal(event.statusCode, OCO_CANCEL_ALREADY_REQUESTED);
+      assert.notEqual(event.statusCode, OCO_CANCEL_REQUESTED);
+      assert.equal(event.statusText, OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU);
+    },
+  ),
+);
+
+/** A finished or rejected deletion must NOT block a fresh attempt. */
+for (const [state, why] of [
+  ["SUCCESSFUL", "finished"],
+  ["INVALID", "rejected"],
+]) {
+  test(
+    `a DELETE in ${state} (${why}) does NOT block — a new DELETE is issued`,
+    withCdek(
+      (method) => {
+        if (method === "GET") {
+          return Response.json(
+            {
+              entity: {
+                uuid: UUID,
+                statuses: [{ code: "CREATED", date_time: T0, name: "CREATED" }],
+              },
+              requests: [{ type: "DELETE", state }],
+            },
+            { status: 200 },
+          );
+        }
+        return Response.json({ requests: [{ type: "DELETE", state: "ACCEPTED" }] }, { status: 202 });
+      },
+      async (calls) => {
+        const result = await cancelCdekOrder(UUID, CREDS);
+        assert.equal(result.ok, true);
+        assert.equal(result.result.reason, OCO_CANCEL_REQUESTED);
+        assert.equal(deletes(calls).length, 1);
+      },
+    ),
+  );
+}
+
+test(
+  "a CREATE in ACCEPTED is NOT mistaken for a pending DELETE",
+  withCdek(
+    (method) => {
+      if (method === "GET") {
+        return Response.json(
+          {
+            entity: {
+              uuid: UUID,
+              statuses: [{ code: "CREATED", date_time: T0, name: "CREATED" }],
+            },
+            // The state that means «pending», but on the WRONG request type.
+            requests: [{ type: "CREATE", state: "ACCEPTED" }],
+          },
+          { status: 200 },
+        );
+      }
+      return Response.json({ requests: [{ type: "DELETE", state: "ACCEPTED" }] }, { status: 202 });
+    },
+    async (calls) => {
+      const result = await cancelCdekOrder(UUID, CREDS);
+      assert.equal(result.result.reason, OCO_CANCEL_REQUESTED);
+      assert.equal(deletes(calls).length, 1);
+    },
+  ),
+);
+
+for (const [label, requests] of [
+  ["absent", undefined],
+  ["empty", []],
+  ["malformed rows", [null, 7, "DELETE"]],
+  ["DELETE with a non-string state", [{ type: "DELETE", state: 202 }]],
+  ["DELETE with no state at all", [{ type: "DELETE" }]],
+]) {
+  test(
+    `requests[] ${label} → not pending, a DELETE is issued`,
+    withCdek(
+      (method) => {
+        if (method === "GET") {
+          const body = {
+            entity: {
+              uuid: UUID,
+              statuses: [{ code: "CREATED", date_time: T0, name: "CREATED" }],
+            },
+          };
+          if (requests !== undefined) body.requests = requests;
+          return Response.json(body, { status: 200 });
+        }
+        return Response.json({ requests: [{ type: "DELETE", state: "ACCEPTED" }] }, { status: 202 });
+      },
+      async (calls) => {
+        // Refusing to act on a body we could not parse would strand a seller
+        // who has never asked for anything.
+        const result = await cancelCdekOrder(UUID, CREDS);
+        assert.equal(result.result.reason, OCO_CANCEL_REQUESTED);
+        assert.equal(deletes(calls).length, 1);
+      },
+    ),
+  );
+}
+
 // ── the vocabulary collision this slice removes ────────────────────────────
 
 test(
@@ -198,7 +352,25 @@ test("the seller-facing cancellation wording and code, character for character",
   assert.equal(OCO_CANCEL_REQUESTED, "OCO_CANCEL_REQUESTED");
   assert.equal(
     OCO_CANCEL_REQUESTED_TEXT_RU,
-    "Запрос на отмену отправлен перевозчику. Подтверждение придёт со следующим обновлением статуса.",
+    "Отмена запрошена у перевозчика. Статус обновится, когда перевозчик её обработает.",
+  );
+  // NO TIMING PROMISE in this line, deliberately. The previous wording said
+  // confirmation would come with the next status update, and the 13.08 probe
+  // measured a DELETE queued for a day with the order's own statuses untouched.
+  // If a future edit reintroduces a «когда» that commits to a moment, this
+  // assertion is what should stop it.
+  assert.doesNotMatch(OCO_CANCEL_REQUESTED_TEXT_RU, /следующим обновлением/);
+  assert.equal(OCO_CANCEL_ALREADY_REQUESTED, "OCO_CANCEL_ALREADY_REQUESTED");
+  assert.equal(
+    OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
+    "Запрос на отмену уже отправлен ранее и ещё обрабатывается перевозчиком. Отправлять его повторно не нужно.",
+  );
+  // The two must stay distinct: a timeline that renders «asked just now» and
+  // «already asked, still processing» identically hides that nothing happened.
+  assert.notEqual(OCO_CANCEL_REQUESTED, OCO_CANCEL_ALREADY_REQUESTED);
+  assert.notEqual(
+    OCO_CANCEL_REQUESTED_TEXT_RU,
+    OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
   );
 });
 

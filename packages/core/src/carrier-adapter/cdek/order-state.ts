@@ -51,10 +51,20 @@ export function hasCdekErrorCode(body: unknown, code: string): boolean {
   return false;
 }
 
-function findCreateRequest(
-  body: Record<string, unknown>,
+/**
+ * ONE way to walk requests[]. Every reader of this envelope goes through here —
+ * create settlement, the post-delete state, and the already-pending check — so
+ * the defensive shape (missing level → null, non-object rows skipped) is
+ * written once instead of three times drifting apart.
+ */
+export function findRequestByType(
+  body: unknown,
+  type: string,
 ): Record<string, unknown> | null {
-  const requests = body.requests;
+  if (body === null || typeof body !== "object") {
+    return null;
+  }
+  const requests = (body as { requests?: unknown }).requests;
   if (!Array.isArray(requests)) {
     return null;
   }
@@ -63,11 +73,56 @@ function findCreateRequest(
       continue;
     }
     const row = entry as Record<string, unknown>;
-    if (row.type === "CREATE") {
+    if (row.type === type) {
       return row;
     }
   }
   return null;
+}
+
+function findCreateRequest(
+  body: Record<string, unknown>,
+): Record<string, unknown> | null {
+  return findRequestByType(body, "CREATE");
+}
+
+/**
+ * States in which a DELETE we already sent is still in flight.
+ *
+ * MEASURED 13.08 on edu: a day after our DELETE, the order still answered 200
+ * with statuses[] unchanged (newest CREATED) and requests[] carrying
+ * { type: "DELETE", state: "ACCEPTED" } — so the order still reads as deletable
+ * and a second press would queue a duplicate request.
+ *
+ * SUCCESSFUL and INVALID are deliberately NOT pending. The first means the
+ * deletion finished; the second that CDEK rejected it. Neither should block a
+ * fresh attempt — and INVALID especially must not, or one rejected request
+ * would lock the seller out of cancelling forever.
+ */
+const PENDING_DELETE_STATES = new Set(["ACCEPTED", "WAITING"]);
+
+/**
+ * The state of an already-pending DELETE, or null when none is in flight.
+ *
+ * Returning the state rather than a boolean because the caller reports it as
+ * providerStatus — the same measured word CDEK used, not one of ours.
+ *
+ * ABSENT OR UNREADABLE → null, i.e. NOT pending. Refusing to act on a body we
+ * could not parse would strand a seller who has never asked for anything; the
+ * cost of the opposite mistake is one duplicate request, which is what the
+ * measured envelope shows CDEK simply queues.
+ */
+export function readPendingDeleteState(body: unknown): string | null {
+  const deleteRequest = findRequestByType(body, "DELETE");
+  if (deleteRequest === null) {
+    return null;
+  }
+  const state = deleteRequest.state;
+  if (typeof state !== "string") {
+    return null;
+  }
+  const trimmed = state.trim();
+  return PENDING_DELETE_STATES.has(trimmed) ? trimmed : null;
 }
 
 function readErrorCodes(createRequest: Record<string, unknown>): string[] {
