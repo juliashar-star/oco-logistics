@@ -7,6 +7,7 @@ import { shouldAcceptFieldValue } from "../apps/web/lib/carriers/should-accept-f
 import { CARRIER_CONNECT_FIELDS } from "../apps/web/lib/carriers/carrier-connect-fields.ts";
 import { pickSuppliedCredentials } from "../apps/web/lib/carriers/pick-supplied-credentials.ts";
 import { connectSuccessMessage } from "../apps/web/lib/carriers/connect-success-message.ts";
+import { PROTOTYPE_KEYS } from "./helpers/prototype-keys.mjs";
 
 // ── capitalizeFieldLabel
 
@@ -157,7 +158,7 @@ test("shouldAcceptFieldValue: showing a secret is not interacting with it", () =
 });
 
 test("shouldAcceptFieldValue: prototype-chain names cannot unlock themselves", () => {
-  for (const name of ["__proto__", "toString", "constructor", "hasOwnProperty"]) {
+  for (const name of PROTOTYPE_KEYS) {
     assert.equal(shouldAcceptFieldValue({}, name), false, name);
   }
 });

@@ -9,6 +9,7 @@ import {
   verdictForOutcome,
 } from "../packages/core/src/carrier-adapter/verify-credentials-adapters.ts";
 import { fetchCdekToken } from "../packages/core/src/carrier-adapter/cdek/transport.ts";
+import { PROTOTYPE_KEYS } from "./helpers/prototype-keys.mjs";
 
 const YANDEX_BASE_URL = "https://b2b.taxi.tst.yandex.net";
 const CDEK_BASE_URL = "https://api.edu.cdek.ru";
@@ -164,7 +165,7 @@ test("registry: keyed by providerKey for both carriers", () => {
 test("isKnownVerifyCredentialsProviderKey: refuses prototype-chain keys and non-strings", () => {
   assert.equal(isKnownVerifyCredentialsProviderKey("cdek"), true);
   assert.equal(isKnownVerifyCredentialsProviderKey("yataxi"), true);
-  for (const bad of ["toString", "constructor", "__proto__", "", 1, null, undefined]) {
+  for (const bad of [...PROTOTYPE_KEYS, "", 1, null, undefined]) {
     assert.equal(isKnownVerifyCredentialsProviderKey(bad), false, String(bad));
   }
   assert.equal(getVerifyCredentialsAdapter("nope"), undefined);

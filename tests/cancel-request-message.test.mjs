@@ -13,6 +13,7 @@ import {
   OCO_CANCEL_REQUESTED,
   OCO_CANCEL_REQUESTED_TEXT_RU,
 } from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
+import { PROTOTYPE_KEY_CASES } from "./helpers/prototype-keys.mjs";
 
 // ── the route's message wins whenever there is one ─────────────────────────
 
@@ -140,10 +141,9 @@ for (const [label, reason] of [
   ["an array", [OCO_CANCEL_REQUESTED]],
   ["a boolean", false],
   // Object.prototype keys: with a plain object literal as the table these would
-  // resolve to a function and be shown to the seller.
-  ["the string \"constructor\"", "constructor"],
-  ["the string \"toString\"", "toString"],
-  ["the string \"__proto__\"", "__proto__"],
+  // resolve to a function and be shown to the seller. One shared list across
+  // every lookup test — see tests/helpers/prototype-keys.mjs.
+  ...PROTOTYPE_KEY_CASES,
 ]) {
   test(`${label} → the general sentence`, () => {
     assert.equal(cancelRequestNoticeMessage(reason), CANCEL_REQUEST_SUCCESS_RU);

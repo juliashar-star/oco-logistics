@@ -8,6 +8,7 @@ import {
 } from "../packages/core/src/carrier-adapter/pickup-point-adapters.ts";
 import { listPickupPoints as cdekListPickupPoints } from "../packages/core/src/carrier-adapter/cdek/client.ts";
 import { listPickupPoints as yandexListPickupPoints } from "../packages/core/src/carrier-adapter/yandex/client.ts";
+import { PROTOTYPE_KEYS } from "./helpers/prototype-keys.mjs";
 
 test("known providerKey resolves and providerKey matches", () => {
   const adapter = getPickupPointAdapter("yataxi");
@@ -68,10 +69,8 @@ test("isKnownPickupPointProviderKey: non-string / null / undefined / number are 
 });
 
 test("isKnownPickupPointProviderKey: prototype-chain names that `in` would accept are ALL false", () => {
-  assert.equal(isKnownPickupPointProviderKey("toString"), false);
-  assert.equal(isKnownPickupPointProviderKey("constructor"), false);
-  assert.equal(isKnownPickupPointProviderKey("hasOwnProperty"), false);
-  assert.equal(isKnownPickupPointProviderKey("__proto__"), false);
-  assert.equal(isKnownPickupPointProviderKey("valueOf"), false);
+  for (const key of PROTOTYPE_KEYS) {
+    assert.equal(isKnownPickupPointProviderKey(key), false, key);
+  }
 });
 

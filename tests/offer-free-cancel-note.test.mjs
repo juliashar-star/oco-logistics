@@ -12,6 +12,7 @@ import {
   FREE_CANCEL_UNTIL_COURIER_PICKUP,
   FREE_CANCEL_UNTIL_WAREHOUSE_INTAKE,
 } from "../packages/core/src/carrier-adapter/free-cancel-boundaries.ts";
+import { PROTOTYPE_KEY_CASES } from "./helpers/prototype-keys.mjs";
 
 // ── every key gets its own sentence ────────────────────────────────────────
 
@@ -69,17 +70,9 @@ for (const [label, boundary] of [
   ["an object", { boundary: FREE_CANCEL_UNTIL_COURIER_PICKUP }],
   ["an array", [FREE_CANCEL_UNTIL_COURIER_PICKUP]],
   // Object.prototype keys: with an object literal as the table these would
-  // resolve to a function and be rendered on the card.
-  //
-  // THE SET IS FIXED, AND THE SAME ONE EVERYWHERE — that is why "__proto__" is
-  // here even though this table is a Map and walks no prototype chain. The trap
-  // came up five times in a week; keeping one identical key set across all our
-  // lookup tests means the next table, accidentally written as an object
-  // literal, is caught by the tests that were copied alongside it rather than
-  // by whoever notices the missing case.
-  ["the string \"constructor\"", "constructor"],
-  ["the string \"toString\"", "toString"],
-  ["the string \"__proto__\"", "__proto__"],
+  // resolve to a function and be rendered on the card. The list is shared and
+  // identical at every site — tests/helpers/prototype-keys.mjs says why.
+  ...PROTOTYPE_KEY_CASES,
 ]) {
   test(`${label} → the unknown sentence, not a blank line`, () => {
     const note = offerFreeCancelNote(boundary);

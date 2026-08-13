@@ -7,6 +7,7 @@ import {
 } from "../apps/web/lib/carriers/connect-carrier-credentials.ts";
 import { mergeSubmittedCredentials } from "../apps/web/lib/carriers/merge-submitted-credentials.ts";
 import { VERIFY_CREDENTIALS_ADAPTERS } from "../packages/core/src/carrier-adapter/verify-credentials-adapters.ts";
+import { PROTOTYPE_KEYS } from "./helpers/prototype-keys.mjs";
 
 const YANDEX_BAG = { platformStationId: "station-1", token: "tok-secret-xyz" };
 const CDEK_BAG = {
@@ -89,7 +90,7 @@ test("unknown providerKey → unknown_provider result, never a throw, nothing st
 });
 
 test("prototype-chain providerKey → unknown_provider, resolved by own-property only", async () => {
-  for (const key of ["__proto__", "toString", "constructor"]) {
+  for (const key of PROTOTYPE_KEYS) {
     const result = await connectCarrierCredentials(
       prismaThatMustNotBeTouched(),
       { companyId: "c1", providerKey: key, credentials: YANDEX_BAG },

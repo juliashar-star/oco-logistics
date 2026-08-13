@@ -10,6 +10,7 @@ import {
   providerSellerDisplayName,
 } from "../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
+import { PROTOTYPE_KEY_CASES } from "./helpers/prototype-keys.mjs";
 
 const BOTH = [
   ["auth", carrierAuthErrorMessage],
@@ -78,9 +79,7 @@ for (const [label, build] of BOTH) {
     ["empty", ""],
     ["blank", "   "],
     ["unknown key", "nope"],
-    ["constructor", "constructor"],
-    ["toString", "toString"],
-    ["__proto__", "__proto__"],
+    ...PROTOTYPE_KEY_CASES,
   ]) {
     test(`${label}: ${caseLabel} names no carrier at all`, () => {
       const message = build(key);

@@ -6,6 +6,7 @@ import {
   resolveOrderAdapter,
   resolveOrderAdapterStrict,
 } from "../packages/core/src/carrier-adapter/order-adapters.ts";
+import { PROTOTYPE_KEYS } from "./helpers/prototype-keys.mjs";
 
 /**
  * PART 1 — what resolveOrderAdapter does TODAY, recorded before anything moved.
@@ -80,7 +81,8 @@ test("resolveOrderAdapterStrict(unknown key) returns null", () => {
  * undefined on the value it got. Measured before the fix, all four returned a
  * prototype member from BOTH lookups.
  */
-const PROTOTYPE_KEYS = ["constructor", "toString", "__proto__", "valueOf"];
+// The list moved to tests/helpers/prototype-keys.mjs so every lookup test feeds
+// in the same names — see the docblock there.
 
 test("resolveOrderAdapterStrict returns null for inherited Object keys", () => {
   for (const key of PROTOTYPE_KEYS) {

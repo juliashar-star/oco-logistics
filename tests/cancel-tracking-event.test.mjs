@@ -11,6 +11,10 @@ import {
   OCO_CANCEL_REQUESTED,
   OCO_CANCEL_REQUESTED_TEXT_RU,
 } from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
+import {
+  PROTOTYPE_KEYS,
+  PROTOTYPE_KEY_CASES,
+} from "./helpers/prototype-keys.mjs";
 
 /** Minimal CarrierCancelResult; every field the function reads is overridable. */
 const result = (over = {}) => ({
@@ -229,11 +233,27 @@ for (const [label, reason] of [
   ["an object", { reason: OCO_CANCEL_ALREADY_REQUESTED }],
   ["an array", [OCO_CANCEL_ALREADY_REQUESTED]],
   ["a boolean", true],
+  // Object.prototype names. The set here is a Set, so it walks no prototype
+  // chain and these were never in danger — they are enumerated because every
+  // lookup test feeds in the same list, and this file is a plausible source to
+  // copy the next one from. See tests/helpers/prototype-keys.mjs.
+  ...PROTOTYPE_KEY_CASES,
 ]) {
   test(`${label} → false`, () => {
     assert.equal(isCancelNotSentReason(reason), false);
   });
 }
+
+test("prototype names are not «not sent», and still record an event", () => {
+  // The other half of the same guard: the resolver must not drop a row for a
+  // reason that only LOOKS like a member of the skip list.
+  for (const key of PROTOTYPE_KEYS) {
+    assert.equal(isCancelNotSentReason(key), false, key);
+    const event = resolveCancelTrackingEvent(result({ reason: key }));
+    assert.notEqual(event, null, `${key} must still be recorded`);
+    assert.equal(event.statusCode, key);
+  }
+});
 
 test("the predicate and the resolver never disagree", () => {
   // They read one set. If a reason says «not sent», the resolver must write
