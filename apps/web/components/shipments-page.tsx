@@ -13,7 +13,13 @@ import {
 } from "@/lib/shipments/shipment-list-labels";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { handoverActCandidates } from "@/lib/shipments/handover-act-candidates";
+import {
+  CANCEL_REQUEST_FALLBACK_ERROR_RU,
+  CANCEL_REQUEST_SUCCESS_RU,
+  cancelRequestErrorMessage,
+} from "@/lib/shipments/cancel-request-message";
 import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
+import { shouldShowCancelControl } from "@/lib/shipments/should-show-cancel-control";
 import type { ShipmentListItemDto } from "@/lib/shipments/shipment-list-dto";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -159,6 +165,10 @@ export function ShipmentsPage() {
   const [events, setEvents] = useState<TrackingEventRow[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
   const [anonymizing, setAnonymizing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -190,31 +200,44 @@ export function ShipmentsPage() {
     setConfirmOpen(false);
     setDeleteConfirmOpen(false);
     setDeleteError(null);
+    setCancelConfirmOpen(false);
+    setCancelError(null);
+    setCancelNotice(null);
   };
+
+  /**
+   * Extracted from openDrawer so the same loader serves the initial open AND a
+   * refresh after an action. Cancellation writes a TrackingEvent, and without
+   * a re-fetch the seller would have to close and reopen the drawer to see the
+   * thing they just did.
+   */
+  const loadEvents = useCallback(async (shipmentId: string) => {
+    setEventsError(null);
+    setEventsLoading(true);
+    try {
+      const response = await fetch(`/api/shipments/${shipmentId}/events`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setEventsError(data.error ?? "Не удалось загрузить историю");
+        return;
+      }
+
+      setEvents(data.events ?? []);
+    } catch {
+      setEventsError("Что-то пошло не так. Обновите страницу или попробуйте через минуту.");
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
 
   const openDrawer = (shipment: ShipmentRow) => {
     setSelectedShipment(shipment);
     setEvents([]);
-    setEventsError(null);
-    setEventsLoading(true);
-
-    void (async () => {
-      try {
-        const response = await fetch(`/api/shipments/${shipment.id}/events`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          setEventsError(data.error ?? "Не удалось загрузить историю");
-          return;
-        }
-
-        setEvents(data.events ?? []);
-      } catch {
-        setEventsError("Что-то пошло не так. Обновите страницу или попробуйте через минуту.");
-      } finally {
-        setEventsLoading(false);
-      }
-    })();
+    setCancelError(null);
+    setCancelNotice(null);
+    setCancelConfirmOpen(false);
+    void loadEvents(shipment.id);
   };
 
   const hasActiveFilters = status !== "" || track.trim() !== "";
@@ -341,6 +364,45 @@ export function ShipmentsPage() {
       );
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleCancelOrder() {
+    if (!selectedShipment) return;
+
+    setCancelling(true);
+    setCancelError(null);
+    setCancelNotice(null);
+    try {
+      const res = await fetch(`/api/shipments/${selectedShipment.id}/cancel`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        // The route's own message, VERBATIM — unlike handleDeleteDraft, which
+        // shows a fixed string. The cancel route's 409s carry the only thing
+        // the seller can act on (free cancellation is gone / the order is
+        // finished / we cannot identify the carrier); replacing them with
+        // «попробуйте позже» would tell them to retry something that can never
+        // succeed. The choice is a pure function so it is testable.
+        setCancelError(cancelRequestErrorMessage(data));
+        return;
+      }
+
+      setCancelConfirmOpen(false);
+      setCancelNotice(CANCEL_REQUEST_SUCCESS_RU);
+      // The drawer STAYS OPEN and the events are re-fetched: cancellation
+      // writes a TrackingEvent, and that is the only visible result.
+      //
+      // The list is deliberately NOT reloaded. The route writes no status by
+      // design — accepted is not cancelled — so no field on the row changes and
+      // a refresh would re-render the same data. Do not add one.
+      await loadEvents(selectedShipment.id);
+    } catch {
+      setCancelError(CANCEL_REQUEST_FALLBACK_ERROR_RU);
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -890,6 +952,77 @@ export function ShipmentsPage() {
                 )}
               </div>
 
+              {/* SEPARATE from shipmentFooterAction and NOT exclusive with it.
+                  That helper picks one destructive action — delete OR anonymize
+                  OR none — but cancelling is an orthogonal question: a CREATED
+                  shipment still holding recipient data can be both cancellable
+                  and anonymisable, and folding this into that enum would make
+                  one silently displace the other. */}
+              {shouldShowCancelControl(selectedShipment) && (
+                <div className="mt-8 border-t border-slate-200 pt-6">
+                  {cancelError && (
+                    <p
+                      className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800"
+                      role="alert"
+                    >
+                      {cancelError}
+                    </p>
+                  )}
+                  {cancelNotice && (
+                    <p
+                      className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                      role="status"
+                    >
+                      {cancelNotice}
+                    </p>
+                  )}
+                  {!cancelConfirmOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelError(null);
+                        setCancelNotice(null);
+                        setCancelConfirmOpen(true);
+                      }}
+                      className="text-sm text-slate-500 hover:text-slate-700"
+                    >
+                      Отменить заказ
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">
+                        Отправим перевозчику запрос на отмену. Отменяем только пока это бесплатно — если бесплатная отмена уже недоступна, мы ничего не сделаем и сообщим об этом. Статус изменится, когда перевозчик обработает запрос.
+                      </p>
+                      <div className="flex gap-2">
+                        {/* «Назад», NOT «Отмена» as the two blocks below use:
+                            in a dialog about cancelling an order, a button
+                            labelled «Отмена» reads as «cancel the
+                            cancellation» — the seller cannot tell which of the
+                            two things it undoes. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCancelConfirmOpen(false);
+                            setCancelError(null);
+                          }}
+                          disabled={cancelling}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Назад
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleCancelOrder()}
+                          disabled={cancelling}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {cancelling ? "Отменяем..." : "Отменить заказ"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {shipmentFooterAction(selectedShipment) === "delete" && (
                 <div className="mt-8 border-t border-slate-200 pt-6">
                   {deleteError && (
