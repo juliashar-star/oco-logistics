@@ -79,6 +79,11 @@ is cheap; a fix built on an unmeasured hypothesis is wasted work.
 **Read before you specify.** Never write a field name, an id, an endpoint or a command from memory
 when it can be read from the repository or from a measured response.
 
+**A slice that decides something ends with an entry in `docs/DECISIONS.md`.** A code comment
+explains the local HOW to whoever is reading that file; `DECISIONS.md` holds the WHAT and the WHY,
+written so it can be read from any chat with no access to the code. A decision that lives only in a
+comment is lost the moment nobody opens that file.
+
 ## Anti-regression rules
 
 1. **Shrink the route to nothing.** Decisions — which adapters to call, what counts as empty, how to

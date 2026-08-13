@@ -77,6 +77,41 @@ const MIXED_TARIFFS = {
   ],
 };
 
+/** The MEASURED 13.08 service block, identical on every edu tariff at 1000 ₽. */
+const INSURANCE_SERVICE = {
+  code: "INSURANCE",
+  sum: 7.5,
+  total_sum: 9,
+  discount_percent: 0,
+  discount_sum: 0,
+  vat_rate: 20,
+  vat_sum: 1.5,
+};
+
+/**
+ * tariffAndService reply for the same three codes.
+ * MEASURED: tariff_code arrives as a STRING here and as a NUMBER in tarifflist;
+ * status is the string "true"; there is no tariff_name and no delivery_mode.
+ */
+const MIXED_SERVICES = {
+  tariff_codes: MIXED_TARIFFS.tariff_codes.map((row) => ({
+    tariff_code: String(row.tariff_code),
+    status: "true",
+    result: {
+      delivery_sum: row.delivery_sum,
+      total_sum: row.delivery_sum * 1.2 + INSURANCE_SERVICE.total_sum,
+      services: [INSURANCE_SERVICE],
+    },
+  })),
+};
+
+/** Route the two calculator calls the way the carrier does. */
+function calculatorReply(url) {
+  return String(url).endsWith("/v2/calculator/tariffAndService")
+    ? MIXED_SERVICES
+    : MIXED_TARIFFS;
+}
+
 async function withCdekBaseUrl(run) {
   const saved = process.env.CDEK_BASE_URL;
   process.env.CDEK_BASE_URL = BASE_URL;
@@ -123,11 +158,19 @@ test("empty items throws CDEK_INPUT_INVALID; tarifflist fetch never called", asy
   assert.equal(tarifflistCalls, 0);
 });
 
-test("oauth then tarifflist with exact body fields", async () => {
+test("oauth then BOTH calculators with exact body fields", async () => {
+  // The single-call version of this test pinned `href === …/tarifflist` and one
+  // calculator call. The quote now needs two: tarifflist for the name and mode,
+  // tariffAndService for the insurance the seller is actually charged. Every
+  // assertion about the tarifflist BODY below is unchanged — only the call
+  // contract moved, plus the new assertions on the second body.
   /** @type {unknown} */
   let tarifflistBody;
+  /** @type {unknown} */
+  let servicesBody;
   let oauthCalls = 0;
   let tarifflistCalls = 0;
+  let servicesCalls = 0;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
     const href = String(url);
@@ -138,8 +181,13 @@ test("oauth then tarifflist with exact body fields", async () => {
         { status: 200 },
       );
     }
-    assert.equal(href, `${BASE_URL}/v2/calculator/tarifflist`);
     assert.equal(init?.method, "POST");
+    if (href === `${BASE_URL}/v2/calculator/tariffAndService`) {
+      servicesCalls += 1;
+      servicesBody = JSON.parse(String(init?.body));
+      return Response.json(MIXED_SERVICES, { status: 200 });
+    }
+    assert.equal(href, `${BASE_URL}/v2/calculator/tarifflist`);
     tarifflistCalls += 1;
     tarifflistBody = JSON.parse(String(init?.body));
     return Response.json(MIXED_TARIFFS, { status: 200 });
@@ -155,6 +203,7 @@ test("oauth then tarifflist with exact body fields", async () => {
 
   assert.equal(oauthCalls, 1);
   assert.equal(tarifflistCalls, 1);
+  assert.equal(servicesCalls, 1);
   assert.deepEqual(tarifflistBody, {
     type: 1,
     currency: 1,
@@ -169,6 +218,120 @@ test("oauth then tarifflist with exact body fields", async () => {
     },
     packages: [{ weight: 1200, length: 30, width: 20, height: 10 }],
   });
+  // Same body plus services — the declared value in RUBLES as a string, and it
+  // is item.unitPriceRub, the very number the order will send as items[].cost.
+  assert.deepEqual(servicesBody, {
+    type: 1,
+    currency: 1,
+    lang: "rus",
+    from_location: {
+      city: "Москва",
+      address: "ул. Складская, 1",
+    },
+    to_location: {
+      city: "Москва",
+      address: "ул. Тверская, д. 1",
+    },
+    packages: [{ weight: 1200, length: 30, width: 20, height: 10 }],
+    services: [{ code: "INSURANCE", parameter: "1500" }],
+  });
+});
+
+test("the quoted price is delivery plus services, NET of VAT", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/v2/oauth/token")) {
+      return Response.json(
+        { access_token: "tok-price", expires_in: 3600 },
+        { status: 200 },
+      );
+    }
+    return Response.json(calculatorReply(url), { status: 200 });
+  };
+  try {
+    await withCdekBaseUrl(async () => {
+      const result = await getOffers(baseInput({ handoverMode: "COURIER" }), CREDS);
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      // 139 «Посылка дверь-дверь»: 440 carriage + 7.5 insurance. NOT total_sum,
+      // which carries VAT — that is a display decision for every carrier at once.
+      assert.deepEqual(
+        result.offers.map((o) => [o.offerId, o.priceRub]),
+        [["cdek:139", 447.5]],
+      );
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("either calculator failing means no CDEK offers — never the bare price", async () => {
+  for (const failing of [
+    "/v2/calculator/tarifflist",
+    "/v2/calculator/tariffAndService",
+  ]) {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const href = String(url);
+      if (href.endsWith("/v2/oauth/token")) {
+        return Response.json(
+          { access_token: "tok-half", expires_in: 3600 },
+          { status: 200 },
+        );
+      }
+      if (href.endsWith(failing)) {
+        return new Response("{}", { status: 500 });
+      }
+      return Response.json(calculatorReply(url), { status: 200 });
+    };
+    try {
+      await withCdekBaseUrl(async () => {
+        await assert.rejects(
+          () => getOffers(baseInput(), CREDS),
+          (error) => {
+            assert.ok(error instanceof Error);
+            assert.match(error.message, /HTTP 500/);
+            return true;
+          },
+          `${failing} failing must throw, not fall back to the understated price`,
+        );
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+});
+
+test("a tariff missing from tariffAndService is dropped, not priced without insurance", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/v2/oauth/token")) {
+      return Response.json(
+        { access_token: "tok-partial", expires_in: 3600 },
+        { status: 200 },
+      );
+    }
+    if (String(url).endsWith("/v2/calculator/tariffAndService")) {
+      // 139 is absent from the services reply entirely.
+      return Response.json(
+        {
+          tariff_codes: MIXED_SERVICES.tariff_codes.filter(
+            (row) => row.tariff_code !== "139",
+          ),
+        },
+        { status: 200 },
+      );
+    }
+    return Response.json(MIXED_TARIFFS, { status: 200 });
+  };
+  try {
+    await withCdekBaseUrl(async () => {
+      const result = await getOffers(baseInput({ handoverMode: "COURIER" }), CREDS);
+      assert.deepEqual(result, { ok: false, reason: "no_delivery_options" });
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("PVZ input: to_location.address equals city; deliveryMode 4 reaches mapper", async () => {
@@ -182,8 +345,12 @@ test("PVZ input: to_location.address equals city; deliveryMode 4 reaches mapper"
         { status: 200 },
       );
     }
-    tarifflistBody = JSON.parse(String(init?.body));
-    return Response.json(MIXED_TARIFFS, { status: 200 });
+    // Both calculators answer; only the tarifflist body is captured, which is
+    // what this test asserts about. Expectations below are unchanged.
+    if (String(url).endsWith("/v2/calculator/tarifflist")) {
+      tarifflistBody = JSON.parse(String(init?.body));
+    }
+    return Response.json(calculatorReply(url), { status: 200 });
   };
   try {
     await withCdekBaseUrl(async () => {
@@ -231,7 +398,7 @@ test("COURIER + DROP_OFF → deliveryMode 3; COURIER handover → deliveryMode 1
           { status: 200 },
         );
       }
-      return Response.json(MIXED_TARIFFS, { status: 200 });
+      return Response.json(calculatorReply(url), { status: 200 });
     };
     return withCdekBaseUrl(() =>
       getOffers(baseInput({ handoverMode }), CREDS),
@@ -270,8 +437,10 @@ test('contractType "2" is sent as type 2', async () => {
         { status: 200 },
       );
     }
-    tarifflistBody = JSON.parse(String(init?.body));
-    return Response.json(MIXED_TARIFFS, { status: 200 });
+    if (String(url).endsWith("/v2/calculator/tarifflist")) {
+      tarifflistBody = JSON.parse(String(init?.body));
+    }
+    return Response.json(calculatorReply(url), { status: 200 });
   };
   try {
     await withCdekBaseUrl(async () => {

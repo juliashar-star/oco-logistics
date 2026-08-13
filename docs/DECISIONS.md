@@ -1897,3 +1897,98 @@ No decrypt on GET; no value, length or mask reaches the browser. Completeness:
 not connected → all fields required; connected → at least one typed field
 (empty keeps stored; merge is a later slice).
 Отвергли: decrypting to learn which fields exist; a presence-only loader.
+
+## 2026-08-13 · CDEK quote = delivery_sum + Σ (total_sum − vat_sum) per service: two calculator calls, merged by tariff code AS A STRING
+
+Measurements behind every number here: `docs/research/cdek-declared-value-2026-08-13.md`
+(spec quotes) and the edu probe of the same day (both calculators, one identical
+input: Москва → Москва, 1000 г, 30×20×10, declared value 1000 ₽).
+
+**The defect.** CDEK insurance is mandatory and computed from the declared value,
+but the method OCO quoted with — `/v2/calculator/tarifflist` — accepts neither a
+declared value nor services, so it cannot price it. Every CDEK card was therefore
+below the invoice by exactly that fee, and by more as the declared value grew:
+measured on tariff 136 «Посылка склад-склад», 150 ₽ quoted against 189 ₽ charged.
+Yandex has no comparable fee, so the two carriers' cards were being compared on
+different things.
+
+**The formula.** An offer's price is `delivery_sum` plus, for every entry in
+`services[]`, `total_sum - vat_sum`. Both halves are the carrier's own numbers and
+the result is NET of VAT, with insurance included.
+
+Neither of the two obvious single fields will do, and each is refused for its own
+reason. `total_sum` alone carries VAT, and whether OCO shows prices with VAT is a
+display-layer decision that has to be taken for every carrier at once — never
+inside one adapter (Yandex quotes net too: `yandex/express-client.ts` picks
+`total_price` over `total_price_with_vat` for the same reason). An adapter quietly
+shipping a gross price would make the CDEK card incomparable with the Yandex cards
+beside it. `sum` alone is the wrong number in the other direction: the spec names
+it «Стоимость услуги» while `total_sum` is «Стоимость услуги с НДС и скидкой», so
+`sum` is the figure BEFORE any contract discount. Quoting it would ignore a
+discount the seller's own contract earns and overstate the card — the same
+systematic error as the original defect, with the sign flipped. `total_sum` minus
+`vat_sum` is the service after discount and still net, which is what the card must
+carry. NO SANDBOX TEST CAN TELL THESE TWO APART: on edu `discount_percent` and
+`discount_sum` are 0 on every service (measured, all 24 tariffs), so `sum` and
+`total_sum - vat_sum` both return 7.5 ₽ there; they diverge only on a production
+contract that actually carries a discount, which is why the reasoning is written
+here rather than left to a passing test.
+
+Measured at 1000 ₽ declared, identical on all 24 tariffs: `sum` 7.5 ₽ (0.75 % of
+the declared value), `vat_sum` 1.5 ₽, `total_sum` 9 ₽. The 0.75 % rate that an
+earlier ADR carried from a secondary source (vc.ru, flagged «перепроверить») is
+now our own measurement.
+
+**Every service is summed, not just INSURANCE.** We request only INSURANCE today,
+but a mandatory service CDEK adds later would otherwise be dropped in silence and
+the card would drift below the invoice again — the same defect under a new name.
+Summing blind means a new service lands in the price by itself.
+
+**Both calculator calls are required, and there is no fallback to a single-call
+price.** `/v2/calculator/tarifflist` is the only one that returns `tariff_name` and
+`delivery_mode`, and it prices no services; `/v2/calculator/tariffAndService`
+prices the services but its rows carry NEITHER `tariff_name` NOR `delivery_mode`
+(measured by key presence, all 24 rows). Neither reply alone can produce a correct
+card. If either call fails, CDEK contributes no offers — the same outcome the
+single call already produced when it failed, and one the surrounding fan-out
+already isolates per adapter. Falling back to the tarifflist price would restore
+the understated figure this decision removes, and the seller would have no way to
+tell which cards were affected. The doubled failure surface is accepted
+deliberately: one option fewer is honest, a wrong price is not.
+
+**The merge key is the tariff code coerced to a string ON BOTH SIDES.** Measured:
+`tarifflist` returns `tariff_code` as a NUMBER (158), `tariffAndService` returns
+the same code as a STRING ("158"); the sets are otherwise identical, all 24 codes
+present on both sides. A strict `===` join would therefore have matched NOTHING and
+produced an empty CDEK list — a silent, total failure. Coercing one side only would
+work today and break the first time either endpoint changes its mind about the type.
+
+**A tariff that cannot be priced completely leaves the list.** That covers a code
+present in only one reply, and a service whose `total_sum` or `vat_sum` cannot be
+read — in particular there is no fallback to `sum` when they cannot, because
+quietly reverting to the pre-discount formula would be invisible. Showing such a
+tariff anyway would put a knowingly-wrong number beside correctly priced siblings,
+which is worse than showing one option fewer: the seller compares carriers by
+exactly that number, and nothing on the card would say this one is not comparable.
+
+**KNOWN UNKNOWN, recorded rather than guessed: whether `delivery_sum` already
+carries its own carriage discount cannot be established from the reply.** The
+tariff level has no discount fields at all — they exist only inside `services[]` —
+so the response cannot say whether the carriage figure is a list price or a
+contracted one. Only a comparison against a real invoice on a production contract
+will answer it. Until then the carriage half of the price is taken as returned.
+
+**The honest frame around all of this: the CDEK calculator is not an offer, and
+the card says «предварительная цена».** The goal is not to match the invoice to the
+kopeck — a calculator cannot promise that — but to stop being wrong systematically
+in one direction. Before this decision every CDEK card understated the price by a
+fee the seller would certainly be charged.
+
+Отвергли: `total_sum` as the added figure (an adapter deciding a display question
+for every carrier); `sum` as the added figure (ignores the contract discount);
+falling back to `sum` when the discounted fields are unreadable; falling back to
+the tarifflist price when the second call fails; summing only INSURANCE;
+normalising the tariff code on one side; showing an unmatched tariff at its bare
+carriage price; `input.assessedCostRub` as the insurance parameter — no adapter
+reads that field and the order body does not send it, so the quote would ask about
+a different number than the order declares.

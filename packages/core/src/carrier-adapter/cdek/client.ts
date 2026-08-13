@@ -30,6 +30,10 @@ import { cdekDeliveryMode } from "./delivery-mode";
 import { mapCdekCancelWindow } from "./map-cancel-window";
 import { mapCdekTariffsToOffers } from "./map-cdek-tariffs";
 import {
+  mergeCdekOffersWithServices,
+  mergeCdekServiceSums,
+} from "./merge-tariff-services";
+import {
   acceptsHandout,
   isActiveOffice,
   mapCdekPickupPoints,
@@ -123,8 +127,24 @@ function buildPackage(item: CarrierOrderItem): {
 }
 
 /**
- * POST /v2/calculator/tarifflist — quote half only. Not registered in
- * ORDER_ADAPTERS yet; nothing calls this from the live order path.
+ * Quote half: TWO calculator calls in parallel, one merged price per tariff.
+ *
+ * WHY TWO. /v2/calculator/tarifflist is the only one of the pair that returns
+ * `tariff_name` and `delivery_mode`, and it accepts neither a declared value nor
+ * services — so its `delivery_sum` is the bare carriage, without the insurance
+ * CDEK charges for every order. /v2/calculator/tariffAndService takes
+ * services[] and prices them, but its rows carry no name and no mode (MEASURED
+ * 13.08, edu, all 24 tariffs, checked by key presence). One call cannot produce
+ * a correct card; see docs/research/cdek-declared-value-2026-08-13.md.
+ *
+ * BOTH REPLIES ARE REQUIRED, AND THE DOUBLED FAILURE SURFACE IS ACCEPTED ON
+ * PURPOSE. If either call fails, CDEK contributes no offers — the same outcome
+ * the single call already produced when it failed (listOffersForOrderAdapters
+ * turns the throw into status failed/timed_out and the other carriers still
+ * answer). Falling back to the tarifflist price instead would silently restore
+ * the understated figure this whole path exists to remove: the seller would see
+ * a number below the invoice and have no way to tell which cards were affected.
+ * An option fewer is honest; a wrong price is not.
  */
 export async function getOffers(
   input: CarrierCreateOrderInput,
@@ -156,20 +176,39 @@ export async function getOffers(
     packages: [buildPackage(item)],
   };
 
-  const response = await cdekPost(
-    baseUrl,
-    creds,
-    "/v2/calculator/tarifflist",
-    body,
-  );
+  // The SAME number the order will put in packages[].items[].cost, which is what
+  // CDEK insures («с данного значения рассчитывается страховка» — spec, quoted in
+  // the research note). Quoting a different figure than the order declares would
+  // reintroduce the gap in a subtler place. Not input.assessedCostRub: no adapter
+  // reads that field, and the order body does not send it.
+  const insuranceParameter = String(item.unitPriceRub);
 
-  if (!response.ok) {
+  const [listResponse, servicesResponse] = await Promise.all([
+    cdekPost(baseUrl, creds, "/v2/calculator/tarifflist", body),
+    cdekPost(baseUrl, creds, "/v2/calculator/tariffAndService", {
+      ...body,
+      services: [{ code: "INSURANCE", parameter: insuranceParameter }],
+    }),
+  ]);
+
+  if (!listResponse.ok) {
     // Status only — never the body (may echo credentials or PII).
-    throw new Error(`CDEK get offers failed: HTTP ${response.status}`);
+    throw new Error(`CDEK get offers failed: HTTP ${listResponse.status}`);
+  }
+  if (!servicesResponse.ok) {
+    throw new Error(
+      `CDEK get offer services failed: HTTP ${servicesResponse.status}`,
+    );
   }
 
-  const json: unknown = await response.json();
-  const offers = mapCdekTariffsToOffers(json, deliveryMode);
+  const listJson: unknown = await listResponse.json();
+  const servicesJson: unknown = await servicesResponse.json();
+
+  const listed = mapCdekTariffsToOffers(listJson, deliveryMode);
+  const offers = mergeCdekOffersWithServices(
+    listed,
+    mergeCdekServiceSums(servicesJson),
+  );
 
   if (offers.length === 0) {
     return { ok: false, reason: "no_delivery_options" };
