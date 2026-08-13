@@ -186,7 +186,7 @@ for (const state of ["ACCEPTED", "WAITING"]) {
 }
 
 test(
-  "the already-requested event is distinct from a fresh request in the timeline",
+  "the already-requested case leaves no row in the timeline",
   withCdek(
     (method) => {
       if (method === "GET") return Response.json(pendingDeleteBody("ACCEPTED"), { status: 200 });
@@ -194,10 +194,20 @@ test(
     },
     async () => {
       const result = await cancelCdekOrder(UUID, CREDS);
-      const event = resolveCancelTrackingEvent(result.result);
-      assert.equal(event.statusCode, OCO_CANCEL_ALREADY_REQUESTED);
-      assert.notEqual(event.statusCode, OCO_CANCEL_REQUESTED);
-      assert.equal(event.statusText, OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU);
+
+      // NOT A DUPLICATE OF THE cancel-tracking-event TESTS — DO NOT DELETE IT
+      // AS ONE. Those feed the resolver a CarrierCancelResult assembled by
+      // hand, which proves the rule but assumes the shape. This one runs the
+      // real cancelCdekOrder against the measured CDEK reply and hands the
+      // resolver whatever the adapter actually produced, so it also fails if
+      // the adapter stops setting the reason the rule is keyed on.
+      assert.equal(result.result.reason, OCO_CANCEL_ALREADY_REQUESTED);
+      assert.notEqual(result.result.reason, OCO_CANCEL_REQUESTED);
+      assert.equal(result.result.description, OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU);
+
+      // Nothing was sent, so there is nothing to record. The distinction from a
+      // fresh request survives where the seller sees it — the banner.
+      assert.equal(resolveCancelTrackingEvent(result.result), null);
     },
   ),
 );

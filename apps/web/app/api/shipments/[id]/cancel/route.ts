@@ -5,7 +5,10 @@ import { resolveOrderAdapterStrict } from "@oco/core/carrier-adapter/order-adapt
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { cancelRequestNoticeMessage } from "@/lib/shipments/cancel-request-message";
-import { resolveCancelTrackingEvent } from "@/lib/shipments/cancel-tracking-event";
+import {
+  isCancelNotSentReason,
+  resolveCancelTrackingEvent,
+} from "@/lib/shipments/cancel-tracking-event";
 import {
   carrierAuthErrorMessage,
   carrierNotConnectedMessage,
@@ -175,10 +178,15 @@ export const POST = withAuth<{ id: string }>(
       // Safe against sync: mapYandexStatusToShipmentStatus returns null for
       // "cancellation_started", so the sync's "last non-null mapped wins" rule
       // skips it and the shipment status stays untouched.
-      // Two presses SHOULD produce two events — the seller really did ask
-      // twice, at two different moments, and that is the truth the timeline
-      // should show. (findUnique/upsert on eventAt=new Date() was dead: the
-      // key is always fresh, unlike sync where eventAt comes from Yandex.)
+      // Two presses produce two events WHERE TWO REQUESTS WERE ACTUALLY MADE —
+      // the seller really did ask twice, at two different moments, and that is
+      // the truth the timeline should show. Yandex is that case: every press
+      // reaches the carrier. CDEK is not, once a deletion is queued — the
+      // adapter answers OCO_CANCEL_ALREADY_REQUESTED without calling, and
+      // resolveCancelTrackingEvent drops the row, because a second identical
+      // line would report an approach that never happened.
+      // (findUnique/upsert on eventAt=new Date() was dead: the key is always
+      // fresh, unlike sync where eventAt comes from Yandex.)
       //
       // The resolution moved out to a pure function so it can be unit-tested;
       // null means the carrier gave us nothing nameable and there is no event
@@ -186,10 +194,21 @@ export const POST = withAuth<{ id: string }>(
       // is missing — so the seller gets the same response either way.
       const event = resolveCancelTrackingEvent(result);
       if (event === null) {
-        console.error(
-          "[shipments/cancel] NO_TRACKING_EVENT_CODE",
-          JSON.stringify({ shipmentId: row.id }),
-        );
+        // TWO DIFFERENT NULLS, AND ONLY ONE OF THEM IS A FAULT. A deliberate
+        // «we sent nothing» is routine and measured — logging it as an error
+        // would put a red line in the log on every press of a normal path and
+        // teach us to ignore the marker that does mean something.
+        if (isCancelNotSentReason(result.reason)) {
+          console.log(
+            "[shipments/cancel] NO_REQUEST_SENT_ALREADY_QUEUED",
+            JSON.stringify({ shipmentId: row.id }),
+          );
+        } else {
+          console.error(
+            "[shipments/cancel] NO_TRACKING_EVENT_CODE",
+            JSON.stringify({ shipmentId: row.id }),
+          );
+        }
       } else {
         await prisma.trackingEvent.create({
           data: {

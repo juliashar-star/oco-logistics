@@ -54,8 +54,15 @@ export const OCO_CANCEL_REQUESTED_TEXT_RU =
  * the timeline would claim a fresh request had been sent.
  *
  * Distinct from OCO_CANCEL_REQUESTED on purpose: «we asked just now» and «you
- * already asked, it is still being processed» are different facts, and a
- * timeline that renders them identically hides that nothing new happened.
+ * already asked, it is still being processed» are different facts, and the
+ * seller is told them in different words — the two codes pick two different
+ * banner sentences (cancelRequestNoticeMessage).
+ *
+ * THE DIFFERENCE LIVES IN THE BANNER, NOT IN THE TIMELINE, and the timeline
+ * says its part by staying still: this code makes resolveCancelTrackingEvent
+ * write nothing, because no request was made and a row would report an approach
+ * to the carrier that never happened. The absent row IS the signal that nothing
+ * new occurred — repeating the earlier one per press would say the opposite.
  */
 export const OCO_CANCEL_ALREADY_REQUESTED = "OCO_CANCEL_ALREADY_REQUESTED";
 
