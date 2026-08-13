@@ -185,6 +185,12 @@ model Shipment {
   // null means it predates this field and falls back to the default entry.
   orderAdapterKey        String?
   selectedOfferId        String?
+  // The service name as the CARRIER itself calls it (CDEK: tariff_name, e.g.
+  // «Посылка склад-склад»). Null when the carrier gives no name at all — both
+  // Yandex families never send one — so nullable here is required, not
+  // convenient. The registry title (order-adapter-seller-titles) covers the
+  // adapter, not the tariff, and cannot stand in for this.
+  selectedOfferServiceName String?
   selectedOfferExpiresAt DateTime?
   submittingAt           DateTime?
   // Holds the CarrierOffer[] from the last getOffers call. Yandex returns the
