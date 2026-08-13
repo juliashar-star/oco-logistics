@@ -4,6 +4,7 @@ import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import { resolveOrderAdapterStrict } from "@oco/core/carrier-adapter/order-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
+import { cancelRequestNoticeMessage } from "@/lib/shipments/cancel-request-message";
 import { resolveCancelTrackingEvent } from "@/lib/shipments/cancel-tracking-event";
 import {
   carrierAuthErrorMessage,
@@ -201,11 +202,17 @@ export const POST = withAuth<{ id: string }>(
         });
       }
 
+      // The banner text is decided HERE, not in the browser, because only this
+      // side knows which reason codes are ours. The client had one fixed
+      // sentence, so the CDEK «already queued» case — where the adapter sends
+      // nothing at all — told the seller a request had just been sent while the
+      // timeline row above it said the opposite.
       return NextResponse.json({
         ok: true,
         accepted: result.accepted,
         providerStatus: result.providerStatus,
         reason: result.reason,
+        notice: cancelRequestNoticeMessage(result.reason),
       });
     } catch (error) {
       if (error instanceof CarrierAuthError) {

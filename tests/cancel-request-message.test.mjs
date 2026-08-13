@@ -5,7 +5,14 @@ import {
   CANCEL_REQUEST_FALLBACK_ERROR_RU,
   CANCEL_REQUEST_SUCCESS_RU,
   cancelRequestErrorMessage,
+  cancelRequestNoticeMessage,
 } from "../apps/web/lib/shipments/cancel-request-message.ts";
+import {
+  OCO_CANCEL_ALREADY_REQUESTED,
+  OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
+  OCO_CANCEL_REQUESTED,
+  OCO_CANCEL_REQUESTED_TEXT_RU,
+} from "../packages/core/src/carrier-adapter/cancel-event-codes.ts";
 
 // ── the route's message wins whenever there is one ─────────────────────────
 
@@ -75,6 +82,102 @@ test("the result is never blank — an empty red panel says less than the fallba
   }
 });
 
+// ── the success banner: a known OCO_* code gets its own sentence ───────────
+
+test("OCO_CANCEL_REQUESTED → the «asked, the carrier decides next» sentence", () => {
+  assert.equal(
+    cancelRequestNoticeMessage(OCO_CANCEL_REQUESTED),
+    OCO_CANCEL_REQUESTED_TEXT_RU,
+  );
+});
+
+test("OCO_CANCEL_ALREADY_REQUESTED → the «already queued» sentence", () => {
+  // THE DEFECT THIS SLICE EXISTS FOR. CDEK's cancelCdekOrder returns this when
+  // requests[] already carries a DELETE — it sends NOTHING to the carrier — and
+  // the seller was still shown «Запрос на отмену отправлен».
+  assert.equal(
+    cancelRequestNoticeMessage(OCO_CANCEL_ALREADY_REQUESTED),
+    OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
+  );
+  assert.notEqual(
+    cancelRequestNoticeMessage(OCO_CANCEL_ALREADY_REQUESTED),
+    CANCEL_REQUEST_SUCCESS_RU,
+  );
+});
+
+test("the two known codes do not share a sentence", () => {
+  // «we asked just now» and «you already asked» are different facts; rendering
+  // them identically would hide that the second press did nothing.
+  assert.notEqual(
+    cancelRequestNoticeMessage(OCO_CANCEL_REQUESTED),
+    cancelRequestNoticeMessage(OCO_CANCEL_ALREADY_REQUESTED),
+  );
+});
+
+test("surrounding whitespace does not hide a known code", () => {
+  assert.equal(
+    cancelRequestNoticeMessage(`  ${OCO_CANCEL_ALREADY_REQUESTED}  `),
+    OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
+  );
+});
+
+// ── anything else → the general sentence, never a provider string ──────────
+
+for (const [label, reason] of [
+  ["a Yandex request/* reason", "cancellation_started"],
+  ["another Yandex reason", "cancelled_by_user"],
+  ["a Yandex Express claim status", "cancelled_with_payment"],
+  ["an unknown OCO-looking code", "OCO_CANCEL_SOMETHING_NEW"],
+  ["a lowercased known code", "oco_cancel_already_requested"],
+  ["a code with a known one inside it", "NOT_OCO_CANCEL_REQUESTED_EITHER"],
+  ["blank string", ""],
+  ["whitespace only", "   "],
+  ["newlines only", "\n\t "],
+  ["missing reason", undefined],
+  ["null reason", null],
+  ["a number", 409],
+  ["an object", { reason: OCO_CANCEL_REQUESTED }],
+  ["an array", [OCO_CANCEL_REQUESTED]],
+  ["a boolean", false],
+  // Object.prototype keys: with a plain object literal as the table these would
+  // resolve to a function and be shown to the seller.
+  ["the string \"constructor\"", "constructor"],
+  ["the string \"toString\"", "toString"],
+  ["the string \"__proto__\"", "__proto__"],
+]) {
+  test(`${label} → the general sentence`, () => {
+    assert.equal(cancelRequestNoticeMessage(reason), CANCEL_REQUEST_SUCCESS_RU);
+  });
+}
+
+test("a carrier's own description is never what comes back", () => {
+  // The function takes a REASON, and even when a provider string is handed to
+  // it the seller sees our sentence — this is what keeps a response body out of
+  // the banner.
+  for (const providerText of [
+    "Заказ отменен по инициативе клиента",
+    "The order has been cancelled",
+    "cancellation_started",
+  ]) {
+    assert.equal(
+      cancelRequestNoticeMessage(providerText),
+      CANCEL_REQUEST_SUCCESS_RU,
+    );
+  }
+});
+
+test("the notice is never blank", () => {
+  for (const reason of [
+    OCO_CANCEL_REQUESTED,
+    OCO_CANCEL_ALREADY_REQUESTED,
+    "",
+    undefined,
+    7,
+  ]) {
+    assert.ok(cancelRequestNoticeMessage(reason).trim().length > 0);
+  }
+});
+
 // ── wording pin ────────────────────────────────────────────────────────────
 
 test("the seller-facing cancellation wording, character for character", () => {
@@ -94,4 +197,25 @@ test("the seller-facing cancellation wording, character for character", () => {
   // The success line must not claim the order IS cancelled — the route writes
   // no status precisely because accepted is not cancelled.
   assert.doesNotMatch(CANCEL_REQUEST_SUCCESS_RU, /отменён|отменен|Заказ отменён/);
+});
+
+test("the per-code banner sentences, character for character", () => {
+  // These live in packages/core because the timeline uses them too; pinned here
+  // because this is where they reach the seller as a banner.
+  assert.equal(
+    cancelRequestNoticeMessage(OCO_CANCEL_REQUESTED),
+    "Отмена запрошена у перевозчика. Статус обновится, когда перевозчик её обработает.",
+  );
+  assert.equal(
+    cancelRequestNoticeMessage(OCO_CANCEL_ALREADY_REQUESTED),
+    "Запрос на отмену уже отправлен ранее и ещё обрабатывается перевозчиком. Отправлять его повторно не нужно.",
+  );
+  // Neither may claim the order is cancelled — accepted is not cancelled, and
+  // for the already-queued case nothing was even sent.
+  for (const sentence of [
+    cancelRequestNoticeMessage(OCO_CANCEL_REQUESTED),
+    cancelRequestNoticeMessage(OCO_CANCEL_ALREADY_REQUESTED),
+  ]) {
+    assert.doesNotMatch(sentence, /Заказ отменён|Заказ отменен/);
+  }
 });

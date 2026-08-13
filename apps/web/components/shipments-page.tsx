@@ -391,7 +391,16 @@ export function ShipmentsPage() {
       }
 
       setCancelConfirmOpen(false);
-      setCancelNotice(CANCEL_REQUEST_SUCCESS_RU);
+      // The route's sentence when it sent one — it is the only side that can
+      // tell «we asked just now» from «you already asked, it is still being
+      // processed». The local constant is the answer for a response that has no
+      // notice at all, which is exactly what an older deployment returns.
+      const notice: unknown = data === null ? undefined : data.notice;
+      setCancelNotice(
+        typeof notice === "string" && notice.trim() !== ""
+          ? notice.trim()
+          : CANCEL_REQUEST_SUCCESS_RU,
+      );
       // The drawer STAYS OPEN and the events are re-fetched: cancellation
       // writes a TrackingEvent, and that is the only visible result.
       //
