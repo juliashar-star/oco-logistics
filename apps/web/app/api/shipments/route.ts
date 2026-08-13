@@ -36,6 +36,7 @@ const shipmentSelect = {
   isAnonymized: true,
   providerKey: true,
   orderAdapterKey: true,
+  selectedOfferServiceName: true,
   // Selected only to derive hasCarrierOrder in the DTO — toShipmentListItem
   // does not copy it, and the browser never sees a carrier's internal id.
   providerOrderId: true,

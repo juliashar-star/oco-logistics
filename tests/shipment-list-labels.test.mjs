@@ -26,6 +26,7 @@ test("shipmentCarrierLabel: providerKey set → masked display name", () => {
     shipmentCarrierLabel({
       providerKey: "yataxi",
       orderAdapterKey: "yataxi:next_day",
+      selectedOfferServiceName: null,
       carrier: { name: "LEGACY" },
     }),
     "Перевозчик №1",
@@ -37,6 +38,7 @@ test("shipmentCarrierLabel: providerKey null → legacy carrier name", () => {
     shipmentCarrierLabel({
       providerKey: null,
       orderAdapterKey: null,
+      selectedOfferServiceName: null,
       carrier: { name: "СДЭК" },
     }),
     "СДЭК",
@@ -48,6 +50,7 @@ test("shipmentCarrierLabel: neither → em dash", () => {
     shipmentCarrierLabel({
       providerKey: null,
       orderAdapterKey: null,
+      selectedOfferServiceName: null,
       carrier: null,
     }),
     "—",
@@ -55,10 +58,13 @@ test("shipmentCarrierLabel: neither → em dash", () => {
 });
 
 test("shipmentTariffLabel: providerKey null → em dash (legacy)", () => {
+  // FIRST branch, before any name is considered: a row with no carrier has no
+  // tariff to name either.
   assert.equal(
     shipmentTariffLabel({
       providerKey: null,
       orderAdapterKey: "yataxi:next_day",
+      selectedOfferServiceName: "Посылка склад-склад",
       carrier: { name: "X" },
     }),
     "—",
@@ -69,6 +75,7 @@ test("shipmentTariffLabel: uses orderAdapterSellerTitle; null key → default en
   const label = shipmentTariffLabel({
     providerKey: "yataxi",
     orderAdapterKey: null,
+    selectedOfferServiceName: null,
     carrier: null,
   });
   assert.equal(label, orderAdapterSellerTitle(null));
@@ -80,10 +87,74 @@ test("shipmentTariffLabel: explicit orderAdapterKey", () => {
     shipmentTariffLabel({
       providerKey: "yataxi",
       orderAdapterKey: "yataxi:next_day",
+      selectedOfferServiceName: null,
       carrier: null,
     }),
     orderAdapterSellerTitle("yataxi:next_day"),
   );
+});
+
+// ── the carrier's own name wins ────────────────────────────────────────────
+
+test("shipmentTariffLabel: CDEK tariff name replaces the registry generalisation", () => {
+  // THE DEFECT THIS SLICE FIXES. One cdek:delivery entry stands in front of two
+  // dozen tariffs, so the registry title was wrong for every CDEK row.
+  const label = shipmentTariffLabel({
+    providerKey: "cdek",
+    orderAdapterKey: "cdek:delivery",
+    selectedOfferServiceName: "Посылка склад-склад",
+    carrier: null,
+  });
+  assert.equal(label, "Посылка склад-склад");
+  assert.notEqual(label, orderAdapterSellerTitle("cdek:delivery"));
+  assert.notEqual(label, "Доставка по России");
+});
+
+test("shipmentTariffLabel: surrounding whitespace is trimmed off the carrier name", () => {
+  assert.equal(
+    shipmentTariffLabel({
+      providerKey: "cdek",
+      orderAdapterKey: "cdek:delivery",
+      selectedOfferServiceName: "  Экспресс склад-склад  ",
+      carrier: null,
+    }),
+    "Экспресс склад-склад",
+  );
+});
+
+for (const [label, serviceName] of [
+  ["null", null],
+  ["undefined", undefined],
+  ["an empty string", ""],
+  ["whitespace only", "   "],
+  ["newlines only", "\n\t "],
+]) {
+  test(`shipmentTariffLabel: ${label} name → the adapter title`, () => {
+    assert.equal(
+      shipmentTariffLabel({
+        providerKey: "yataxi",
+        orderAdapterKey: "yataxi:express",
+        selectedOfferServiceName: serviceName,
+        carrier: null,
+      }),
+      orderAdapterSellerTitle("yataxi:express"),
+    );
+  });
+}
+
+test("shipmentTariffLabel: a carrier name BEATS the default-entry fallback on an unknown key", () => {
+  // orderAdapterSellerTitle answers an unknown key with the DEFAULT (Yandex)
+  // title, so without this precedence a CDEK row whose adapter key drifted
+  // would be labelled «Доставка по России» while the true name sat unused.
+  const label = shipmentTariffLabel({
+    providerKey: "cdek",
+    orderAdapterKey: "cdek:nonexistent",
+    selectedOfferServiceName: "Посылка склад-склад",
+    carrier: null,
+  });
+  assert.equal(label, "Посылка склад-склад");
+  assert.equal(orderAdapterSellerTitle("cdek:nonexistent"), "Доставка по России");
+  assert.notEqual(label, orderAdapterSellerTitle("cdek:nonexistent"));
 });
 
 test("DRIFT GUARD: every ORDER_ADAPTERS key is an own key of ORDER_ADAPTER_LABEL_SUPPORT", () => {

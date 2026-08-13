@@ -20,6 +20,7 @@ const EXPECTED_SHIPMENT_LIST_KEYS = [
   "isAnonymized",
   "providerKey",
   "orderAdapterKey",
+  "selectedOfferServiceName",
   "hasCarrierOrder",
   "confirmWarnings",
   "carrier",
@@ -42,6 +43,7 @@ const SAMPLE_ROW = {
   isAnonymized: false,
   providerKey: "yataxi",
   orderAdapterKey: "yataxi:express",
+  selectedOfferServiceName: null,
   providerOrderId: "req-abc-udp",
   confirmWarnings: /** @type {const} */ ([
     "REQUIREMENT_UNMET",

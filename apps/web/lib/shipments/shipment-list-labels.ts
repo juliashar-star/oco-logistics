@@ -9,6 +9,8 @@ import { isHttpOrHttpsUrl } from "../url/is-http-or-https-url";
 export type ShipmentListLabelRow = {
   providerKey: string | null;
   orderAdapterKey: string | null;
+  /** The carrier's own name for the purchased service; null when it gave none. */
+  selectedOfferServiceName: string | null;
   carrier: { name: string } | null;
 };
 
@@ -24,13 +26,29 @@ export function shipmentCarrierLabel(row: ShipmentListLabelRow): string {
 }
 
 /**
- * ТАРИФ cell / CSV «Тариф».
+ * ТАРИФ cell / CSV «Тариф» / drawer «Тариф» — one resolver for all three.
+ *
+ * THE CARRIER'S OWN NAME WINS WHENEVER THERE IS ONE, and the asymmetry between
+ * carriers is the reason. For Yandex the registry entry IS the service —
+ * `yataxi:next_day` is one service, so its title is correct and the carrier
+ * sends no name of its own. For CDEK a single `cdek:delivery` entry stands in
+ * front of two dozen tariffs (24 measured on one route), so the registry title
+ * is a generalisation that is wrong for every row: the seller picked «Посылка
+ * склад-склад» and was shown «Доставка по России».
+ *
+ * The registry title stays the fallback, not the default: rows created before
+ * the column existed, and carriers that name nothing, still need a label.
+ *
  * Titles from order-adapter-seller-titles (null/unknown key → default entry).
  * Must not import order-adapters — that registry pulls Node builtins into the client.
  */
 export function shipmentTariffLabel(row: ShipmentListLabelRow): string {
   if (row.providerKey == null) {
     return "—";
+  }
+  const carrierName = row.selectedOfferServiceName?.trim() ?? "";
+  if (carrierName !== "") {
+    return carrierName;
   }
   return orderAdapterSellerTitle(row.orderAdapterKey);
 }

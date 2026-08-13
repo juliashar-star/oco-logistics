@@ -153,6 +153,14 @@ export async function submitOrder(
           providerKey,
           orderAdapterKey,
           selectedOfferId: offer.offerId,
+          // The carrier's own name for what was bought (CDEK: tariff_name,
+          // e.g. «Посылка склад-склад»). THE VALUE WAS ALREADY IN HAND HERE and
+          // was simply dropped: the row kept the offer id but nothing naming the
+          // service, so the list fell back to the registry title — right for
+          // Yandex, wrong for every CDEK order.
+          // Blank or whitespace becomes null, never "": Yandex sends no name at
+          // all, and «no value» must have ONE representation, not two.
+          selectedOfferServiceName: offer.serviceName?.trim() || null,
           selectedOfferExpiresAt: parseOptionalIsoDate(offer.expiresAt),
           // plannedCost is kopecks (docs/DATABASE.md; every reader divides by 100);
           // CarrierOffer.priceRub is rubles — raw would show 273.28 ₽ as 2,73 ₽.

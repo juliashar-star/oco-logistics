@@ -1992,3 +1992,56 @@ normalising the tariff code on one side; showing an unmatched tariff at its bare
 carriage price; `input.assessedCostRub` as the insurance parameter — no adapter
 reads that field and the order body does not send it, so the quote would ask about
 a different number than the order declares.
+
+## 2026-08-13 · Shipment.selectedOfferServiceName — the carrier's own name for what was bought
+
+**The defect.** The ТАРИФ column showed «Доставка по России» on every CDEK row.
+It rendered `orderAdapterSellerTitle(orderAdapterKey)`, i.e. the name of the
+REGISTRY ENTRY. For Yandex that is correct by construction — `yataxi:next_day`
+is one service, and the carrier sends no name of its own — but a single
+`cdek:delivery` entry stands in front of two dozen tariffs (24 measured on one
+route), so the title is a generalisation that is wrong for every row: the seller
+picked «Посылка склад-склад» and was shown something else. The row already held
+`selectedOfferId` = `cdek:136`; what it did not hold was any name.
+
+**A column, not a derivation from `quotedOffers`.** The name was reachable in
+principle — `quotedOffers` keeps the whole `CarrierOffer[]`, including
+`serviceName`, and survives submit. It was rejected on four counts, each
+sufficient on its own: the array never crosses the boundary (the list DTO names
+its fields explicitly and does not include it); it carries `rawOffer`, the raw
+carrier bodies the DTO exists to keep out of the browser; it yields nothing for
+Yandex, which sets no `serviceName` in either family, so the fallback would be
+needed anyway; and rows created before the column existed have no array at all.
+Deriving it would mean parsing JSON per row on every list request to recover a
+value we had in hand at submit and threw away.
+
+**Null, never the empty string.** Both Yandex families send no name, so «no
+value» is the common case, not an edge one — and it must have ONE
+representation. A stored `""` would read as a name the carrier gave, and every
+consumer would have to guard against it a second time. The write trims and
+collapses blank to null at the single point where it happens
+(`submit-order.ts`, the CREATED branch); the label resolver trims again on read
+because old rows and future writers are not this slice's to trust.
+
+**Precedence: the carrier's name wins whenever there is one, the registry title
+is the fallback.** Deliberately including the case of an unknown adapter key:
+`orderAdapterSellerTitle` answers an unknown key with the DEFAULT (Yandex)
+title, so without this order a CDEK row whose key drifted would be labelled
+«Доставка по России» while the true name sat unused in the column. The
+`providerKey == null → "—"` branch stays first: a row with no carrier has no
+tariff to name either.
+
+**Rows created before today keep the adapter title, and that is accepted.**
+Back-filling them from `quotedOffers` is a data migration, and on the two CDEK
+rows that exist it is not worth its own risk. New orders are correct from the
+next submit onward.
+
+One resolver serves all three surfaces — table, drawer and CSV — but the CSV
+path has its own row type and its own Prisma select, so the field is added in
+both places; a column missing from one select would silently keep showing the
+old generalisation there.
+
+Отвергли: deriving the name from `quotedOffers` on read; storing `""` for «no
+name»; putting the registry title first and the carrier's name second; a
+back-fill migration for existing rows; a second column for the tariff code (the
+code is already in `selectedOfferId`).

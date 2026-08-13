@@ -24,6 +24,12 @@ export type ShipmentListItemDto = {
   providerKey: string | null;
   orderAdapterKey: string | null;
   /**
+   * The carrier's own name for the purchased service (CDEK: tariff_name).
+   * Null when the carrier gives none — both Yandex families send nothing —
+   * and null on rows created before the column existed.
+   */
+  selectedOfferServiceName: string | null;
+  /**
    * Whether an order exists at the carrier — DERIVED from providerOrderId, which
    * itself never crosses the boundary. The browser has no use for an internal
    * carrier id, and shipping one would put a value into the client that only
@@ -52,6 +58,12 @@ export type ShipmentListItemSource = {
   isAnonymized: boolean;
   providerKey: string | null;
   orderAdapterKey: string | null;
+  /**
+   * The carrier's own name for the purchased service (CDEK: tariff_name).
+   * Null when the carrier gives none — both Yandex families send nothing —
+   * and null on rows created before the column existed.
+   */
+  selectedOfferServiceName: string | null;
   /** Read to derive hasCarrierOrder; never copied to the DTO. */
   providerOrderId: string | null;
   confirmWarnings: readonly CarrierConfirmWarning[];
@@ -78,6 +90,7 @@ export function toShipmentListItem(
     isAnonymized: row.isAnonymized,
     providerKey: row.providerKey,
     orderAdapterKey: row.orderAdapterKey,
+    selectedOfferServiceName: row.selectedOfferServiceName,
     // Same blank-check the cancel route's first precondition uses, so the
     // control and the server agree on what «exists at the carrier» means.
     hasCarrierOrder:

@@ -618,6 +618,73 @@ describe("submitOrder", { concurrency: false }, () => {
     assert.equal(row.orderAdapterKey, adapterKey);
   });
 
+  test("(xi) submit writes the carrier's own service name onto the row", async () => {
+    const { company, shipment } = await seedDraftShipment(
+      "Service Name Co",
+      `submit-service-name-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = "cdek-request-service-name-1";
+
+    await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: { ...OFFER, serviceName: "Посылка склад-склад" },
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "cdek",
+      orderAdapterKey: "cdek:delivery",
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
+      }),
+    });
+
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    assert.equal(row.selectedOfferServiceName, "Посылка склад-склад");
+  });
+
+  for (const [label, serviceName] of [
+    ["absent", undefined],
+    ["an empty string", ""],
+    ["whitespace only", "   "],
+  ]) {
+    test(`(xi-${label}) service name ${label} → the column is NULL, never ""`, async () => {
+      const { company, shipment } = await seedDraftShipment(
+        `No Service Name Co ${label}`,
+        `submit-no-service-name-${label.replace(/\s+/g, "-")}-${Date.now()}@example.com`,
+      );
+      const REQUEST_ID = `yandex-request-no-service-name-${Date.now()}`;
+      const offer = { ...OFFER };
+      if (serviceName !== undefined) {
+        offer.serviceName = serviceName;
+      }
+
+      await submitOrder(prisma, {
+        shipmentId: shipment.id,
+        companyId: company.id,
+        offer,
+        input: ORDER_INPUT,
+        credentials: CREDS,
+        providerKey: "yataxi",
+        orderAdapterKey: "yataxi:next_day",
+        confirm: async () => ({
+          requestId: REQUEST_ID,
+          rawResponse: { request_id: REQUEST_ID },
+          warnings: [],
+        }),
+      });
+
+      const row = await assertNotSubmitting(prisma, shipment.id);
+      assert.equal(row.status, "CREATED");
+      // «no value» has ONE representation. An empty string in the column would
+      // read as a name the carrier gave, and the label resolver would have to
+      // guard against it a second time.
+      assert.equal(row.selectedOfferServiceName, null);
+    });
+  }
+
   test("(x) offer with no adapterKey still submits via resolveOrderAdapter fallback", async () => {
     const { company, shipment } = await seedDraftShipment(
       "Fallback Adapter Co",
