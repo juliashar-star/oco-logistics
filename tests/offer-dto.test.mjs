@@ -3,6 +3,9 @@ import test from "node:test";
 
 import { toOffersResponse } from "../apps/web/lib/shipments/offer-dto.ts";
 
+// OFFER PIN. Order-sensitive. Unchanged by the adapter-status notice slice:
+// that field is a TOP-LEVEL envelope key, deliberately not a per-offer one —
+// an adapter that produced no offers has no offer to hang it on.
 const EXPECTED_OFFER_KEYS = [
   "offerId",
   "expiresAt",
@@ -75,13 +78,14 @@ function fakeResolveFreeCancelBoundary(adapterKey) {
   return "unknown";
 }
 
-function mapOffers(result) {
+function mapOffers(result, adaptersWithoutOffers = []) {
   return toOffersResponse(
     result,
     fakeResolveServiceTitle,
     fakeResolveSupportsThermalBag,
     fakeResolveCarrierName,
     fakeResolveFreeCancelBoundary,
+    adaptersWithoutOffers,
   );
 }
 
@@ -109,6 +113,10 @@ test("fat rawOffer never appears in serialized response", () => {
   assert.equal(serialized.includes("should-not-leak"), false);
 });
 
+// ENVELOPE PIN. deepEqual on the whole object, so any new top-level key fails
+// here — which is what it is for. `adaptersWithoutOffers` was added by the
+// adapter-status notice slice: the fan-out already knew which adapter produced
+// nothing, and the browser had no way to learn it.
 test("no_delivery_options -> ok true, status no_delivery_options, empty offers", () => {
   const response = mapOffers({
     ok: false,
@@ -118,6 +126,7 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
     ok: true,
     status: "no_delivery_options",
     offers: [],
+    adaptersWithoutOffers: [],
   });
 });
 
@@ -127,7 +136,54 @@ test("ok with empty offers -> ok true, status ok, empty offers", () => {
     ok: true,
     status: "ok",
     offers: [],
+    adaptersWithoutOffers: [],
   });
+});
+
+// ── adaptersWithoutOffers: three fields, and neither key ───────────────────
+
+test("adaptersWithoutOffers is carried through with exactly three fields", () => {
+  const response = mapOffers({ ok: true, offers: [SAMPLE_OFFER] }, [
+    {
+      carrierName: "Перевозчик №2",
+      serviceTitle: "Доставка по России",
+      status: "failed",
+    },
+  ]);
+  assert.equal(response.adaptersWithoutOffers.length, 1);
+  assert.deepEqual(Object.keys(response.adaptersWithoutOffers[0]), [
+    "carrierName",
+    "serviceTitle",
+    "status",
+  ]);
+});
+
+test("adapter key and providerKey stay off the wire", () => {
+  // Same guard as «adapterKey stays off the wire» for offers: the fan-out entry
+  // carries the registry key, and the display map exists to mask providerKey.
+  const adapterKey = "cdek:delivery_LEAK_MARKER_abc99";
+  const providerKey = "cdek_PROVIDER_LEAK_zzz";
+  const response = mapOffers({ ok: true, offers: [SAMPLE_OFFER] }, [
+    {
+      carrierName: "Перевозчик №2",
+      serviceTitle: "Доставка по России",
+      status: "auth_failed",
+      key: adapterKey,
+      adapterKey,
+      providerKey,
+    },
+  ]);
+
+  const entry = response.adaptersWithoutOffers[0];
+  assert.equal("key" in entry, false);
+  assert.equal("adapterKey" in entry, false);
+  assert.equal("providerKey" in entry, false);
+
+  const serialized = JSON.stringify(response);
+  assert.equal(serialized.includes("LEAK_MARKER_abc99"), false);
+  assert.equal(serialized.includes("PROVIDER_LEAK_zzz"), false);
+  assert.equal(serialized.includes("adapterKey"), false);
+  assert.equal(serialized.includes("providerKey"), false);
 });
 
 test("serviceTitle comes from the resolver for each offer, including undefined adapterKey", () => {

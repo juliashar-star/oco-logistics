@@ -5,7 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
-import type { OfferDto } from "@/lib/shipments/offer-dto";
+import type {
+  OfferAdapterWithoutOffersDto,
+  OfferDto,
+} from "@/lib/shipments/offer-dto";
 import {
   formatMoscowClockTime,
 } from "@/lib/date/format-offer-interval";
@@ -15,6 +18,7 @@ import {
 } from "@/lib/date/format-offer-lines";
 import { pickSharedOfferExpiry } from "@/lib/date/pick-shared-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
+import { describeAdaptersWithoutOffers } from "@/lib/shipments/describe-adapters-without-offers";
 import { describePartialPickupPoints } from "@/lib/shipments/describe-partial-pickup-points";
 import {
   formatParcelEntrySummary,
@@ -217,6 +221,16 @@ export function NewOrderForm() {
   const [selectedInterval, setSelectedInterval] = useState<DeliveryInterval | null>(null);
   const [intervalsLoading, setIntervalsLoading] = useState(false);
   const [yandexOffers, setYandexOffers] = useState<OfferDto[]>([]);
+  const [offerAdaptersWithoutOffers, setOfferAdaptersWithoutOffers] = useState<
+    OfferAdapterWithoutOffersDto[]
+  >([]);
+  /** Same shape as partialPickupPointsNotice: only beside a non-empty list. */
+  const adaptersWithoutOffersNotice = useMemo(() => {
+    if (yandexOffers.length === 0) {
+      return null;
+    }
+    return describeAdaptersWithoutOffers(offerAdaptersWithoutOffers);
+  }, [yandexOffers.length, offerAdaptersWithoutOffers]);
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [draftShipmentId, setDraftShipmentId] = useState<string | null>(null);
   const [noDeliveryToPoint, setNoDeliveryToPoint] = useState(false);
@@ -657,6 +671,7 @@ export function NewOrderForm() {
       if (offersData.status === "no_delivery_options") {
         setNoDeliveryToPoint(true);
         setYandexOffers([]);
+        setOfferAdaptersWithoutOffers([]);
         setSelectedOfferId(null);
         calculationSnapshot.current = snapshotFromForm();
         return;
@@ -666,6 +681,11 @@ export function NewOrderForm() {
         ? offersData.offers
         : [];
       setNoDeliveryToPoint(false);
+      setOfferAdaptersWithoutOffers(
+        Array.isArray(offersData.adaptersWithoutOffers)
+          ? offersData.adaptersWithoutOffers
+          : [],
+      );
       setYandexOffers(nextOffers);
       setSelectedOfferId(null);
       calculationSnapshot.current = snapshotFromForm();
@@ -1336,6 +1356,14 @@ export function NewOrderForm() {
               </p>
             );
           })()}
+          {adaptersWithoutOffersNotice && (
+            <p
+              className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              role="status"
+            >
+              {adaptersWithoutOffersNotice}
+            </p>
+          )}
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {yandexOffers.map((offer) => {
               const isSelected = selectedOfferId === offer.offerId;

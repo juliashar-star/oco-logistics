@@ -2208,3 +2208,74 @@ working carrier for a fee that does not exist on this contract); treating
 `status: "false"` as an unconditional fallback to the bare price (an unknown code
 would silently understate); prefix matching on the codes; inferring success from
 the presence of `delivery_sum` inside `result` rather than from `status`.
+
+## 2026-08-14 · A carrier that was asked and produced nothing is named beside the offer list, as «перевозчик · услуга»
+
+**The defect.** With one adapter answering and another failing, the offers route
+returned 200 with a shorter list and said nothing. The fan-out had already
+computed the reason — `listOffersForOrderAdapters` returns
+`adapters: [{ key, status }]` — and the route read it only as three aggregate
+predicates, then dropped it. Measured twice on 14.08: the sandbox 500 on
+`tariffAndService`, and the unrecognised city on the calculator. Both times the
+seller saw fewer cards and the reason existed only in the server log. A carrier
+that was asked and failed looked exactly like one that was never connected.
+
+**THE PAIR «carrierName · serviceTitle», NOT ONE NAME, and both halves are
+forced by measured collisions in the registry.** Three yataxi entries —
+`next_day`, `express`, `courier` — share one `providerKey`, so they resolve to
+one masked name «Перевозчик №1»: the name alone cannot say which service went
+missing. And `yataxi:next_day` and `cdek:delivery` carry the identical title
+«Доставка по России», so the title alone cannot say which carrier. Only the pair
+is unique across all four entries — and it is the same construction the offer
+card already uses for its heading, so the seller reads the same words in both
+places. Where either half is blank the notice degrades to «один из
+перевозчиков», never to a key.
+
+**Structure crosses the wire, prose is built in the browser.** The response
+gains one top-level field, `adaptersWithoutOffers`, with exactly three strings
+per entry: the masked name, the registry title, the status. The sentence is a
+pure function in the UI layer — the same split as `freeCancelBoundary` and its
+banner, and for the same reason: wording is a display decision that must be
+taken once for every carrier, not baked into a route.
+
+**NEITHER KEY CROSSES.** Not `adapterKey`, which would tell the browser which
+registry entries exist, and not `providerKey`, which is the carrier identity the
+display map exists to mask. Both are resolved server-side by the same two
+resolvers the cards use. Worth recording explicitly because the neighbouring
+pickup-points DTO DOES put `providerKey` on the wire (`CarrierDto.providerKey`):
+that is a precedent we deliberately do not follow, and the shape of
+`describePartialPickupPoints` was reused while its payload was not.
+
+**Three sentences, not one, because the three cases ask for different things
+from the seller.** `no_delivery_options` is an honest answer — the carrier does
+not serve this route — and calling it a failure would be false. `timed_out` and
+`failed` share one sentence on purpose: to the seller both mean «did not
+answer», and whether it was a clock or a throw is ours to read in the log, not
+theirs to act on; the sentence invites a recalculation, which is the only useful
+move. `auth_failed` is the one case with an action the seller owns, so it points
+at the settings. Status `ok` yields no sentence at all — an adapter that
+answered successfully with nothing to sell is not a failure, the same rule the
+pickup-points notice applies to `ok` with zero points.
+
+**Scope is the mixed branch only.** The other branches already say their piece:
+the all-`no_delivery_options` branch tells the seller delivery is unavailable,
+the all-`auth_failed` branch already names the connection, and the 500 branch
+says a retry is worth trying. Filling the field there too would double the
+message beside an empty list, and rewriting those branches in the same slice
+would mix two purposes. They pass an empty array explicitly.
+
+**The list is computed against the offers, not from the status alone.** An
+adapter can report `ok` and return an empty list — Yandex documents exactly that
+in `getOffers` — and same-provider dedupe can remove everything an adapter did
+send. Selecting by «contributed nothing to the list the seller is about to see»
+covers all three shapes; the status rides along so the notice can explain the
+ones it understands.
+
+Отвергли: `carrierName` alone (three yataxi entries collide); `serviceTitle`
+alone (next_day and cdek:delivery collide); shipping the adapter key or
+providerKey and letting the browser resolve names (the masking exists precisely
+to prevent that); one sentence for all four statuses (they call for different
+actions, and «не возит» is not a failure); building the sentence on the server
+(a display decision for every carrier at once); filling the field in every
+branch (doubles messages that already exist); selecting adapters by status
+alone (misses `ok` with zero offers and deduped-away offers).

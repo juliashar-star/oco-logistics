@@ -238,6 +238,26 @@ export const POST = withAuth<{ id: string }>(
         taggedOffers.length > 0 ||
         adapters.some((entry) => entry.status === "ok")
       ) {
+        // WHICH ADAPTERS CONTRIBUTED NOTHING TO THE LIST THE SELLER IS ABOUT TO
+        // SEE. Computed against the offers, not from the status alone: an
+        // adapter can answer `ok` with an empty list (Yandex documents it), and
+        // same-provider dedupe can remove everything it did send. The status
+        // still rides along so the UI can say WHY where it knows.
+        // Only the two seller-facing strings cross — never `entry.key`, which is
+        // the registry key, and never providerKey behind it.
+        const adapterKeysWithOffers = new Set(
+          taggedOffers
+            .map((offer) => offer.adapterKey)
+            .filter((key): key is string => typeof key === "string"),
+        );
+        const adaptersWithoutOffers = adapters
+          .filter((entry) => !adapterKeysWithOffers.has(entry.key))
+          .map((entry) => ({
+            carrierName: resolveOfferCarrierName(entry.key),
+            serviceTitle: resolveOfferServiceTitle(entry.key),
+            status: entry.status,
+          }));
+
         // CarrierOffer.rawOffer is `unknown`; Prisma.InputJsonValue rejects it
         // without a cast. Same pattern as persist-tariff-quotes (as InputJsonValue).
         const quotedOffers = taggedOffers as unknown as Prisma.InputJsonValue;
@@ -252,6 +272,7 @@ export const POST = withAuth<{ id: string }>(
             resolveOfferSupportsThermalBag,
             resolveOfferCarrierName,
             resolveOfferFreeCancelBoundary,
+            adaptersWithoutOffers,
           ),
         );
       }
@@ -272,6 +293,11 @@ export const POST = withAuth<{ id: string }>(
             resolveOfferSupportsThermalBag,
             resolveOfferCarrierName,
             resolveOfferFreeCancelBoundary,
+            // Empty on purpose: this branch already tells the seller the whole
+            // story — every carrier said the same thing. Listing them again
+            // beside an empty list would be noise, and this slice deliberately
+            // changes only the mixed branch.
+            [],
           ),
         );
       }
