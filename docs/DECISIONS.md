@@ -2045,3 +2045,99 @@ old generalisation there.
 name»; putting the registry title first and the carrier's name second; a
 back-fill migration for existing rows; a second column for the tariff code (the
 code is already in `selectedOfferId`).
+
+## 2026-08-14 · CDEK city code is a FALLBACK after a named 400, never the default
+
+**The defect.** The 10.08 price sweep produced 24 rows of HTTP 400 from CDEK on
+exactly two cities — Санкт-Петербург and Екатеринбург — on all five parcel
+profiles and both handover methods, deterministically, while Москва worked. The
+cause was unknown for four days because we throw with the status and never the
+body. Measured 14.08 on edu, with the calculator body printed deliberately (it
+carries no recipient, no address and no phone — only cities, weight and
+dimensions, so it cannot echo personal data):
+
+    to_location   {city:"Санкт-Петербург"} → 400 v2_recipient_location_not_recognized
+    from_location {city:"Санкт-Петербург"} → 400 v2_sender_location_not_recognized
+    to_location   {code:137}               → 200, 17 tariffs
+
+Both error codes are now recorded facts, not guesses. **With BOTH ends broken at
+once, CDEK named only the SENDER** and said nothing about the recipient — which
+is why the retry resolves both ends rather than only the one it was told about:
+fixing only the named end would need a second round trip to discover the second
+half, and there is no second retry.
+
+**The code is the fallback, not the default, and Москва is the whole reason.**
+Resolving every city up front looks tidier and would be wrong: the directory
+returns TWO rows for «Москва» — code 44 (region Москва) and code 1172673 (region
+Псковская область) — and Москва is the commonest sender city, sitting in company
+settings by default. Today it works precisely BECAUSE the name is never
+resolved. A code-first design would force us to choose between two settlements
+for the route that works most often, and choosing wrong ships a parcel to a
+village. So: try the name; only when CDEK says it did not recognise an end do we
+consult the directory, and only for that request.
+
+**Refusal is scoped to the end CDEK named — not to both.** The named end must
+resolve to exactly one city or the attempt is refused; the other end gets a code
+only if it too is unambiguous, and otherwise keeps the name it already had.
+NOT GUESSING MEANS NOT CHOOSING AMONG SEVERAL — it does not mean refusing
+because of an end the carrier already accepted. Refusing on both ends would have
+turned the ordinary Москва → Санкт-Петербург route into a refusal, i.e. broken
+the exact case this decision exists to fix.
+
+**The refusal is not a regression.** Санкт-Петербург and Екатеринбург answer 400
+by name today, so a seller quoting them loses nothing that currently works; what
+changes is that ambiguity is refused explicitly instead of being papered over
+with a guess. It surfaces as a throw (`CDEK_CITY_NOT_RESOLVED`), which the
+existing fan-out already turns into «this carrier contributed no offers» —
+`CarrierOffersResult`'s only returned reason is `no_delivery_options`, and
+returning that would claim the destination is unserved, which is a different and
+false statement. Telling the seller WHY the carrier is missing is a separate
+slice; the data for it already exists unused in `listOffersForOrderAdapters`'
+per-adapter statuses.
+
+**Reading the error code does not breach the rule about response bodies.** The
+rule forbids putting a provider body into an error message or into anything
+stored. Here the body is parsed, one exact code string is compared, and nothing
+from it survives except a member of a two-value union — the same treatment the
+order lookup (`v2_entity_not_found_im_number`) and the cancel path
+(`v2_entity_not_found`) have always given it. What is never done is echoing it.
+Note that the calculator and the order paths use DIFFERENT error envelopes: the
+order envelope is `requests[].errors[].code`, which `hasCdekErrorCode` walks,
+while the calculator answers with a bare top-level `errors[]`. Both shapes are
+read rather than widening the shared helper, whose two existing callers reason
+about the request envelope only.
+
+**One shape for the quote and the order.** All three forms — `{code}`,
+`{code, address}` and `{code, city, address}` — return HTTP 200 with an
+identical tariff count (17 for СПб, 13 for Екатеринбург), so the code is ADDED
+to what `buildCdekLocation` already produces instead of replacing it. The
+invariant that helper exists for — quote and order must describe the same place
+— survives literally, and the order keeps the street a courier destination
+needs.
+
+**The fallback belongs to BOTH ends and BOTH paths.** `buildCdekLocation` serves
+the quote and `buildCdekOrderBody` alike, so an order to Санкт-Петербург would
+be refused exactly as the quote is; we have never seen it only because the quote
+fails first and the seller never reaches submit. Retrying the create is safe
+against duplicates because the first attempt was REFUSED — no order exists to
+duplicate — and the `im_number` lookup that precedes it would adopt one anyway.
+
+**One shared decision module, two explicit retry sites.** What must never
+diverge is the rule — which code means retry, and «exactly one match or refuse»
+— so it lives in `cdek/location-fallback.ts` with an injectable directory
+lookup and is unit-tested without network. The plumbing differs structurally:
+the quote issues two parallel POSTs that must both be retried, the order issues
+one POST after an adoption lookup. A wrapper general enough to cover both would
+be a higher-order function parameterised by how to build the body, how to detect
+failure across N responses and what to return — and it would hide the retry
+exactly where a reader needs to see it. Two call sites, one rule; generalise on
+the third.
+
+Отвергли: resolving city codes up front for every request (breaks Москва, and
+would need a choice among two settlements); refusing whenever EITHER end is
+ambiguous (same breakage); replacing city/address with the bare `{code}` (splits
+the quote and order shapes for no measured gain); more than one retry; widening
+`hasCdekErrorCode` to the calculator envelope; a shared retry wrapper for two
+structurally different call sites; adding a `city_not_resolved` reason to
+`CarrierOffersResult` in this slice (a neutral-contract change whose seller-facing
+half is not built yet).

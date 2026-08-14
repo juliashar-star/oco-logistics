@@ -27,6 +27,12 @@ import {
   resolveCdekCities,
 } from "./cities";
 import { cdekDeliveryMode } from "./delivery-mode";
+import {
+  type CdekLocationCodes,
+  readCdekUnrecognizedLocationEnd,
+  resolveCdekLocationCodes,
+  withCdekLocationCode,
+} from "./location-fallback";
 import { mapCdekCancelWindow } from "./map-cancel-window";
 import { mapCdekTariffsToOffers } from "./map-cdek-tariffs";
 import {
@@ -160,22 +166,6 @@ export async function getOffers(
   if (!item) {
     throw new Error("CDEK_INPUT_INVALID: at least one item is required");
   }
-  const body = {
-    type: Number(creds.contractType),
-    currency: 1,
-    lang: "rus",
-    // Same helper as buildCdekOrderBody — quote and order must agree on place.
-    from_location: buildCdekLocation(
-      input.sender.city,
-      input.sender.addressString,
-    ),
-    to_location: buildCdekLocation(
-      input.recipient.city,
-      input.recipient.addressString,
-    ),
-    packages: [buildPackage(item)],
-  };
-
   // The SAME number the order will put in packages[].items[].cost, which is what
   // CDEK insures («с данного значения рассчитывается страховка» — spec, quoted in
   // the research note). Quoting a different figure than the order declares would
@@ -183,26 +173,100 @@ export async function getOffers(
   // reads that field, and the order body does not send it.
   const insuranceParameter = String(item.unitPriceRub);
 
-  const [listResponse, servicesResponse] = await Promise.all([
-    cdekPost(baseUrl, creds, "/v2/calculator/tarifflist", body),
-    cdekPost(baseUrl, creds, "/v2/calculator/tariffAndService", {
-      ...body,
-      services: [{ code: "INSURANCE", parameter: insuranceParameter }],
-    }),
-  ]);
+  const buildBody = (codes: CdekLocationCodes) => ({
+    type: Number(creds.contractType),
+    currency: 1,
+    lang: "rus",
+    // Same helper as buildCdekOrderBody — quote and order must agree on place.
+    // A code, when we have one, is ADDED to that pair rather than replacing it.
+    from_location: withCdekLocationCode(
+      buildCdekLocation(input.sender.city, input.sender.addressString),
+      codes.senderCode,
+    ),
+    to_location: withCdekLocationCode(
+      buildCdekLocation(input.recipient.city, input.recipient.addressString),
+      codes.recipientCode,
+    ),
+    packages: [buildPackage(item)],
+  });
 
-  if (!listResponse.ok) {
-    // Status only — never the body (may echo credentials or PII).
-    throw new Error(`CDEK get offers failed: HTTP ${listResponse.status}`);
+  type CalculatorAttempt =
+    | { ok: true; listJson: unknown; servicesJson: unknown }
+    | { ok: false; which: "list" | "services"; status: number; body: unknown };
+
+  const runCalculators = async (
+    codes: CdekLocationCodes,
+  ): Promise<CalculatorAttempt> => {
+    const body = buildBody(codes);
+    const [listResponse, servicesResponse] = await Promise.all([
+      cdekPost(baseUrl, creds, "/v2/calculator/tarifflist", body),
+      cdekPost(baseUrl, creds, "/v2/calculator/tariffAndService", {
+        ...body,
+        services: [{ code: "INSURANCE", parameter: insuranceParameter }],
+      }),
+    ]);
+
+    if (!listResponse.ok) {
+      return {
+        ok: false,
+        which: "list",
+        status: listResponse.status,
+        body: await readResponseBody(listResponse),
+      };
+    }
+    if (!servicesResponse.ok) {
+      return {
+        ok: false,
+        which: "services",
+        status: servicesResponse.status,
+        body: await readResponseBody(servicesResponse),
+      };
+    }
+    return {
+      ok: true,
+      listJson: (await listResponse.json()) as unknown,
+      servicesJson: (await servicesResponse.json()) as unknown,
+    };
+  };
+
+  // FIRST BY NAME, ALWAYS. The city code is the FALLBACK, not the default:
+  // «Москва» is recognised by name and has TWO directory matches, so resolving
+  // it up front would force a choice we refuse to make and would break the
+  // commonest route. See location-fallback.ts for the whole rule.
+  let attempt = await runCalculators({});
+
+  if (!attempt.ok) {
+    const namedEnd = readCdekUnrecognizedLocationEnd(attempt.body);
+    if (namedEnd !== null) {
+      const resolved = await resolveCdekLocationCodes({
+        namedEnd,
+        senderCity: input.sender.city,
+        recipientCity: input.recipient.city,
+        credentials,
+      });
+      if (!resolved.ok) {
+        // Refusal, not a guess — and NOT a regression: these cities answer 400
+        // by name today, so the seller loses nothing that works. Thrown rather
+        // than returned because CarrierOffersResult's only returned reason is
+        // no_delivery_options, which would claim the destination is unserved.
+        throw new Error("CDEK_CITY_NOT_RESOLVED");
+      }
+      // EXACTLY ONE RETRY. A second failure is a real failure; retrying again
+      // would only spend the seller's wait on the same answer.
+      attempt = await runCalculators(resolved.codes);
+    }
   }
-  if (!servicesResponse.ok) {
+
+  if (!attempt.ok) {
+    // Status only — never the body (may echo credentials or PII).
     throw new Error(
-      `CDEK get offer services failed: HTTP ${servicesResponse.status}`,
+      attempt.which === "list"
+        ? `CDEK get offers failed: HTTP ${attempt.status}`
+        : `CDEK get offer services failed: HTTP ${attempt.status}`,
     );
   }
 
-  const listJson: unknown = await listResponse.json();
-  const servicesJson: unknown = await servicesResponse.json();
+  const { listJson, servicesJson } = attempt;
 
   const listed = mapCdekTariffsToOffers(listJson, deliveryMode);
   const offers = mergeCdekOffersWithServices(
@@ -275,8 +339,51 @@ export async function confirmOffer(
   // v2_entity_not_found_im_number (measured HTTP 400) → nothing exists yet.
 
   // 3. POST /v2/orders
-  const createRes = await cdekPost(baseUrl, creds, "/v2/orders", orderBody);
-  const createBody = await readResponseBody(createRes);
+  let createRes = await cdekPost(baseUrl, creds, "/v2/orders", orderBody);
+  let createBody = await readResponseBody(createRes);
+
+  if (!createRes.ok) {
+    // THE SAME FALLBACK AS THE QUOTE, and it belongs here for the same reason:
+    // buildCdekOrderBody uses buildCdekLocation too, so an order to «Санкт-
+    // Петербург» would be refused exactly as the quote was. We have never seen
+    // it only because the quote fails first and the seller never reaches submit.
+    const namedEnd = readCdekUnrecognizedLocationEnd(createBody);
+    if (namedEnd !== null) {
+      const resolved = await resolveCdekLocationCodes({
+        namedEnd,
+        senderCity: input.sender.city,
+        // A PVZ order carries delivery_point and NO to_location, so there is no
+        // recipient city to resolve — passing one would attach a code to a
+        // location the body does not send.
+        recipientCity: orderBody.to_location ? input.recipient.city : null,
+        credentials,
+      });
+      if (!resolved.ok) {
+        throw new Error("CDEK_CITY_NOT_RESOLVED");
+      }
+      const retryBody = {
+        ...orderBody,
+        from_location: withCdekLocationCode(
+          orderBody.from_location,
+          resolved.codes.senderCode,
+        ),
+        ...(orderBody.to_location
+          ? {
+              to_location: withCdekLocationCode(
+                orderBody.to_location,
+                resolved.codes.recipientCode,
+              ),
+            }
+          : {}),
+      };
+      // EXACTLY ONE RETRY — same rule as the quote. Safe against duplicates:
+      // the first attempt was REFUSED, so no order exists to duplicate, and the
+      // im_number lookup above would adopt one if it somehow did.
+      createRes = await cdekPost(baseUrl, creds, "/v2/orders", retryBody);
+      createBody = await readResponseBody(createRes);
+    }
+  }
+
   if (!createRes.ok) {
     throw new Error(`CDEK order create failed: HTTP ${createRes.status}`);
   }
