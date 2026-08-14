@@ -277,6 +277,177 @@ test("one unreadable tariff does not poison its neighbours", () => {
   );
 });
 
+// ── status "false": the carrier says the fee does not apply ────────────────
+
+/** A failed row exactly as the PRODUCTION contract returned it, 14.08. */
+const failedRow = (code, errorCode) => ({
+  tariff_code: code,
+  status: "false",
+  result: {
+    errors: [
+      { code: errorCode, additional_code: "0xBC236B02", message: "не печатаем" },
+    ],
+  },
+});
+
+test("the MEASURED 37-row case: insurance unavailable → every tariff keeps its price", () => {
+  // The whole production reply shape: nothing priced, everything failed with
+  // «Доп услуга … недоступна». The seller must still see CDEK.
+  const codes = ["158", "59", "777", "778", "61", "795", "796", "797"];
+  const sums = mergeCdekServiceSums({
+    tariff_codes: codes.map((c) => failedRow(c, "ve_additional_service_unavailable")),
+  });
+  assert.equal(sums.size, codes.length);
+  const merged = mergeCdekOffersWithServices(
+    codes.map((c, i) => offer(`cdek:${c}`, 100 + i)),
+    sums,
+  );
+  assert.equal(merged.length, codes.length);
+  assert.deepEqual(
+    merged.map((m) => m.priceRub),
+    codes.map((_, i) => 100 + i),
+  );
+});
+
+test("the MEASURED declared-value threshold → the tariff keeps its price", () => {
+  // Tariff 2360, «минимальная объявленная стоимость - 3000» against 1000 ₽.
+  const sums = mergeCdekServiceSums({
+    tariff_codes: [failedRow("2360", "ve_as_insurance_min_declared_cost")],
+  });
+  assert.deepEqual(mergeCdekOffersWithServices([offer("cdek:2360", 1290)], sums), [
+    { offerId: "cdek:2360", priceRub: 1290 },
+  ]);
+});
+
+test("a MIXED reply prices each tariff on its own row", () => {
+  const sums = mergeCdekServiceSums({
+    tariff_codes: [
+      { tariff_code: "136", status: "true", result: { services: [INSURANCE] } },
+      failedRow("158", "ve_additional_service_unavailable"),
+      failedRow("2360", "ve_as_insurance_min_declared_cost"),
+      failedRow("999", "ve_something_nobody_has_seen"),
+    ],
+  });
+  const merged = mergeCdekOffersWithServices(
+    [
+      offer("cdek:136", 150),
+      offer("cdek:158", 650),
+      offer("cdek:2360", 1290),
+      offer("cdek:999", 100),
+    ],
+    sums,
+  );
+  assert.deepEqual(merged, [
+    { offerId: "cdek:136", priceRub: 157.5 }, // priced: 150 + 7.5
+    { offerId: "cdek:158", priceRub: 650 }, // fee unavailable: bare price
+    { offerId: "cdek:2360", priceRub: 1290 }, // below threshold: bare price
+    // 999 dropped: unknown code must never mean «no fee»
+  ]);
+});
+
+test("an UNKNOWN error code drops the tariff — silence must not mean «no fee»", () => {
+  const sums = mergeCdekServiceSums({
+    tariff_codes: [failedRow("999", "ve_something_nobody_has_seen")],
+  });
+  assert.equal(sums.has("999"), false);
+  assert.deepEqual(mergeCdekOffersWithServices([offer("cdek:999", 100)], sums), []);
+});
+
+test("codes are matched EXACTLY, never by prefix or substring", () => {
+  for (const code of [
+    "ve_additional_service_unavailable_v2",
+    "not_ve_additional_service_unavailable",
+    "VE_ADDITIONAL_SERVICE_UNAVAILABLE",
+    "ve_as_insurance_min_declared_cost_2",
+    "ve_as_insurance",
+  ]) {
+    const sums = mergeCdekServiceSums({ tariff_codes: [failedRow("136", code)] });
+    assert.equal(sums.has("136"), false, `${code} must not be treated as known`);
+  }
+});
+
+test("several errors on one row: ALL must be known, or the tariff drops", () => {
+  const known = mergeCdekServiceSums({
+    tariff_codes: [
+      {
+        tariff_code: "136",
+        status: "false",
+        result: {
+          errors: [
+            { code: "ve_additional_service_unavailable" },
+            { code: "ve_as_insurance_min_declared_cost" },
+          ],
+        },
+      },
+    ],
+  });
+  assert.equal(known.get("136"), 0);
+
+  const mixed = mergeCdekServiceSums({
+    tariff_codes: [
+      {
+        tariff_code: "136",
+        status: "false",
+        result: {
+          errors: [
+            { code: "ve_additional_service_unavailable" },
+            { code: "ve_brand_new_thing" },
+          ],
+        },
+      },
+    ],
+  });
+  assert.equal(mixed.has("136"), false);
+});
+
+for (const [label, errors] of [
+  ["errors is absent", undefined],
+  ["errors is empty", []],
+  ["errors is null", null],
+  ["errors is not an array", { code: "ve_additional_service_unavailable" }],
+  ["an entry is not an object", ["ve_additional_service_unavailable"]],
+  ["an entry has no code", [{ message: "нет кода" }]],
+  ["a code is not a string", [{ code: 500 }]],
+  ["a code is blank", [{ code: "   " }]],
+]) {
+  test(`status "false" and ${label} → the tariff drops`, () => {
+    const sums = mergeCdekServiceSums({
+      tariff_codes: [{ tariff_code: "136", status: "false", result: { errors } }],
+    });
+    assert.equal(sums.has("136"), false);
+    assert.deepEqual(mergeCdekOffersWithServices([offer("cdek:136", 150)], sums), []);
+  });
+}
+
+// ── an unusable status is never guessed at ─────────────────────────────────
+
+for (const [label, status] of [
+  ["absent", Symbol.for("omit")],
+  ["a boolean true", true],
+  ["a boolean false", false],
+  ["null", null],
+  ["a number", 1],
+  ["an empty string", ""],
+  ["an unknown word", "pending"],
+]) {
+  test(`status ${label} → the tariff drops, nothing is assumed`, () => {
+    const row = { tariff_code: "136", result: { services: [INSURANCE] } };
+    if (status !== Symbol.for("omit")) {
+      row.status = status;
+    }
+    const sums = mergeCdekServiceSums({ tariff_codes: [row] });
+    assert.equal(sums.has("136"), false);
+    assert.deepEqual(mergeCdekOffersWithServices([offer("cdek:136", 150)], sums), []);
+  });
+}
+
+test("status \"true\" with whitespace around it is still success", () => {
+  const sums = mergeCdekServiceSums({
+    tariff_codes: [{ tariff_code: "136", status: "  true  ", result: { services: [INSURANCE] } }],
+  });
+  assert.equal(sums.get("136"), 7.5);
+});
+
 // ── malformed replies and offer ids ────────────────────────────────────────
 
 for (const [label, raw] of [

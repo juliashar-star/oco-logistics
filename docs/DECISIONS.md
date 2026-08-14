@@ -1900,6 +1900,8 @@ not connected → all fields required; connected → at least one typed field
 
 ## 2026-08-13 · CDEK quote = delivery_sum + Σ (total_sum − vat_sum) per service: two calculator calls, merged by tariff code AS A STRING
 
+**REFINED** (обработка строк, которые перевозчик не посчитал): см. «2026-08-14 · CDEK service pricing is decided by the row's `status`, not by a missing `services[]`». В силе остаётся всё, кроме этого: цена посчитанной строки по-прежнему `delivery_sum` + Σ(`total_sum` − `vat_sum`), `total_sum` как слагаемое по-прежнему отвергнут, ключ слияния по-прежнему строка с обеих сторон. Уточнение касается только строк со `status: "false"`, где услуга не посчитана.
+
 Measurements behind every number here: `docs/research/cdek-declared-value-2026-08-13.md`
 (spec quotes) and the edu probe of the same day (both calculators, one identical
 input: Москва → Москва, 1000 г, 30×20×10, declared value 1000 ₽).
@@ -2141,3 +2143,68 @@ the quote and order shapes for no measured gain); more than one retry; widening
 structurally different call sites; adding a `city_not_resolved` reason to
 `CarrierOffersResult` in this slice (a neutral-contract change whose seller-facing
 half is not built yet).
+
+## 2026-08-14 · CDEK service pricing is decided by the row's `status`, not by a missing `services[]` — REFINES the 2026-08-13 price decision, does not replace it
+
+The 13.08 decision above stands: two calculator calls, merged by tariff code as a
+string, price = `delivery_sum` + Σ(`total_sum` − `vat_sum`). What changes is the
+handling of a tariff row the carrier could NOT price. Measurements:
+`docs/research/cdek-production-calculator-2026-08-14.md`.
+
+**MEASURED on the PRODUCTION contract, and it does not resemble the sandbox.**
+`tariffAndService` answers HTTP 200 with 38 rows, and **every one of them has
+`status: "false"` with no `services[]` and no `delivery_sum`**. 37 carry
+`ve_additional_service_unavailable` («Доп услуга "Дополнительный сбор за
+объявленную стоимость" недоступна» — insurance is simply not enabled on this
+contract); one, tariff 2360, carries `ve_as_insurance_min_declared_cost`
+(«минимальная объявленная стоимость - 3000» against a declared 1000 ₽). The edu
+sandbox had answered `sum` 7.5 on all 24 tariffs, so the 13.08 slice was written
+against the only behaviour it could see. The 0.75 % rate and «insurance is
+mandatory for online shops», both carried from a secondary source flagged
+«перепроверить», are NOT confirmed by this contract.
+
+**A CALL THAT FAILED IS NOT A SERVICE THAT DOES NOT APPLY, and that distinction
+is the whole decision.** «No fallback to the tarifflist price» was written
+against a FAILED call, where the bare price would be knowingly understated
+because a mandatory fee exists and we did not show it. Here the call SUCCEEDED
+and the carrier states there is no fee to add — so the bare price is not
+understated, it is correct. Dropping CDEK entirely in that case would hide a
+carrier that works, on the strength of a rule aimed at a different situation.
+
+**The decision is keyed on `status`, NOT on the absence of `services[]`, and
+that correction is the point.** A missing `services` array looks identical on a
+row that was priced with no surcharge and on a row that failed — so the previous
+code, which read only `services`, treated EVERY failure as «no extra cost».
+Measured by running it against the production shape: three failed rows, including
+one with an invented error code, all produced prices. That is the opposite defect
+from the one the earlier record feared — not too strict, too lenient — and it is
+the one that would have quietly understated a real surcharge the first time CDEK
+introduced a new code. Per row:
+
+- `status "true"` → the row was priced; services are added, an empty or absent
+  array being an honest zero;
+- `status "false"` + `ve_additional_service_unavailable` → bare tarifflist price;
+- `status "false"` + `ve_as_insurance_min_declared_cost` → bare tarifflist price;
+- `status "false"` + any other code, or `errors` empty/unreadable → tariff drops;
+- no `status`, or a `status` that is not one of those two strings → tariff drops.
+
+Codes are compared EXACTLY — never by prefix or substring — for the same reason
+the strict lookups elsewhere are: `ve_as_insurance` and
+`ve_additional_service_unavailable_v2` are not the codes we measured, and
+treating them as such would be inventing a fact about the carrier.
+
+**THE PRICE OF THIS DECISION, named plainly: an unrecognised CDEK code now
+removes a tariff from the seller's list, and the seller is told nothing.** That
+is the deliberate trade — an option fewer beats a wrong price — but it is a
+silent failure mode, so an unknown code is LOGGED with its tariff
+(`[mergeCdekServiceSums] UNKNOWN_TARIFF_ERROR_CODE`). Without that line we would
+learn about a new CDEK code only by noticing offers had gone missing. Codes only;
+the body is never stored or forwarded, the same treatment the order and cancel
+paths give their envelopes.
+
+Отвергли: keeping the «absence of services means zero» rule (it is what made an
+unknown failure mean «no fee»); dropping CDEK whenever any row fails (hides a
+working carrier for a fee that does not exist on this contract); treating
+`status: "false"` as an unconditional fallback to the bare price (an unknown code
+would silently understate); prefix matching on the codes; inferring success from
+the presence of `delivery_sum` inside `result` rather than from `status`.

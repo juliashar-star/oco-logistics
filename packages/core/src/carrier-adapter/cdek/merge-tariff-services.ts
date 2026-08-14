@@ -104,12 +104,69 @@ function sumServices(services: unknown): number | null {
 }
 
 /**
+ * CDEK error codes on a failed tariff row that mean «this parcel is not charged
+ * for the service», NOT «the call went wrong».
+ *
+ * MEASURED 14.08 on the PRODUCTION contract, 38 rows, all with status "false":
+ * 37 answered `ve_additional_service_unavailable` («Доп услуга … недоступна» —
+ * insurance is not enabled on this contract at all) and one answered
+ * `ve_as_insurance_min_declared_cost` («минимальная объявленная стоимость —
+ * 3000» against a declared value of 1000 ₽). In both the carrier is telling us
+ * there is no fee to add, so the bare tarifflist price is CORRECT, not
+ * understated — which is the whole distinction: a call that FAILED is not the
+ * same as a service that does not APPLY.
+ *
+ * EXACT CODES, NEVER A PREFIX OR A SUBSTRING. An unknown code must never
+ * silently come to mean «no fee»: that is exactly how a real surcharge would
+ * disappear from the card. Anything outside this set drops the tariff.
+ */
+const FEE_NOT_APPLICABLE_ERROR_CODES = new Set<string>([
+  "ve_additional_service_unavailable",
+  "ve_as_insurance_min_declared_cost",
+]);
+
+const UNKNOWN_TARIFF_ERROR_LOG_MARKER =
+  "[mergeCdekServiceSums] UNKNOWN_TARIFF_ERROR_CODE";
+
+/** Every `code` on a failed row's errors[], as exact strings. */
+function errorCodesOf(result: Record<string, unknown>): string[] | null {
+  const errors = result.errors;
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return null;
+  }
+  const codes: string[] = [];
+  for (const entry of errors) {
+    if (entry === null || typeof entry !== "object") {
+      return null;
+    }
+    const code = (entry as Record<string, unknown>).code;
+    if (typeof code !== "string" || code.trim() === "") {
+      return null;
+    }
+    codes.push(code.trim());
+  }
+  return codes;
+}
+
+/**
  * Read `tariffAndService` into { tariffCode → service total }.
  *
- * A row whose services cannot be read is OMITTED rather than counted as zero.
- * Zero would be a claim that this tariff costs nothing extra, which is the
- * understatement the slice removes; omitting it makes the tariff unmergeable,
- * and mergeCdekOffersWithServices then drops it from the list entirely.
+ * THE DECISION IS KEYED ON `status`, NOT ON THE ABSENCE OF `services`, and that
+ * is the correction this rule exists for. A missing `services` array looks
+ * identical on a successful row with no surcharge and on a row that failed — so
+ * reading only `services` made EVERY failure, including one whose code we have
+ * never seen, quietly mean «no extra cost». Measured: the production reply, all
+ * rows failed, and every one of them still produced a price.
+ *
+ * status "true"  → the row was priced; services are added (empty or absent
+ *                  array is an honest zero).
+ * status "false" → the row failed; only the two measured «fee does not apply»
+ *                  codes keep the bare price, everything else drops the tariff.
+ * no status      → unusable; dropped, because guessing is what this fixes.
+ *
+ * A DROPPED TARIFF IS AN OPTION THE SELLER NEVER SEES, so an unrecognised code
+ * is logged with the tariff — otherwise a new CDEK code would announce itself
+ * only as offers quietly going missing. Codes only, never the body.
  */
 export function mergeCdekServiceSums(raw: unknown): CdekServiceSums {
   const sums: CdekServiceSums = new Map();
@@ -137,6 +194,37 @@ export function mergeCdekServiceSums(raw: unknown): CdekServiceSums {
     if (result === null) {
       continue;
     }
+
+    // MEASURED: status arrives as the STRING "true" / "false", not a boolean.
+    const status = typeof row.status === "string" ? row.status.trim() : null;
+    if (status === null) {
+      continue;
+    }
+
+    if (status === "false") {
+      const codes = errorCodesOf(result);
+      if (codes === null) {
+        continue;
+      }
+      const unknown = codes.filter(
+        (code) => !FEE_NOT_APPLICABLE_ERROR_CODES.has(code),
+      );
+      if (unknown.length > 0) {
+        console.error(
+          UNKNOWN_TARIFF_ERROR_LOG_MARKER,
+          JSON.stringify({ tariffCode: key, codes: unknown }),
+        );
+        continue;
+      }
+      // Every code says the fee does not apply — the bare price is the right one.
+      sums.set(key, 0);
+      continue;
+    }
+
+    if (status !== "true") {
+      continue;
+    }
+
     const services = sumServices(result.services);
     if (services === null) {
       continue;
