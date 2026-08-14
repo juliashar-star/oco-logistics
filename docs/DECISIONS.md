@@ -2279,3 +2279,74 @@ actions, and «не возит» is not a failure); building the sentence on the
 (a display decision for every carrier at once); filling the field in every
 branch (doubles messages that already exist); selecting adapters by status
 alone (misses `ok` with zero offers and deduped-away offers).
+
+## 2026-08-14 · Offer badges «дешевле» / «быстрее» — two tags, compared at the precision the two offers share
+
+**TWO TAGS, NOT THREE.** «Оптимально» would have to weigh price against speed
+against carrier quality, and the quality half has nothing behind it: Carrier
+Score is unbuilt and `rankQuotes` substitutes a neutral 50 for every carrier
+(`rank-quotes.ts`, `resolveCarrierScore`). A badge computed from a placeholder
+is a claim we cannot stand behind. The landing page promises exactly these two —
+«Нужно дешевле — подсветит дешевле. Нужно быстрее — быстрее.» — so two is also
+what was sold. The third returns when the score is real, not before.
+
+**NOT `rankQuotes`, and not a small adaptation of it.** It takes APIShip's
+`DeliveryQuote`, and of its fields the browser DTO has NONE: no `providerKey`
+(deliberately off the wire), no `tariffId`, no `deliveryMode`, and — decisively —
+no `deliveryDaysMin`/`deliveryDaysMax`. Its dedupe key is
+`providerKey:tariffId:deliveryMode`, three fields we do not have. Reusing it
+would mean inventing a day count from data that has none, and calling a
+three-tag function to use two thirds of it. It stays where it is, for the
+Carrier Score work that will actually need it.
+
+**SPEED IS COMPARED AT THE COARSEST PRECISION THE OFFERS SHARE.** The two
+carrier families answer in different units, measured: Yandex fills
+`deliveryIntervalFrom/To` with ISO timestamps and no day fields; CDEK fills
+`deliveryDayFrom/To` with `YYYY-MM-DD` and leaves every interval blank. So the
+rule is: the calendar day decides first, because every usable deadline has one,
+and clock time is consulted ONLY when every offer still in contention carries
+one.
+
+Two reasons, and both matter. First, **never give a day range an hour.**
+«22–26 августа» says nothing about when on the 22nd, and inventing midnight — or
+noon, or end of day — to make it comparable would settle the ranking on a number
+the carrier never sent. That is the same invention the offer card refuses when
+it renders a day as a day, and the same one `submit-order` refuses when CDEK's
+blank intervals leave `plannedDeliveryDate` null rather than fabricating a clock
+time. A ranking rule may not be looser than the rules that display the same
+values. Second, **it keeps the answer independent of input order**: «finer of
+the two» applied pairwise is not transitive (a day-only offer can tie with two
+timed offers that differ from each other), so a naive reduce would return
+whichever the list happened to start with. Narrowing by day, then by time,
+is a total order at each step.
+
+**THE LATE EDGE, NOT THE EARLY ONE.** Ranking by the start of a window flatters
+the widest interval: «сегодня 09:00–21:00» would beat «сегодня 10:00–12:00»,
+though the second is the one a seller can plan around. `To` is what the carrier
+commits to.
+
+Ties are resolved in one direction each and never by identifier: equal prices →
+the faster offer takes «дешевле»; equal deadlines → the cheaper takes «быстрее»;
+still equal → the first in the list, stably. An offer with no usable deadline
+simply never wins «быстрее» and blocks nobody. Fewer than two offers → no badges
+at all: «дешевле» on a list of one is decoration, and it would read as a claim
+about the market rather than about the list. One offer can carry both tags.
+
+**ACCEPTED RISK, AND IT IS NOT CLOSED: «дешевле» is only true if the carriers'
+prices are of the same nature with respect to VAT, and for one of them that is
+NOT MEASURED.** Yandex Express quotes net of VAT (measured, 27.07); CDEK's
+`delivery_sum` is «без НДС» by specification and our own services sum is net by
+construction (2026-08-13 entry). But whether `pricing_total` on the request/*
+family — «Доставка по России», the default adapter — includes VAT is stated
+nowhere in the documentation we hold, and no probe has answered it. If it turns
+out to be gross, the badge will point at the wrong card whenever that family
+competes closely on price, and it will do so silently. The badge is shipped
+knowing this because the alternative is shipping nothing while a promise on the
+landing page stays unkept; the measurement is owed, and until it exists this
+paragraph is the honest statement of what the badge means.
+
+Отвергли: a third «оптимально» tag on a placeholder score; reusing or widening
+`rankQuotes`; comparing the early edge; converting day ranges to a clock time to
+make one comparator; sorting the list instead of badging it (the seller's own
+order carries information — cheapest-first is already the sort); a badge on a
+single-offer list; deciding ties by offerId.

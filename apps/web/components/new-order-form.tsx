@@ -48,6 +48,10 @@ import { confirmWarningMessage } from "@/lib/shipments/confirm-warning-message";
 import { parseSubmitConfirmWarnings } from "@/lib/shipments/parse-submit-confirm-warnings";
 import { parseSubmitSuccessLabelFields } from "@/lib/shipments/parse-submit-success-label-fields";
 import { offerFreeCancelNote } from "@/lib/shipments/offer-free-cancel-note";
+import {
+  OFFER_HIGHLIGHT_LABELS,
+  offerHighlights,
+} from "@/lib/shipments/offer-highlights";
 import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offer-lacks-thermal-bag";
 import type { CarrierConfirmWarning } from "@oco/core/carrier-adapter/types";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
@@ -231,6 +235,14 @@ export function NewOrderForm() {
     }
     return describeAdaptersWithoutOffers(offerAdaptersWithoutOffers);
   }, [yandexOffers.length, offerAdaptersWithoutOffers]);
+  /**
+   * A badge is a statement about THIS list, so it is computed once from the
+   * whole list rather than card by card.
+   */
+  const highlights = useMemo(
+    () => offerHighlights(yandexOffers),
+    [yandexOffers],
+  );
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [draftShipmentId, setDraftShipmentId] = useState<string | null>(null);
   const [noDeliveryToPoint, setNoDeliveryToPoint] = useState(false);
@@ -1399,8 +1411,22 @@ export function NewOrderForm() {
                       Забор: {pickupLine}
                     </div>
                   ) : null}
-                  <div className="mt-1 text-base font-semibold text-slate-900">
-                    {offer.priceRub.toLocaleString("ru-RU")} ₽
+                  {/* Badges ride BESIDE the price, never on a line of their
+                      own: the grid equalises row height, so one extra line on
+                      one card lifts the whole row. <span>, not <button> — the
+                      card is already a button. */}
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-base font-semibold text-slate-900">
+                      {offer.priceRub.toLocaleString("ru-RU")} ₽
+                    </span>
+                    {(highlights.get(offer.offerId) ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900"
+                      >
+                        {OFFER_HIGHLIGHT_LABELS[tag]}
+                      </span>
+                    ))}
                   </div>
                   {offer.priceIsEstimate ? (
                     <div className="mt-1 text-xs text-slate-500">
