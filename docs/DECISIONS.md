@@ -2531,3 +2531,68 @@ the refusal); dropping the house check to let typed addresses through (it guards
 against a real failure, and removing a guard to silence a confusing message is
 the wrong trade); adding server-side house validation in this slice (a separate
 decision with its own test surface, deliberately not smuggled in here).
+
+## 2026-08-18 (3) · «Топ перевозчиков» counted ONE of the two carrier columns and lost 21 shipments out of 33; the cabinet now has a single definition of «which carrier is this»
+
+**DECIDED BY JULIA, 18.08.** The panel showed СДЭК 9, Dostavista 2, «Другой
+перевозчик» 1 — twelve shipments — while the tile beside it said 34, and the
+carrier the seller had connected themselves was missing entirely.
+
+**WHAT WAS ACTUALLY HAPPENING, measured before anything was changed.** A
+shipment names its carrier in one of two columns, depending on which path
+created it. The older APIShip path writes a link to the legacy carrier table;
+the direct path — the one the form uses today — writes the provider key and
+never touches that link. The panel grouped by the legacy link alone, so it could
+only ever see the older path. Of 34 counted shipments, 12 carried the legacy
+link, 21 carried the provider key, ONE carried neither, and NOT A SINGLE ROW
+carried both. The 21 invisible ones were the carriers the seller connected
+themselves — nineteen through one carrier, two through another. The legacy table
+has no row for the carrier behind those nineteen at all, so no amount of looking
+at that table could have surfaced them.
+
+**WHY THE DEFINITION IS NOW ONE PER CABINET.** The shipments list had already
+solved this: it identifies a carrier as «the row's own provider key, falling back
+to the legacy table's code». That rule was correct and was simply not applied
+here, which is how two screens over the same rows came to disagree about who
+carried what. The panel now uses the identical rule, and the rule lives in one
+tested function rather than being spelled out a second time. A second definition
+is not a duplicate — it is a future divergence with nothing to catch it.
+
+**WHY ONE GROUPED QUERY AND NOT TWO SUMMED.** Counting each column separately
+and adding the totals gives the right answer only while no row carries both
+columns. Today no row does. But that is a property of the data as it happens to
+be, not of the schema, and the day a backfill or a new path writes both, every
+such row is counted twice — silently, because a double-count looks exactly like
+a busy month. Grouping by BOTH columns in a single query and reconciling each
+group to one key means a row contributes exactly once by construction, whatever
+the columns come to hold. This was chosen over the cheaper two-query version
+deliberately.
+
+**A ROW WITH NEITHER COLUMN IS NOT COUNTED.** One such row exists — an order
+that never reached a carrier. There is nobody to attribute it to, and inventing
+a bucket would put a carrier on the panel that does not exist. CONSEQUENCE WORTH
+KNOWING: the carrier column now sums to 33 while the total tile says 34, and
+that gap is correct, not a bug to be «fixed» later.
+
+**THE TOP-3 CAP IS REMOVED.** The panel summarises the seller's OWN shipments,
+and hiding some of their own carriers behind a top-N is hard to justify on a
+screen whose whole job is to add up. The cap was also about to start biting: the
+old grouping happened to produce exactly three groups, so nothing was visibly
+lost, but reconciling the two columns produces four, and the fourth would have
+vanished the moment this change landed — leaving a column that no longer adds up
+to the number beside it. The list is bounded by how many carriers exist at all,
+and the panel is a plain vertical list with no fixed height.
+
+**SORTING IS NOW EXPLICIT AND STABLE.** The old query sorted at the database,
+which stopped meaning anything once groups are merged in code, so the sort moved
+next to the merge: by count descending, then by key. Without the second term the
+panel would reshuffle between loads whenever two carriers tie, on nothing but
+the order the database happened to return.
+
+Отвергли: keeping the legacy link as the grouping key and backfilling it for the
+direct path (it would write legacy rows for carriers that never had them, to
+keep a column the rest of the cabinet has already stopped using); two queries
+summed (double-counts the first time a row carries both, and fails invisibly);
+counting the carrier-less row under a "неизвестный" bucket (a carrier that does
+not exist); keeping the cap at three (would have hidden a real carrier on the
+very first load after this change).

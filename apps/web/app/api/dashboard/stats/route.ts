@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ShipmentStatus } from "@prisma/client";
 import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
+import { tallyShipmentsByCarrier } from "@/lib/shipments/tally-shipments-by-carrier";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 
@@ -46,12 +47,12 @@ export const GET = withAuth(async (_request, user) => {
         where: { ...baseWhere, createdAt: { gte: last30Days } },
         _sum: { plannedCost: true },
       }),
+      // BOTH carrier columns in ONE grouped query, reconciled below. Two
+      // queries summed would double-count any row that ever carried both.
       prisma.shipment.groupBy({
-        by: ["carrierId"],
-        where: { ...baseWhere, carrierId: { not: null } },
+        by: ["providerKey", "carrierId"],
+        where: baseWhere,
         _count: { _all: true },
-        orderBy: { _count: { carrierId: "desc" } },
-        take: 3,
       }),
     ]);
 
@@ -73,15 +74,21 @@ export const GET = withAuth(async (_request, user) => {
       carriers.map((carrier) => [carrier.id, carrier.apishipCode]),
     );
 
-    const topCarriers = carrierGroups.map((group) => {
-      const providerKey = providerKeyById.get(group.carrierId!);
-      return {
-        // Resolved here, on the server; the browser receives only the string.
-        name:
-          providerKey === undefined ? "Неизвестный" : carrierCabinetName(providerKey),
+    // Not capped: the panel sums up the seller's OWN shipments, so hiding some
+    // of their own carriers behind a top-N would leave the column not adding up
+    // to the total beside it. Bounded by how many carriers exist at all.
+    const topCarriers = tallyShipmentsByCarrier(
+      carrierGroups.map((group) => ({
+        providerKey: group.providerKey,
+        carrierId: group.carrierId,
         count: group._count._all,
-      };
-    });
+      })),
+      providerKeyById,
+    ).map((entry) => ({
+      // Resolved here, on the server; the browser receives only the string.
+      name: carrierCabinetName(entry.providerKey),
+      count: entry.count,
+    }));
 
     return NextResponse.json({
       totalShipments,
