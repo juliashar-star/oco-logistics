@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
+import { needsSuggestionPick } from "@/lib/address/needs-suggestion-pick";
 import type {
   OfferAdapterWithoutOffersDto,
   OfferDto,
@@ -114,6 +115,9 @@ const DEST_CITY_PICK_REQUIRED =
 /** Instruction under the city field when text is present but not yet confirmed. */
 const DEST_CITY_PICK_HINT =
   "Выберите город из списка подсказок";
+/** Instruction under the address field when text is present but not yet confirmed. */
+const DEST_ADDRESS_PICK_HINT =
+  "Выберите адрес из списка подсказок";
 
 const RECALCULATE_AFTER_CREATE_HINT =
   "Для следующего отправления рассчитайте тарифы заново";
@@ -940,7 +944,7 @@ export function NewOrderForm() {
               }}
               placeholder="Город доставки"
             />
-            {destCity.trim() && !destCityDisplayValue.trim() && (
+            {needsSuggestionPick(destCity, destCityDisplayValue) && (
               <p className="mt-1 text-xs text-slate-500">{DEST_CITY_PICK_HINT}</p>
             )}
           </div>
@@ -1114,6 +1118,12 @@ export function NewOrderForm() {
               }}
               placeholder="Улица и дом"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Адрес должен содержать населённый пункт, улицу и дом или строение.
+            </p>
+            {needsSuggestionPick(destAddress, destAddressDisplayValue) && (
+              <p className="mt-1 text-xs text-slate-500">{DEST_ADDRESS_PICK_HINT}</p>
+            )}
             <div className="mt-4">
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Квартира / офис

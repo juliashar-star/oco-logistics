@@ -2472,3 +2472,62 @@ is a key either way); deriving a display name from an unknown key; declining the
 real names with a per-name table; changing the public site in the same slice;
 paying down the two-keys-in-the-DTO debt here (a separate change with its own
 test surface).
+
+## 2026-08-18 (2) · «Адрес до дома» is enforced by PICKING FROM THE LIST, not by reading the text — so the form now says that out loud
+
+**DECIDED BY JULIA, 18.08.** The complaint that reached us was «sellers keep
+forgetting the house number». The measurement said something else, and the fix
+follows the measurement, not the complaint.
+
+**WHAT WAS ACTUALLY HAPPENING.** The new-order form holds two values per
+autocomplete field: the text, and a display value written ONLY by the
+suggestion-picked handler and wiped by ANY manual keystroke. The house flag
+behaves the same way — it is set only when a suggestion carrying a house is
+picked. The courier branch refuses to submit without that flag. Therefore an
+address TYPED BY HAND was never accepted, no matter how correct it was: a seller
+who wrote a perfectly good house number got «Укажите адрес до дома (номер дома)»
+and no way to tell what the form wanted. The reported symptom and the real cause
+were different things, and a hint about the house number alone would have fixed
+neither.
+
+**WHAT WE DECIDED: make the state VISIBLE rather than start accepting typed
+addresses.** Two lines now sit under the address field, and they are two
+different messages, not one message twice.
+
+- A PERMANENT line — what an address has to contain: settlement, street, and
+  house or building. It states the requirement BEFORE the seller types.
+- A CONDITIONAL line — that the address has to be chosen from the suggestion
+  list. It appears exactly while there is text with no confirmation behind it,
+  and it explains WHY the form will refuse.
+
+Both are ordinary grey field captions, in the same style as the existing hint
+under the city field; neither is styled as an error, and the permanent one sits
+above so it never jumps as the seller types.
+
+**THE PREDICATE IS NOW A PURE FUNCTION WITH TESTS, because the component is
+covered by nothing.** «Text entered, confirmation-by-picking not received» had
+been living inline in JSX, and adding the address hint would have made it live
+there twice — once for the city, once for the address. It moved into a single
+tested function beside the form, called from both places, with a docblock that
+states what the state MEANS FOR THE SELLER rather than what it computes. Six
+cases are pinned, including the odd one — a confirmation with no text answers
+«no». There is no renderer in the unit suite, so a predicate a test can reach is
+the only honest way this rule gets guarded at all.
+
+**WHAT STAYS TRUE AND OPEN.** A hand-typed address still does not pass. That was
+deliberate: this slice changes what the seller is TOLD, not what is accepted.
+
+**AND A REAL GAP, recorded so nobody assumes otherwise: the server does not
+check for a house number anywhere.** All four routes that accept a destination
+address — quote, draft creation, order creation, and delivery intervals — check
+only that the string is non-empty. The whole «up to the house» rule is a client
+rule, held by the picked-suggestion flag. Anything reaching those routes by
+another path is not covered by it.
+
+Отвергли: parsing a house number out of free text (Russian address parsing is
+unreliable, and the price of a wrong parse is a parcel that does not arrive);
+showing only the permanent line (it states the requirement but never explains
+the refusal); dropping the house check to let typed addresses through (it guards
+against a real failure, and removing a guard to silence a confusing message is
+the wrong trade); adding server-side house validation in this slice (a separate
+decision with its own test surface, deliberately not smuggled in here).
