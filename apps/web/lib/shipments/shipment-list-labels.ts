@@ -3,7 +3,6 @@ import {
   isLabelAllowedStatus,
   orderAdapterSupportsLabel,
 } from "@oco/core/carrier-adapter/order-adapter-label-support";
-import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
 import { isHttpOrHttpsUrl } from "../url/is-http-or-https-url";
 
 export type ShipmentListLabelRow = {
@@ -11,18 +10,22 @@ export type ShipmentListLabelRow = {
   orderAdapterKey: string | null;
   /** The carrier's own name for the purchased service; null when it gave none. */
   selectedOfferServiceName: string | null;
-  carrier: { name: string } | null;
+  /** Already resolved on the server — this layer only renders it. */
+  carrierName: string;
 };
 
 /**
  * ПЕРЕВОЗЧИК cell / CSV «Перевозчик».
- * Masked names come from provider-seller-display-names (one place).
+ *
+ * NOTHING IS RESOLVED HERE ANY MORE. The name arrives finished from the server,
+ * for both new rows (providerKey) and legacy ones (the carrier table's
+ * apishipCode) — see toShipmentListItem. This layer used to call the masking
+ * helper for one branch and read `Carrier.name` for the other; that second
+ * branch put a provider key in capital letters on screen.
  */
 export function shipmentCarrierLabel(row: ShipmentListLabelRow): string {
-  if (row.providerKey != null) {
-    return providerSellerDisplayName(row.providerKey) ?? "—";
-  }
-  return row.carrier?.name ?? "—";
+  const name = row.carrierName.trim();
+  return name === "" ? "—" : name;
 }
 
 /**

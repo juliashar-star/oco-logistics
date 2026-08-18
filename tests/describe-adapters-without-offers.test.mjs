@@ -3,14 +3,23 @@ import test from "node:test";
 
 import { describeAdaptersWithoutOffers } from "../apps/web/lib/shipments/describe-adapters-without-offers.ts";
 
+/**
+ * DECISION CHANGED 18.08, BEHAVIOUR DID NOT. The cabinet now shows the
+ * carriers' REAL names instead of «Перевозчик №N» — masking stayed only on the
+ * public site — so every fixture and every expected string here was rewritten
+ * from the masked vocabulary to the real one. The verb also moved to the
+ * present tense («не отвечает»): past-tense Russian verbs agree with gender,
+ * and «СДЭК», «Яндекс Доставка» and «Dostavista» do not share one.
+ */
+
 /** The four registry entries as the route resolves them today. */
-const NEXT_DAY = { carrierName: "Перевозчик №1", serviceTitle: "Доставка по России" };
-const EXPRESS = { carrierName: "Перевозчик №1", serviceTitle: "Доставка в тот же день" };
+const NEXT_DAY = { carrierName: "Яндекс Доставка", serviceTitle: "Доставка по России" };
+const EXPRESS = { carrierName: "Яндекс Доставка", serviceTitle: "Доставка в тот же день" };
 const COURIER = {
-  carrierName: "Перевозчик №1",
+  carrierName: "Яндекс Доставка",
   serviceTitle: "Доставка лёгких посылок в тот же день",
 };
-const CDEK = { carrierName: "Перевозчик №2", serviceTitle: "Доставка по России" };
+const CDEK = { carrierName: "СДЭК", serviceTitle: "Доставка по России" };
 
 const withStatus = (entry, status) => ({ ...entry, status });
 
@@ -54,28 +63,28 @@ test("an unknown status is ignored, never guessed at", () => {
 test("no_delivery_options — the carrier does not serve this route", () => {
   assert.equal(
     describeAdaptersWithoutOffers([withStatus(CDEK, "no_delivery_options")]),
-    "Перевозчик №2 · Доставка по России — не возит по этому направлению",
+    "СДЭК · Доставка по России — не возит по этому направлению",
   );
 });
 
 test("timed_out — did not answer", () => {
   assert.equal(
     describeAdaptersWithoutOffers([withStatus(EXPRESS, "timed_out")]),
-    "Перевозчик №1 · Доставка в тот же день — не ответил, попробуйте рассчитать ещё раз",
+    "Яндекс Доставка · Доставка в тот же день — не отвечает, попробуйте рассчитать ещё раз",
   );
 });
 
 test("failed — same sentence as timed_out, the seller cannot act on the difference", () => {
   assert.equal(
     describeAdaptersWithoutOffers([withStatus(EXPRESS, "failed")]),
-    "Перевозчик №1 · Доставка в тот же день — не ответил, попробуйте рассчитать ещё раз",
+    "Яндекс Доставка · Доставка в тот же день — не отвечает, попробуйте рассчитать ещё раз",
   );
 });
 
 test("auth_failed — points at the one thing the seller can fix", () => {
   assert.equal(
     describeAdaptersWithoutOffers([withStatus(CDEK, "auth_failed")]),
-    "Перевозчик №2 · Доставка по России — проверьте подключение в настройках",
+    "СДЭК · Доставка по России — проверьте подключение в настройках",
   );
 });
 
@@ -87,7 +96,7 @@ test("two unreachable → plural verb, names joined by a comma", () => {
       withStatus(EXPRESS, "failed"),
       withStatus(COURIER, "timed_out"),
     ]),
-    "Перевозчик №1 · Доставка в тот же день, Перевозчик №1 · Доставка лёгких посылок в тот же день — не ответили, попробуйте рассчитать ещё раз",
+    "Яндекс Доставка · Доставка в тот же день, Яндекс Доставка · Доставка лёгких посылок в тот же день — не отвечают, попробуйте рассчитать ещё раз",
   );
 });
 
@@ -97,7 +106,7 @@ test("two that do not serve the route → plural verb", () => {
       withStatus(CDEK, "no_delivery_options"),
       withStatus(NEXT_DAY, "no_delivery_options"),
     ]),
-    "Перевозчик №2 · Доставка по России, Перевозчик №1 · Доставка по России — не возят по этому направлению",
+    "СДЭК · Доставка по России, Яндекс Доставка · Доставка по России — не возят по этому направлению",
   );
 });
 
@@ -107,8 +116,8 @@ test("singular and plural differ only in the verb, never in a bent noun", () => 
     withStatus(CDEK, "failed"),
     withStatus(EXPRESS, "failed"),
   ]);
-  assert.match(one, /не ответил,/);
-  assert.match(two, /не ответили,/);
+  assert.match(one, /не отвечает,/);
+  assert.match(two, /не отвечают,/);
 });
 
 // ── several groups: fixed order ────────────────────────────────────────────
@@ -122,12 +131,13 @@ test("three groups at once → fixed order, joined by «; », one capital", () =
   ]);
   assert.equal(
     notice,
-    "Перевозчик №2 · Доставка по России — не возит по этому направлению; " +
-      "Перевозчик №1 · Доставка лёгких посылок в тот же день — не ответил, попробуйте рассчитать ещё раз; " +
-      "Перевозчик №1 · Доставка в тот же день — проверьте подключение в настройках",
+    "СДЭК · Доставка по России — не возит по этому направлению; " +
+      "Яндекс Доставка · Доставка лёгких посылок в тот же день — не отвечает, попробуйте рассчитать ещё раз; " +
+      "Яндекс Доставка · Доставка в тот же день — проверьте подключение в настройках",
   );
-  // Only the very first character is capitalised, not each group.
-  assert.equal(notice.includes("; Перевозчик"), true);
+  // Only the very first character is capitalised, not each group: the groups
+  // after «; » start with a name in its registry spelling, untouched.
+  assert.equal(notice.includes("; Яндекс Доставка"), true);
 });
 
 test("the pair disambiguates what one name cannot", () => {
@@ -139,7 +149,7 @@ test("the pair disambiguates what one name cannot", () => {
   ]);
   assert.equal(
     notice,
-    "Перевозчик №1 · Доставка по России, Перевозчик №2 · Доставка по России — не ответили, попробуйте рассчитать ещё раз",
+    "Яндекс Доставка · Доставка по России, СДЭК · Доставка по России — не отвечают, попробуйте рассчитать ещё раз",
   );
   assert.notEqual(
     describeAdaptersWithoutOffers([withStatus(NEXT_DAY, "failed")]),
@@ -152,9 +162,9 @@ test("the pair disambiguates what one name cannot", () => {
 test("blank service title → the carrier name alone", () => {
   assert.equal(
     describeAdaptersWithoutOffers([
-      { carrierName: "Перевозчик №2", serviceTitle: "   ", status: "failed" },
+      { carrierName: "СДЭК", serviceTitle: "   ", status: "failed" },
     ]),
-    "Перевозчик №2 — не ответил, попробуйте рассчитать ещё раз",
+    "СДЭК — не отвечает, попробуйте рассчитать ещё раз",
   );
 });
 
@@ -163,7 +173,7 @@ test("blank carrier name → the service title alone", () => {
     describeAdaptersWithoutOffers([
       { carrierName: "", serviceTitle: "Доставка по России", status: "failed" },
     ]),
-    "Доставка по России — не ответил, попробуйте рассчитать ещё раз",
+    "Доставка по России — не отвечает, попробуйте рассчитать ещё раз",
   );
 });
 
@@ -172,11 +182,11 @@ test("both halves blank or missing → «один из перевозчиков�
     describeAdaptersWithoutOffers([
       { carrierName: "", serviceTitle: "", status: "failed" },
     ]),
-    "Один из перевозчиков — не ответил, попробуйте рассчитать ещё раз",
+    "Один из перевозчиков — не отвечает, попробуйте рассчитать ещё раз",
   );
   assert.equal(
     describeAdaptersWithoutOffers([{ status: "failed" }]),
-    "Один из перевозчиков — не ответил, попробуйте рассчитать ещё раз",
+    "Один из перевозчиков — не отвечает, попробуйте рассчитать ещё раз",
   );
 });
 
@@ -195,7 +205,7 @@ test("provider error text never reaches the string", () => {
       body: { errors: [{ code: "v2_internal_error", message: providerMessage }] },
     },
   ]);
-  assert.equal(result, "Перевозчик №2 · Доставка по России — не ответил, попробуйте рассчитать ещё раз");
+  assert.equal(result, "СДЭК · Доставка по России — не отвечает, попробуйте рассчитать ещё раз");
   assert.equal(result.includes(providerMessage), false);
   assert.equal(result.includes("connection refused"), false);
   assert.equal(result.includes("PROVIDER_ERR_TEXT"), false);

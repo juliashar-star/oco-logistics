@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
@@ -41,7 +42,9 @@ const shipmentSelect = {
   // does not copy it, and the browser never sees a carrier's internal id.
   providerOrderId: true,
   confirmWarnings: true,
-  carrier: { select: { name: true } },
+  // apishipCode, not name: `name` is the provider key uppercased and must not
+  // reach a screen; the code is what the name resolver needs.
+  carrier: { select: { apishipCode: true } },
 } satisfies Prisma.ShipmentSelect;
 
 function parseLimit(raw: string | null): number {
@@ -86,7 +89,7 @@ export const GET = withAuth(async (request, user) => {
 
     return NextResponse.json({
       shipments: shipments.map((row) =>
-        toShipmentListItem(decryptShipmentRecipientPii(row)),
+        toShipmentListItem(decryptShipmentRecipientPii(row), carrierCabinetName),
       ),
       total,
     });

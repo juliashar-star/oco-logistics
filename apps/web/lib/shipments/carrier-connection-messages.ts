@@ -1,4 +1,7 @@
-import { PROVIDER_SELLER_DISPLAY_NAMES } from "@oco/core/carrier-adapter/provider-seller-display-names";
+import {
+  CARRIER_CABINET_NAME_FALLBACK,
+  carrierCabinetName,
+} from "@oco/core/carrier-adapter/carrier-cabinet-names";
 
 /**
  * The two sentences a seller sees when a carrier CONNECTION is the problem —
@@ -20,31 +23,31 @@ import { PROVIDER_SELLER_DISPLAY_NAMES } from "@oco/core/carrier-adapter/provide
  * Prisma and Next to run, and a seller-facing string nothing can exercise is a
  * string nobody is watching.
  *
- * THE NAMES ARE MASKED («Перевозчик №1»), which is deliberate elsewhere in the
- * product and is what makes these sentences safe to show.
+ * THE NAMES ARE THE CARRIERS' REAL ONES (decided 18.08): these sentences are
+ * shown in the cabinet, to a seller acting on their own connection. Masking is
+ * a secrecy measure and lives on the public site.
  */
 
 /**
- * The masked name for a provider, or null when we cannot name it.
+ * The carrier's real name for a provider key, or null when we cannot name it.
  *
- * NOT providerSellerDisplayName: that helper falls back to CARRIER_REGISTRY's
- * REAL display name for any key it cannot mask, which would unmask a carrier in
- * a seller-facing sentence. And NOT a plain index: "constructor", "toString"
- * and "__proto__" are inherited members that resolve to something truthy.
+ * WAS MASKED UNTIL 18.08. These sentences live in the cabinet, where the
+ * decision is now to name the carrier the seller connected themselves; masking
+ * remains a secrecy measure for the public site only.
  *
- * Unknown → null → the sentence names NO carrier. A wrong name is worse than
- * no name; that is the entire defect these functions remove.
+ * Unknown key → null → the sentence names NO carrier. A wrong name is worse
+ * than no name; that is the defect these functions were written to remove, and
+ * it is unchanged by which vocabulary the names come from.
  */
-function maskedProviderName(providerKey: string | null | undefined): string | null {
+function carrierNameForMessage(
+  providerKey: string | null | undefined,
+): string | null {
   if (providerKey == null || providerKey.trim() === "") {
     return null;
   }
   const key = providerKey.trim();
-  if (!Object.hasOwn(PROVIDER_SELLER_DISPLAY_NAMES, key)) {
-    return null;
-  }
-  const name = PROVIDER_SELLER_DISPLAY_NAMES[key];
-  return typeof name === "string" && name.trim() !== "" ? name.trim() : null;
+  const name = carrierCabinetName(key);
+  return name === CARRIER_CABINET_NAME_FALLBACK ? null : name;
 }
 
 /**
@@ -58,7 +61,7 @@ function maskedProviderName(providerKey: string | null | undefined): string | nu
 export function carrierAuthErrorMessage(
   providerKey: string | null | undefined,
 ): string {
-  const name = maskedProviderName(providerKey);
+  const name = carrierNameForMessage(providerKey);
   return name === null
     ? "Не удалось авторизоваться у перевозчика. Проверьте подключение."
     : `Не удалось авторизоваться: ${name}. Проверьте подключение.`;
@@ -67,17 +70,19 @@ export function carrierAuthErrorMessage(
 /**
  * «Перевозчик №2 не подключён. Подключите его в настройках, чтобы продолжить.»
  *
- * GENDER: «подключён» and «его» are masculine, and that is checked rather than
- * assumed — every masked name is «Перевозчик №N», a masculine noun, so the
- * agreement holds for all of them. A test pins that property: if a future entry
- * is feminine («Почта России»), it fails and forces the wording to be revisited
- * instead of quietly disagreeing on screen.
+ * NO GENDER AGREEMENT LEFT IN THIS SENTENCE, and that is the rewrite. The old
+ * wording «X не подключён … подключите ЕГО» was masculine, which was safe only
+ * while every name was «Перевозчик №N». Real names share no gender: «СДЭК»,
+ * «Яндекс Доставка» (feminine), «Dostavista» (Latin script). The name now
+ * stands first in the nominative, then an em dash and a nominal phrase that
+ * agrees with nothing, and the imperative names «перевозчика» instead of a
+ * pronoun that would have to match.
  */
 export function carrierNotConnectedMessage(
   providerKey: string | null | undefined,
 ): string {
-  const name = maskedProviderName(providerKey);
+  const name = carrierNameForMessage(providerKey);
   return name === null
     ? "Перевозчик не подключён. Подключите его в настройках, чтобы продолжить."
-    : `${name} не подключён. Подключите его в настройках, чтобы продолжить.`;
+    : `${name} — нет подключения. Подключите перевозчика в настройках, чтобы продолжить.`;
 }

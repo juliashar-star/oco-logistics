@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { toShipmentListItem } from "../apps/web/lib/shipments/shipment-list-dto.ts";
 
+/** Fake resolver — the real one lives in @oco/core and is the route's to pass. */
+function fakeResolveCarrierName(providerKey) {
+  return providerKey === "cdek" ? "СДЭК" : `NAME_FOR:${providerKey}`;
+}
+
 const EXPECTED_SHIPMENT_LIST_KEYS = [
   "id",
   "createdAt",
@@ -23,7 +28,11 @@ const EXPECTED_SHIPMENT_LIST_KEYS = [
   "selectedOfferServiceName",
   "hasCarrierOrder",
   "confirmWarnings",
-  "carrier",
+  // Was "carrier" ({ name }). DECISION CHANGED 18.08: the cabinet shows the
+  // carrier's real name, resolved ON THE SERVER, so the DTO carries a finished
+  // string. `Carrier.name` was the provider key uppercased and must never reach
+  // a screen; the source row now supplies apishipCode instead.
+  "carrierName",
 ];
 
 const SAMPLE_ROW = {
@@ -49,7 +58,7 @@ const SAMPLE_ROW = {
     "REQUIREMENT_UNMET",
     "ADDRESS_NOT_FOUND",
   ]),
-  carrier: { name: "Яндекс Доставка" },
+  carrier: { apishipCode: "cdek" },
   // Extra Prisma-ish fields must not leak through the boundary.
   companyId: "co_LEAK",
   quotedOffers: [{ secret: "should-not-leak" }],
@@ -57,12 +66,12 @@ const SAMPLE_ROW = {
 };
 
 test("mapped shipment list key set is exactly the DTO fields", () => {
-  const item = toShipmentListItem(SAMPLE_ROW);
+  const item = toShipmentListItem(SAMPLE_ROW, fakeResolveCarrierName);
   assert.deepEqual(Object.keys(item), EXPECTED_SHIPMENT_LIST_KEYS);
 });
 
 test("confirmWarnings are plain string codes, not objects", () => {
-  const item = toShipmentListItem(SAMPLE_ROW);
+  const item = toShipmentListItem(SAMPLE_ROW, fakeResolveCarrierName);
   assert.deepEqual(item.confirmWarnings, [
     "REQUIREMENT_UNMET",
     "ADDRESS_NOT_FOUND",
@@ -77,12 +86,12 @@ test("confirmWarnings are plain string codes, not objects", () => {
 });
 
 test("empty confirmWarnings stays an empty array", () => {
-  const item = toShipmentListItem({ ...SAMPLE_ROW, confirmWarnings: [] });
+  const item = toShipmentListItem({ ...SAMPLE_ROW, confirmWarnings: [] }, fakeResolveCarrierName);
   assert.deepEqual(item.confirmWarnings, []);
 });
 
 test("hasCarrierOrder is derived, and providerOrderId NEVER crosses the boundary", () => {
-  const item = toShipmentListItem(SAMPLE_ROW);
+  const item = toShipmentListItem(SAMPLE_ROW, fakeResolveCarrierName);
   assert.equal(item.hasCarrierOrder, true);
   // The id itself must not appear anywhere on the wire — not as a field, and
   // not as a value hidden inside another one.
@@ -101,15 +110,48 @@ test("hasCarrierOrder follows the same blank rule as the cancel route", () => {
     ["whitespace only", "   ", false],
   ]) {
     assert.equal(
-      toShipmentListItem({ ...SAMPLE_ROW, providerOrderId }).hasCarrierOrder,
+      toShipmentListItem({ ...SAMPLE_ROW, providerOrderId }, fakeResolveCarrierName).hasCarrierOrder,
       expected,
       label,
     );
   }
 });
 
-test("carrier is name-only", () => {
-  const item = toShipmentListItem(SAMPLE_ROW);
-  assert.deepEqual(Object.keys(item.carrier), ["name"]);
-  assert.equal(item.carrier.name, "Яндекс Доставка");
+test("carrierName is a finished string, resolved on the server", () => {
+  // Was «carrier is name-only», asserting a nested { name } object taken
+  // straight from the legacy table. That column holds the provider key in
+  // capital letters, so the DTO now ships a resolved name instead.
+  const item = toShipmentListItem(SAMPLE_ROW, fakeResolveCarrierName);
+  // SAMPLE_ROW carries providerKey "yataxi", which wins over the legacy code.
+  assert.equal(item.carrierName, "NAME_FOR:yataxi");
+  assert.equal("carrier" in item, false);
+});
+
+test("the legacy row resolves through apishipCode when providerKey is null", () => {
+  const legacy = { ...SAMPLE_ROW, providerKey: null };
+  assert.equal(
+    toShipmentListItem(legacy, fakeResolveCarrierName).carrierName,
+    "СДЭК",
+  );
+});
+
+test("no key at all → empty string, and the resolver is never called", () => {
+  let calls = 0;
+  const item = toShipmentListItem(
+    { ...SAMPLE_ROW, providerKey: null, carrier: null },
+    (key) => {
+      calls += 1;
+      return `NAME_FOR:${key}`;
+    },
+  );
+  assert.equal(item.carrierName, "");
+  assert.equal(calls, 0);
+});
+
+test("providerKey wins over the legacy apishipCode", () => {
+  const item = toShipmentListItem(
+    { ...SAMPLE_ROW, providerKey: "yataxi", carrier: { apishipCode: "cdek" } },
+    fakeResolveCarrierName,
+  );
+  assert.equal(item.carrierName, "NAME_FOR:yataxi");
 });

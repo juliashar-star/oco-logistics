@@ -6,7 +6,7 @@ import {
   ORDER_ADAPTERS,
   resolveOrderAdapter,
 } from "@oco/core/carrier-adapter/order-adapters";
-import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { selectOrderAdaptersForConnectedCarriers } from "@oco/core/carrier-adapter/select-order-adapters-for-connected-carriers";
 import { narrowAdaptersToPointCarrier } from "@oco/core/carrier-adapter/narrow-adapters-to-point-carrier";
 import { withAuth } from "@/lib/auth/with-auth";
@@ -40,10 +40,9 @@ function resolveOfferFreeCancelBoundary(
 }
 
 function resolveOfferCarrierName(adapterKey: string | undefined): string {
-  return (
-    providerSellerDisplayName(resolveOrderAdapter(adapterKey).providerKey) ??
-    ""
-  );
+  // Cabinet screen → the carrier's REAL name (decided 18.08). Still resolved
+  // here, on the server: what changed is what the key resolves into, not where.
+  return carrierCabinetName(resolveOrderAdapter(adapterKey).providerKey);
 }
 function messageForBuildFailure(
   reason:

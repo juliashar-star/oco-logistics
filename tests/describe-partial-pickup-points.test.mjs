@@ -3,11 +3,26 @@ import test from "node:test";
 
 import { describePartialPickupPoints } from "../apps/web/lib/shipments/describe-partial-pickup-points.ts";
 
+/**
+ * DECISION CHANGED 18.08, BEHAVIOUR DID NOT. The cabinet shows real carrier
+ * names now, so the fixtures moved from «Перевозчик №N» to «СДЭК» / «Яндекс
+ * Доставка» / «Dostavista». Two wording rules changed with them, and both are
+ * consequences of that decision, not of a broken function:
+ *
+ * — the verbs are PRESENT tense («не отвечает», «не находит»), because Russian
+ *   past-tense verbs agree with gender and the three real names do not share
+ *   one; the present tense carries no gender at all;
+ * — the «Для X …» shape is gone, and with it the genitive transform that bent
+ *   «Перевозчик №N» into «Перевозчика №N». «Для СДЭК» / «Для Яндекс Доставки» /
+ *   «Для Dostavista» have three different correct forms, so the name now stands
+ *   first in the nominative and the rest follows an em dash.
+ */
+
 test("all ok → null", () => {
   assert.equal(
     describePartialPickupPoints([
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
-      { providerKey: "cdek", status: "ok", carrierName: "Перевозчик №2" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
+      { providerKey: "cdek", status: "ok", carrierName: "СДЭК" },
     ]),
     null,
   );
@@ -21,7 +36,7 @@ test("empty carriers array → null", () => {
 test("ok with zero points is ignored (not a partial failure)", () => {
   assert.equal(
     describePartialPickupPoints([
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
     ]),
     null,
   );
@@ -30,15 +45,15 @@ test("ok with zero points is ignored (not a partial failure)", () => {
 test("one failed among two ok", () => {
   assert.equal(
     describePartialPickupPoints([
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
-      { providerKey: "cdek", status: "failed", carrierName: "Перевозчик №2" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
+      { providerKey: "cdek", status: "failed", carrierName: "СДЭК" },
       {
         providerKey: "other",
         status: "ok",
-        carrierName: "Перевозчик №3",
+        carrierName: "Dostavista",
       },
     ]),
-    "Не удалось загрузить пункты: Перевозчик №2",
+    "СДЭК — не отвечает",
   );
 });
 
@@ -48,36 +63,36 @@ test("city_not_resolved", () => {
       {
         providerKey: "cdek",
         status: "city_not_resolved",
-        carrierName: "Перевозчик №2",
+        carrierName: "СДЭК",
       },
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
     ]),
-    "Перевозчик №2 не нашёл этот город",
+    "СДЭК — не находит этот город",
   );
 });
 
 test("no_adapter", () => {
   assert.equal(
     describePartialPickupPoints([
-      { providerKey: "cdek", status: "no_adapter", carrierName: "Перевозчик №2" },
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
+      { providerKey: "cdek", status: "no_adapter", carrierName: "СДЭК" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
     ]),
-    "Для Перевозчика №2 список пунктов пока недоступен",
+    "СДЭК — список пунктов пока недоступен",
   );
 });
 
 test("two different statuses at once → both groups, joined", () => {
   assert.equal(
     describePartialPickupPoints([
-      { providerKey: "yataxi", status: "ok", carrierName: "Перевозчик №1" },
-      { providerKey: "cdek", status: "failed", carrierName: "Перевозчик №2" },
+      { providerKey: "yataxi", status: "ok", carrierName: "Яндекс Доставка" },
+      { providerKey: "cdek", status: "failed", carrierName: "СДЭК" },
       {
         providerKey: "alpha",
         status: "no_adapter",
-        carrierName: "Перевозчик №3",
+        carrierName: "Dostavista",
       },
     ]),
-    "Не удалось загрузить пункты: Перевозчик №2; Для Перевозчика №3 список пунктов пока недоступен",
+    "СДЭК — не отвечает; Dostavista — список пунктов пока недоступен",
   );
 });
 
@@ -88,13 +103,13 @@ test("provider error / message text never reaches the string", () => {
     {
       providerKey: "cdek",
       status: "failed",
-      carrierName: "Перевозчик №2",
+      carrierName: "СДЭК",
       message: providerMessage,
       error: providerMessage,
       providerMessage,
     },
   ]);
-  assert.equal(result, "Не удалось загрузить пункты: Перевозчик №2");
+  assert.equal(result, "СДЭК — не отвечает");
   assert.equal(result.includes(providerMessage), false);
   assert.equal(result.includes("connection refused"), false);
   assert.equal(result.includes("PROVIDER_ERR_TEXT"), false);
@@ -114,10 +129,10 @@ test("empty carrierName → neither providerKey nor key-like token", () => {
   assert.equal(result.includes("yataxi"), false);
   assert.equal(result.includes("secret_key"), false);
   assert.equal(result.includes("_xyz"), false);
-  assert.equal(result, "Не удалось загрузить пункты: один из перевозчиков");
+  assert.equal(result, "Один из перевозчиков — не отвечает");
 });
 
-test("empty carrierName: city_not_resolved and no_adapter use nominative / genitive slots", () => {
+test("empty carrierName: every group keeps the fallback in the NOMINATIVE — nothing declines it", () => {
   assert.equal(
     describePartialPickupPoints([
       {
@@ -126,7 +141,7 @@ test("empty carrierName: city_not_resolved and no_adapter use nominative / genit
         carrierName: "",
       },
     ]),
-    "Один из перевозчиков не нашёл этот город",
+    "Один из перевозчиков — не находит этот город",
   );
   assert.equal(
     describePartialPickupPoints([
@@ -136,6 +151,30 @@ test("empty carrierName: city_not_resolved and no_adapter use nominative / genit
         carrierName: "",
       },
     ]),
-    "Для одного из перевозчиков список пунктов пока недоступен",
+    "Один из перевозчиков — список пунктов пока недоступен",
   );
+});
+
+// ── the name is never declined ─────────────────────────────────────────────
+
+test("a carrier name appears EXACTLY as the registry spells it, in every group", () => {
+  // The guard the 18.08 decision needs: real names have three different
+  // declension behaviours («СДЭК» indeclinable, «Яндекс Доставка» feminine two
+  // words, «Dostavista» Latin), so the only safe rule is not to bend them at
+  // all. Every status group must contain the name byte for byte.
+  for (const name of ["Яндекс Доставка", "Dostavista", "СДЭК"]) {
+    for (const status of ["failed", "city_not_resolved", "no_adapter"]) {
+      const notice = describePartialPickupPoints([
+        { providerKey: "x", status, carrierName: name },
+      ]);
+      assert.ok(notice, `${name} / ${status} must produce a notice`);
+      assert.ok(
+        notice.includes(name),
+        `${name} must survive «${status}» unbent, got: ${notice}`,
+      );
+      // No genitive of the two Russian names may appear anywhere.
+      assert.equal(notice.includes("Яндекс Доставки"), false);
+      assert.equal(notice.includes("СДЭКа"), false);
+    }
+  }
 });

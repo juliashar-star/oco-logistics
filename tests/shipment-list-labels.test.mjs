@@ -10,51 +10,73 @@ import {
   ORDER_ADAPTER_LABEL_SUPPORT,
   orderAdapterSupportsLabel,
 } from "../packages/core/src/carrier-adapter/order-adapter-label-support.ts";
-import { PROVIDER_SELLER_DISPLAY_NAMES } from "../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
 import {
   shipmentCarrierLabel,
   shipmentLabelCell,
   shipmentTariffLabel,
 } from "../apps/web/lib/shipments/shipment-list-labels.ts";
 
-test("PROVIDER_SELLER_DISPLAY_NAMES masks yataxi as Перевозчик №1", () => {
-  assert.equal(PROVIDER_SELLER_DISPLAY_NAMES.yataxi, "Перевозчик №1");
-});
+/**
+ * DECISION CHANGED 18.08 — and with it, WHERE the name is decided. The cabinet
+ * shows real carrier names, resolved on the SERVER, so shipmentCarrierLabel no
+ * longer calls the masking helper and no longer reads the legacy
+ * `carrier.name`. It renders a finished string. The three tests below used to
+ * pin those two branches; they now pin that this layer decides nothing.
+ */
 
-test("shipmentCarrierLabel: providerKey set → masked display name", () => {
+test("shipmentCarrierLabel: renders the server-resolved name as it is", () => {
   assert.equal(
     shipmentCarrierLabel({
       providerKey: "yataxi",
       orderAdapterKey: "yataxi:next_day",
       selectedOfferServiceName: null,
-      carrier: { name: "LEGACY" },
+      carrierName: "Яндекс Доставка",
     }),
-    "Перевозчик №1",
+    "Яндекс Доставка",
   );
 });
 
-test("shipmentCarrierLabel: providerKey null → legacy carrier name", () => {
+test("shipmentCarrierLabel: a legacy row shows whatever the server resolved for it", () => {
   assert.equal(
     shipmentCarrierLabel({
       providerKey: null,
       orderAdapterKey: null,
       selectedOfferServiceName: null,
-      carrier: { name: "СДЭК" },
+      carrierName: "СДЭК",
     }),
     "СДЭК",
   );
 });
 
-test("shipmentCarrierLabel: neither → em dash", () => {
-  assert.equal(
-    shipmentCarrierLabel({
-      providerKey: null,
-      orderAdapterKey: null,
-      selectedOfferServiceName: null,
-      carrier: null,
-    }),
-    "—",
-  );
+for (const [label, carrierName] of [
+  ["empty", ""],
+  ["whitespace", "   "],
+]) {
+  test(`shipmentCarrierLabel: ${label} name → em dash`, () => {
+    assert.equal(
+      shipmentCarrierLabel({
+        providerKey: null,
+        orderAdapterKey: null,
+        selectedOfferServiceName: null,
+        carrierName,
+      }),
+      "—",
+    );
+  });
+}
+
+test("shipmentCarrierLabel: the name is never bent, whatever it is", () => {
+  for (const name of ["Яндекс Доставка", "Dostavista", "СДЭК", "Почта России"]) {
+    assert.equal(
+      shipmentCarrierLabel({
+        providerKey: "x",
+        orderAdapterKey: null,
+        selectedOfferServiceName: null,
+        carrierName: name,
+      }),
+      name,
+    );
+  }
 });
 
 test("shipmentTariffLabel: providerKey null → em dash (legacy)", () => {

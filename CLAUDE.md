@@ -53,8 +53,13 @@ Efficiency and elegance come after all three.
 - **Never put provider response bodies into error messages or into anything stored.** They echo
   submitted fields and can contain the recipient's name, phone and address. Errors carry the HTTP
   status or a code-like string, never the body.
-- **Never send a carrier's internal provider key to the browser.** Carrier names shown to a seller
-  are masked and resolved server-side.
+- **Two separate rules about carrier identity — different reasons, do not merge them.**
+  - *Connectedness:* a carrier's internal key is resolved to a name **server-side**, and the browser
+    never branches on adapter or provider keys. Reason: one place decides what a key means.
+  - *Secrecy:* names are **masked («Перевозчик №N») on the public site only**. In the seller's
+    cabinet the carrier is named for real — the seller connected it with their own credentials, so
+    hiding it from them buys nothing. `Carrier.name` in the database is the provider key in capital
+    letters, not a name: it must never reach a screen.
 
 ## How to work
 

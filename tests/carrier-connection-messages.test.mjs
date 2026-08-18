@@ -6,11 +6,23 @@ import {
   carrierNotConnectedMessage,
 } from "../apps/web/lib/shipments/carrier-connection-messages.ts";
 import {
-  PROVIDER_SELLER_DISPLAY_NAMES,
-  providerSellerDisplayName,
-} from "../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
+  CARRIER_CABINET_NAME_FALLBACK,
+  carrierCabinetName,
+} from "../packages/core/src/carrier-adapter/carrier-cabinet-names.ts";
 import { ORDER_ADAPTERS } from "../packages/core/src/carrier-adapter/order-adapters.ts";
 import { PROTOTYPE_KEY_CASES } from "./helpers/prototype-keys.mjs";
+
+/**
+ * DECISION CHANGED 18.08: the cabinet names the carrier for real. This file
+ * used to iterate PROVIDER_SELLER_DISPLAY_NAMES (the masking map); it now
+ * iterates the keys the cabinet actually resolves, through carrierCabinetName.
+ */
+const CABINET_NAMES = Object.fromEntries(
+  ["cdek", "yataxi", "rupost", "dostavista"].map((key) => [
+    key,
+    carrierCabinetName(key),
+  ]),
+);
 
 const BOTH = [
   ["auth", carrierAuthErrorMessage],
@@ -22,7 +34,7 @@ const BOTH = [
 for (const [label, build] of BOTH) {
   test(`${label}: every masked provider key yields its own name`, () => {
     for (const [providerKey, name] of Object.entries(
-      PROVIDER_SELLER_DISPLAY_NAMES,
+      CABINET_NAMES,
     )) {
       const message = build(providerKey);
       assert.ok(
@@ -31,7 +43,7 @@ for (const [label, build] of BOTH) {
       );
       // ...and must not contain any OTHER provider's name.
       for (const [otherKey, otherName] of Object.entries(
-        PROVIDER_SELLER_DISPLAY_NAMES,
+        CABINET_NAMES,
       )) {
         if (otherKey === providerKey || otherName === name) continue;
         assert.ok(
@@ -45,7 +57,7 @@ for (const [label, build] of BOTH) {
   test(`${label}: every adapter in the registry resolves to a named message`, () => {
     for (const entry of Object.values(ORDER_ADAPTERS)) {
       const message = build(entry.providerKey);
-      const name = PROVIDER_SELLER_DISPLAY_NAMES[entry.providerKey];
+      const name = CABINET_NAMES[entry.providerKey];
       assert.ok(name, `${entry.key} providerKey must be masked`);
       assert.ok(message.includes(name), `${entry.key} → ${message}`);
     }
@@ -83,7 +95,7 @@ for (const [label, build] of BOTH) {
   ]) {
     test(`${label}: ${caseLabel} names no carrier at all`, () => {
       const message = build(key);
-      for (const name of Object.values(PROVIDER_SELLER_DISPLAY_NAMES)) {
+      for (const name of Object.values(CABINET_NAMES)) {
         assert.ok(!message.includes(name), `must not name ${name}`);
       }
       assert.doesNotMatch(message, /Яндекс|СДЭК|CDEK|Yandex/);
@@ -91,34 +103,43 @@ for (const [label, build] of BOTH) {
   }
 }
 
-test("an unmasked provider is NOT unmasked by the fallback helper", () => {
-  // providerSellerDisplayName falls back to CARRIER_REGISTRY's REAL name for a
-  // key it cannot mask. These functions must never do that — an unmasked
-  // carrier name in a seller-facing sentence is the leak the mask exists to
-  // prevent. Pinned by contrast: the helper resolves a real name, we do not.
-  const real = providerSellerDisplayName("rupost");
-  if (real !== undefined) {
-    assert.ok(!carrierAuthErrorMessage("rupost").includes(real));
-    assert.ok(!carrierNotConnectedMessage("rupost").includes(real));
-  }
+test("a carrier with no registry name is not named at all", () => {
+  // DECISION CHANGED 18.08: a REAL name is now the desired outcome, so the old
+  // «must not unmask rupost» assertion was inverted — rupost IS named. What
+  // survives is the other half of the rule: a key the registry cannot name
+  // yields a sentence naming nobody, never a name invented from the key.
+  assert.ok(carrierAuthErrorMessage("rupost").includes("Почта России"));
+  const unknown = carrierAuthErrorMessage("cse");
+  assert.equal(unknown.includes(CARRIER_CABINET_NAME_FALLBACK), false);
+  assert.equal(unknown.includes("CSE"), false);
+  assert.equal(unknown.includes("cse"), false);
+  assert.equal(
+    unknown,
+    "Не удалось авторизоваться у перевозчика. Проверьте подключение.",
+  );
 });
 
 // ── grammar: «не подключён» is masculine ───────────────────────────────────
 
-test("every masked name is masculine, which is what «не подключён» agrees with", () => {
-  // The wording says «Перевозчик №2 не подключён … Подключите ЕГО». Both are
-  // masculine. Every current name is «Перевозчик №N», a masculine noun, so the
-  // agreement holds. If a feminine name is ever added («Почта России»), this
-  // fails and forces the sentence to be revisited instead of quietly
-  // disagreeing on a seller's screen.
-  for (const [providerKey, name] of Object.entries(
-    PROVIDER_SELLER_DISPLAY_NAMES,
-  )) {
-    assert.ok(
-      name.startsWith("Перевозчик "),
-      `${providerKey} is ${JSON.stringify(name)} — if this is not masculine, «не подключён» no longer agrees`,
-    );
+test("no sentence agrees with gender any more, and no name is declined", () => {
+  // REPLACES «every masked name is masculine». That test could exist only while
+  // every name was «Перевозчик №N». Real names have three genders and two
+  // scripts, so the sentences were rewritten to agree with nothing: the name
+  // stands first, in the nominative, followed by an em dash. This pins that the
+  // registry spelling survives byte for byte in both messages.
+  for (const providerKey of ["cdek", "yataxi", "rupost", "dostavista"]) {
+    const name = carrierCabinetName(providerKey);
+    assert.notEqual(name, CARRIER_CABINET_NAME_FALLBACK);
+    for (const build of [carrierAuthErrorMessage, carrierNotConnectedMessage]) {
+      const message = build(providerKey);
+      assert.ok(message.includes(name), `${providerKey} → ${message}`);
+    }
   }
+  // The two Russian names must never appear in an oblique case.
+  const yandex = carrierNotConnectedMessage("yataxi");
+  assert.equal(yandex.includes("Яндекс Доставки"), false);
+  assert.equal(yandex.includes("Яндекс Доставку"), false);
+  assert.equal(carrierNotConnectedMessage("rupost").includes("Почты России"), false);
 });
 
 // ── wording pin ────────────────────────────────────────────────────────────
@@ -130,11 +151,11 @@ test("the seller-facing connection wording, character for character", () => {
   // stay green if the sentence around the name changed or emptied.
   assert.equal(
     carrierAuthErrorMessage("yataxi"),
-    "Не удалось авторизоваться: Перевозчик №1. Проверьте подключение.",
+    "Не удалось авторизоваться: Яндекс Доставка. Проверьте подключение.",
   );
   assert.equal(
     carrierAuthErrorMessage("cdek"),
-    "Не удалось авторизоваться: Перевозчик №2. Проверьте подключение.",
+    "Не удалось авторизоваться: СДЭК. Проверьте подключение.",
   );
   assert.equal(
     carrierAuthErrorMessage(null),
@@ -142,11 +163,11 @@ test("the seller-facing connection wording, character for character", () => {
   );
   assert.equal(
     carrierNotConnectedMessage("yataxi"),
-    "Перевозчик №1 не подключён. Подключите его в настройках, чтобы продолжить.",
+    "Яндекс Доставка — нет подключения. Подключите перевозчика в настройках, чтобы продолжить.",
   );
   assert.equal(
     carrierNotConnectedMessage("cdek"),
-    "Перевозчик №2 не подключён. Подключите его в настройках, чтобы продолжить.",
+    "СДЭК — нет подключения. Подключите перевозчика в настройках, чтобы продолжить.",
   );
   assert.equal(
     carrierNotConnectedMessage(null),

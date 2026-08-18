@@ -2408,3 +2408,67 @@ one rouble); keeping it for every type (the measured 37-of-38 failure); sending
 `services: []` for type 1 (identical to omitting it, but states less); refusing
 to quote at all for an unknown contract type; deriving the decision from the
 error codes at runtime instead of from the contract type we already hold.
+
+## 2026-08-18 · The cabinet names carriers for real; masking is a public-site measure, and the two rules split
+
+**DECIDED BY JULIA, 18.08.** Inside the seller's cabinet a carrier is named:
+«СДЭК», «Яндекс Доставка». The seller connected that carrier themselves, with
+their own credentials — hiding its name from them buys nothing and costs them
+the ability to act on what they read. The «Подключение» tab had already been
+carved out on exactly this argument; this generalises it to the whole cabinet.
+Masking stays on the public site, where it is a secrecy measure about who OCO
+works with.
+
+**THE OLD RULE WAS TWO RULES WEARING ONE SENTENCE, and they have different
+reasons, so they are now written separately in CLAUDE.md.**
+
+- *Connectedness*: the key resolves to a name ON THE SERVER, and the browser
+  does not branch on adapter or provider keys. The reason is that one place
+  should decide what a key means. **Unchanged by this slice** — what changed is
+  what the key resolves INTO, not where.
+- *Secrecy*: names are masked on the public site only. The reason is who OCO
+  works with, which is not the seller's own connection.
+
+**`Carrier.name` IS A KEY IN CAPITAL LETTERS, and it is off every screen now.**
+`ensureCarrier` writes `name: providerKey.toUpperCase()`, so the dashboard panel
+«Топ перевозчиков» was rendering «CDEK», «DOSTAVISTA», «CSE» — provider keys,
+not names, and the last two are carriers this seller never used through OCO. The
+list, the CSV and the dashboard now select `apishipCode` (the key itself) and
+resolve it server-side; `Carrier.name` is read nowhere.
+
+**PRESENT TENSE INSTEAD OF PAST, AND NO DECLENSION — a grammar consequence, not
+a style choice.** Masked names were all «Перевозчик №N»: one gender, and a
+predictable genitive, so «не ответил» agreed and «Для Перевозчика №N» could be
+produced by string surgery. Real names share neither: «СДЭК» does not decline,
+«Яндекс Доставка» is feminine and would need «Яндекс Доставки», «Dostavista» is
+Latin script. Russian PRESENT-tense verbs carry no gender, so «не отвечает» is
+correct for all three, and the «Для X …» shape was replaced by «X — …» with the
+name first and in the nominative. Number agreement stays: the count is ours to
+know. The genitive helper is deleted, and a test asserts every name survives
+every message byte for byte.
+
+**A CARRIER WITH NO REGISTRY NAME GETS «Другой перевозчик» AND A LOG LINE.** `cse`
+is in the database and in no registry. Deriving a name from the key is what
+produced «CSE» in the first place, so the fallback is neutral and the key is
+logged (`[carrierCabinetName] NO_REGISTRY_NAME`) rather than shown. Where a
+sentence can simply omit the carrier — the connection messages — it still does.
+
+**KNOWN DEBT, connectedness half: the shipments list DTO ships `providerKey` and
+`orderAdapterKey` to the browser** and the client branches on them
+(`shipmentLabelCell`, `shipmentTariffLabel`). That predates this slice and is
+NOT touched here; it is a connectedness debt, not a leak, and the offers screen
+already shows the shape it should converge on — keys resolved server-side,
+nothing but finished strings on the wire.
+
+**KNOWN FACT, secrecy half, deliberately not changed:** `carrier-comparison` and
+`carrier-picker` are public pages and call `providerSellerDisplayName`, which
+falls back to the registry's REAL name for any key the mask does not cover. The
+landing page avoids this by reading the MAP directly and says so in a comment.
+Whether the two picker pages should mask is a separate product question.
+
+Отвергли: keeping masking everywhere (unusable in the cabinet, and already
+carved out for the connection tab); showing `Carrier.name` with nicer casing (it
+is a key either way); deriving a display name from an unknown key; declining the
+real names with a per-name table; changing the public site in the same slice;
+paying down the two-keys-in-the-DTO debt here (a separate change with its own
+test surface).

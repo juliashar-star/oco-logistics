@@ -8,7 +8,9 @@ import { STATUS_SYNC_ADAPTERS } from "../../packages/core/src/carrier-adapter/st
 import { CarrierAuthError } from "../../packages/core/src/carrier-adapter/errors.ts";
 import { YandexAuthError } from "../../packages/core/src/carrier-adapter/yandex/client.ts";
 import { mapYandexStatusToShipmentStatus } from "../../packages/core/src/carrier-adapter/yandex/map-status.ts";
-import { providerSellerDisplayName } from "../../packages/core/src/carrier-adapter/provider-seller-display-names.ts";
+// DECISION CHANGED 18.08: the cabinet names carriers for real, so the summary
+// resolves through carrierCabinetName instead of the masking map.
+import { carrierCabinetName } from "../../packages/core/src/carrier-adapter/carrier-cabinet-names.ts";
 import { getTestPrisma, truncateAll } from "../helpers/test-db.mjs";
 
 const ENV_KEY = "CARRIER_CREDENTIALS_ENCRYPTION_KEY";
@@ -1048,7 +1050,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       assert.equal(result.events, 1);
       assert.equal(result.authFailed, 0);
       assert.deepEqual(result.authFailedCarriers, [
-        providerSellerDisplayName(PROVIDER_YANDEX),
+        carrierCabinetName(PROVIDER_YANDEX),
       ]);
       assert.equal(
         JSON.stringify(result).includes(PROVIDER_YANDEX),
@@ -1154,7 +1156,7 @@ describe("syncYandexShipmentStatuses", { concurrency: false }, () => {
       const failedProvider = historyProviders[0];
       const okProvider = historyProviders[1];
       assert.deepEqual(result.authFailedCarriers, [
-        providerSellerDisplayName(failedProvider),
+        carrierCabinetName(failedProvider),
       ]);
       assert.equal(JSON.stringify(result).includes("yataxi"), false);
       assert.equal(JSON.stringify(result).includes("cdek"), false);

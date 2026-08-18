@@ -18,7 +18,8 @@ export type ShipmentExportRow = {
   orderAdapterKey: string | null;
   /** Same field as the list DTO — the CSV «Тариф» column shares its resolver. */
   selectedOfferServiceName: string | null;
-  carrier: { name: string } | null;
+  /** Resolved by the export route, exactly as the list route resolves it. */
+  carrierName: string;
   recipientName: string;
   recipientPhone: string;
   destCity: string;

@@ -13,7 +13,7 @@ type PartialCarrierInput = {
   carrierName?: unknown;
 };
 
-/** Nominative base; after-«Для» transform yields genitive «одного из перевозчиков». */
+/** Always nominative — see phraseForGroup: nothing declines a carrier name now. */
 const EMPTY_NAME_FALLBACK = "один из перевозчиков";
 
 const STATUS_ORDER = ["failed", "city_not_resolved", "no_adapter"] as const;
@@ -34,35 +34,44 @@ function displayName(carrier: PartialCarrierInput): string {
   return name.length > 0 ? name : EMPTY_NAME_FALLBACK;
 }
 
-/**
- * After «Для»: «Перевозчик №N» → «Перевозчика №N»;
- * «один из перевозчиков» → «одного из перевозчиков».
- */
-function nameAfterDlya(name: string): string {
-  if (name === EMPTY_NAME_FALLBACK) {
-    return "одного из перевозчиков";
-  }
-  if (name.startsWith("Перевозчик ")) {
-    return `Перевозчика ${name.slice("Перевозчик ".length)}`;
-  }
-  return name;
-}
-
 function joinNames(names: string[]): string {
   return names.join(", ");
 }
 
+/**
+ * A CARRIER NAME IS NEVER DECLINED, and the verbs are in the PRESENT TENSE for
+ * that exact reason.
+ *
+ * The names used to be masked («Перевозчик №N»), a masculine noun we could bend
+ * safely: an earlier version turned it into «Перевозчика №N» after «Для», and
+ * the past tense «не нашёл» agreed with its gender. Real names break both
+ * tricks. «СДЭК» does not decline at all, «Яндекс Доставка» is feminine and
+ * would need «Яндекс Доставки», «Dostavista» is Latin script — no rule fits all
+ * three, and a wrong case or a wrong gender is a visible mistake in a sentence
+ * a seller reads.
+ *
+ * Russian present-tense verbs do NOT agree with gender — «не отвечает» is
+ * correct for «СДЭК», «Яндекс Доставка» and «Dostavista» alike — so the tense
+ * carries the whole problem away. Number agreement stays: we always know how
+ * many carriers are in the group.
+ *
+ * The «Для X …» shape is gone with the genitive that required it; every group
+ * now starts with the name in the nominative and continues after an em dash,
+ * the same shape describeAdaptersWithoutOffers already uses.
+ */
 function phraseForGroup(status: PartialStatus, names: string[]): string {
   const joined = joinNames(names);
+  const many = names.length > 1;
   switch (status) {
     case "failed":
-      return `Не удалось загрузить пункты: ${joined}`;
-    case "city_not_resolved": {
-      const verb = names.length === 1 ? "не нашёл" : "не нашли";
-      return `${joined} ${verb} этот город`;
-    }
+      // Present tense: «не отвечает» / «не отвечают» — no gender agreement.
+      return `${joined} — ${many ? "не отвечают" : "не отвечает"}`;
+    case "city_not_resolved":
+      // Present tense: «не находит» works for any gender and any script.
+      return `${joined} — ${many ? "не находят" : "не находит"} этот город`;
     case "no_adapter":
-      return `Для ${joinNames(names.map(nameAfterDlya))} список пунктов пока недоступен`;
+      // Name first, nominative, then the em dash — nothing to decline.
+      return `${joined} — список пунктов пока недоступен`;
   }
 }
 

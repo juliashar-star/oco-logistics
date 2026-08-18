@@ -85,6 +85,13 @@ function joinNames(names: string[]): string {
  * Wording rules: a status says WHAT HAPPENED, never how we feel about it, and it
  * is phrased so the agreement is correct for any count (the verb is chosen, not
  * the noun bent around a number).
+ *
+ * PRESENT TENSE, AND THE NAME IS NEVER DECLINED. Since the cabinet shows real
+ * carrier names, the past tense no longer works: «не ответил» agrees with
+ * gender, and «СДЭК», «Яндекс Доставка» and «Dostavista» do not share one.
+ * Russian present-tense verbs carry no gender, so «не отвечает» is correct for
+ * all three. The name always stands first, in the nominative, before the em
+ * dash — nothing after it has to bend.
  */
 function phraseForGroup(group: NoticeGroup, names: string[]): string {
   const joined = joinNames(names);
@@ -93,7 +100,8 @@ function phraseForGroup(group: NoticeGroup, names: string[]): string {
     case "no_delivery_options":
       return `${joined} — ${many ? "не возят" : "не возит"} по этому направлению`;
     case "unreachable":
-      return `${joined} — ${many ? "не ответили" : "не ответил"}, попробуйте рассчитать ещё раз`;
+      // Was «не ответил» — past tense agrees with gender, real names differ.
+      return `${joined} — ${many ? "не отвечают" : "не отвечает"}, попробуйте рассчитать ещё раз`;
     case "auth_failed":
       return `${joined} — проверьте подключение в настройках`;
   }

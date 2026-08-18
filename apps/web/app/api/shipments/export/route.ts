@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma, ShipmentStatus } from "@prisma/client";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
@@ -47,7 +48,8 @@ const exportSelect = {
   providerKey: true,
   orderAdapterKey: true,
   selectedOfferServiceName: true,
-  carrier: { select: { name: true } },
+  // apishipCode, not name — see the list route: `name` is the key uppercased.
+  carrier: { select: { apishipCode: true } },
 } satisfies Prisma.ShipmentSelect;
 
 export const GET = withAuth(async (request, user) => {
@@ -80,7 +82,21 @@ export const GET = withAuth(async (request, user) => {
     });
 
     const exportedAt = new Date();
-    const body = buildShipmentsCsv(shipments.map(decryptShipmentRecipientPii));
+    // The name is resolved here, on the server, exactly as the list route does.
+    const body = buildShipmentsCsv(
+      shipments.map((row) => {
+        const decrypted = decryptShipmentRecipientPii(row);
+        const providerKeyForName =
+          decrypted.providerKey ?? decrypted.carrier?.apishipCode ?? "";
+        return {
+          ...decrypted,
+          carrierName:
+            providerKeyForName === ""
+              ? ""
+              : carrierCabinetName(providerKeyForName),
+        };
+      }),
+    );
 
     void logAuditEvent({
       userId: user.userId,

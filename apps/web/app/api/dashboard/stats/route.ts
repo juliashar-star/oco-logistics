@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ShipmentStatus } from "@prisma/client";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 
@@ -62,16 +63,25 @@ export const GET = withAuth(async (_request, user) => {
       carrierIds.length > 0
         ? await prisma.carrier.findMany({
             where: { id: { in: carrierIds } },
-            select: { id: true, name: true },
+            // apishipCode, NOT name: `name` is `providerKey.toUpperCase()` —
+            // that is what put «CDEK», «DOSTAVISTA», «CSE» on this panel.
+            select: { id: true, apishipCode: true },
           })
         : [];
 
-    const carrierNameById = new Map(carriers.map((carrier) => [carrier.id, carrier.name]));
+    const providerKeyById = new Map(
+      carriers.map((carrier) => [carrier.id, carrier.apishipCode]),
+    );
 
-    const topCarriers = carrierGroups.map((group) => ({
-      name: carrierNameById.get(group.carrierId!) ?? "Неизвестный",
-      count: group._count._all,
-    }));
+    const topCarriers = carrierGroups.map((group) => {
+      const providerKey = providerKeyById.get(group.carrierId!);
+      return {
+        // Resolved here, on the server; the browser receives only the string.
+        name:
+          providerKey === undefined ? "Неизвестный" : carrierCabinetName(providerKey),
+        count: group._count._all,
+      };
+    });
 
     return NextResponse.json({
       totalShipments,

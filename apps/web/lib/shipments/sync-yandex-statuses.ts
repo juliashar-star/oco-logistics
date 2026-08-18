@@ -11,7 +11,7 @@ import type {
 } from "@oco/core/carrier-adapter/types";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
 import { DEFAULT_ORDER_ADAPTER } from "@oco/core/carrier-adapter/order-adapters";
-import { providerSellerDisplayName } from "@oco/core/carrier-adapter/provider-seller-display-names";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import type { StatusSyncAdapter } from "@oco/core/carrier-adapter/status-sync-adapters";
 
 import { formatDateMoscow } from "../date/format-date-moscow";
@@ -603,10 +603,11 @@ export async function syncYandexShipmentStatuses(
     }
   }
 
-  // Masked names only — providerKey stays off the wire (carrier identity).
+  // Resolved names only — the providerKey itself stays off the wire. Since
+  // 18.08 the cabinet resolves it to the carrier's REAL name.
   const authFailedCarriers = [...authFailedProviders]
-    .map((key) => providerSellerDisplayName(key))
-    .filter((name): name is string => typeof name === "string" && name.length > 0);
+    .map((key) => carrierCabinetName(key))
+    .filter((name) => name.length > 0);
 
   return {
     updated: counters.updated,
