@@ -34,6 +34,7 @@ import {
   withCdekLocationCode,
 } from "./location-fallback";
 import { mapCdekCancelWindow } from "./map-cancel-window";
+import { cdekCalculatorServices } from "./insurance-services";
 import { mapCdekTariffsToOffers } from "./map-cdek-tariffs";
 import {
   mergeCdekOffersWithServices,
@@ -172,6 +173,12 @@ export async function getOffers(
   // reintroduce the gap in a subtler place. Not input.assessedCostRub: no adapter
   // reads that field, and the order body does not send it.
   const insuranceParameter = String(item.unitPriceRub);
+  // Contract type decides whether the array is sent at all — see
+  // cdekCalculatorServices. undefined means «omit the key».
+  const services = cdekCalculatorServices(
+    creds.contractType,
+    insuranceParameter,
+  );
 
   const buildBody = (codes: CdekLocationCodes) => ({
     type: Number(creds.contractType),
@@ -202,7 +209,7 @@ export async function getOffers(
       cdekPost(baseUrl, creds, "/v2/calculator/tarifflist", body),
       cdekPost(baseUrl, creds, "/v2/calculator/tariffAndService", {
         ...body,
-        services: [{ code: "INSURANCE", parameter: insuranceParameter }],
+        ...(services === undefined ? {} : { services }),
       }),
     ]);
 

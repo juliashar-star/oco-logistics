@@ -218,8 +218,13 @@ test("oauth then BOTH calculators with exact body fields", async () => {
     },
     packages: [{ weight: 1200, length: 30, width: 20, height: 10 }],
   });
-  // Same body plus services — the declared value in RUBLES as a string, and it
-  // is item.unitPriceRub, the very number the order will send as items[].cost.
+  // CREDS is contract type 1 «Интернет-магазин», where the insurance fee is
+  // charged automatically and asking for it is REFUSED — measured 18.08 on the
+  // production contract: 37 of 38 rows came back status "false" with
+  // ve_additional_service_unavailable. So the body is the SAME as tarifflist's,
+  // with no services key at all. The earlier version of this assertion expected
+  // services here; that expectation was built on the sandbox, where the request
+  // happened to be accepted.
   assert.deepEqual(servicesBody, {
     type: 1,
     currency: 1,
@@ -233,8 +238,50 @@ test("oauth then BOTH calculators with exact body fields", async () => {
       address: "ул. Тверская, д. 1",
     },
     packages: [{ weight: 1200, length: 30, width: 20, height: 10 }],
-    services: [{ code: "INSURANCE", parameter: "1500" }],
   });
+  // Key presence, not just deep equality — the point is that the field is
+  // ABSENT, not that it is empty.
+  assert.equal("services" in servicesBody, false);
+});
+
+test("contract type 2 DOES send INSURANCE with the real declared value", async () => {
+  // «Доставка»: omitting it makes CDEK substitute parameter 1, and a parcel
+  // insured for one rouble is uninsured.
+  /** @type {any} */
+  let servicesBody;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.endsWith("/v2/oauth/token")) {
+      return Response.json(
+        { access_token: "tok-type2-services", expires_in: 3600 },
+        { status: 200 },
+      );
+    }
+    if (href.endsWith("/v2/calculator/tariffAndService")) {
+      servicesBody = JSON.parse(String(init?.body));
+      return Response.json(MIXED_SERVICES, { status: 200 });
+    }
+    return Response.json(MIXED_TARIFFS, { status: 200 });
+  };
+  try {
+    await withCdekBaseUrl(async () => {
+      const result = await getOffers(baseInput(), {
+        ...CREDS,
+        contractType: "2",
+      });
+      assert.equal(result.ok, true);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(servicesBody.type, 2);
+  assert.deepEqual(servicesBody.services, [
+    { code: "INSURANCE", parameter: "1500" },
+  ]);
+  // ITEM.unitPriceRub is 1500 — the same number the order body sends as cost.
+  assert.notEqual(servicesBody.services[0].parameter, "1");
 });
 
 test("the quoted price is delivery plus services, NET of VAT", async () => {

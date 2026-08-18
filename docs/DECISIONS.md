@@ -2350,3 +2350,61 @@ paragraph is the honest statement of what the badge means.
 make one comparator; sorting the list instead of badging it (the seller's own
 order carries information — cheapest-first is already the sort); a badge on a
 single-offer list; deciding ties by offerId.
+
+## 2026-08-14 · CDEK calculator `services` depends on the CONTRACT TYPE: omitted for «Интернет-магазин», sent for «Доставка»
+
+CDEK answered both halves directly on 18.08, and the production contour agrees
+with the answer. Measurements: `docs/research/cdek-production-calculator-2026-08-14.md`.
+
+**TYPE 1 «Интернет-магазин»: the fee is automatic and asking for it is
+forbidden.** That is the cause of the 37-of-38 failure recorded in the 14.08
+entry above — not a broken contract, not a missing service, but a request CDEK
+refuses to accept from this contract type. Measured on the same contract with
+the array removed: all 38 rows returned `status: "true"`, no errors at all, and
+the automatic fee appeared by itself in `result.services[]` on the one tariff
+that carries it (`2360`: `sum` 30 ₽, `vat_rate` 22, `total_sum` 36.6 ₽). We now
+omit the key entirely for this type.
+
+**TYPE 2 «Доставка»: the value must be sent, and the reason is a silent
+harm.** If `services` is absent CDEK substitutes `parameter: 1` — insurance of
+one rouble, which is insurance of nothing. The seller would believe their
+declared value is covered while the parcel travels effectively uninsured, and
+nothing in any reply would say so. THIS IS WHY THE FIX IS A BRANCH AND NOT A
+DELETION: dropping `services` for everyone is correct for type 1 and quietly
+harmful for type 2.
+
+An unrecognised contract type behaves as type 2 and logs the fact
+(`[cdekCalculatorServices] UNKNOWN_CONTRACT_TYPE`). The asymmetry decides the
+default: an unknown contract that receives an insurance request is no worse off
+than today, an unknown contract that does not may end up with no cover. The
+branch is unreachable through the adapter as it stands — `assertCdekCredentials`
+refuses anything but "1" and "2", and the connect form offers only those two —
+so the log line is a tripwire for the day that guard is relaxed, not a live
+defence.
+
+**MEASURED, AND IT BOUNDS WHAT THE QUOTE CAN EVER PROMISE FOR TYPE 1: the
+calculator accepts no declared value at all.** `CalculatorTariffListRequestDto`
+has no cost field and `CalcPackageRequestDto` carries only weight and
+dimensions; `tariffAndService` adds `services` and nothing else. So for type 1,
+where the fee is computed by CDEK from the declared value, the quote cannot
+include the mandatory fee even in principle — the endpoint has nowhere to hear
+the number from. The 30 ₽ the calculator did show for tariff `2360` is therefore
+not a function of this seller's declared value; the figure matches 1 % of the
+3000 ₽ threshold that tariff reported on 14.08, but that is arithmetic that fits,
+not a measurement, and the connection is unverified.
+
+Also measured 18.08: an absent `services` key and `services: []` produce
+byte-identical replies (38 rows, 10221 bytes, zero differing rows). We omit the
+key rather than send an empty array — same result, clearer intent.
+
+The error-code whitelist from the 14.08 entry stays. Type 2 still asks for the
+service, so `ve_as_insurance_min_declared_cost` remains reachable whenever the
+declared value is under a tariff's threshold, and
+`ve_additional_service_unavailable` remains reachable if a type 2 contract has
+the service switched off. It also still guards the unknown codes for both types.
+
+Отвергли: removing `services` for every contract type (leaves type 2 insured for
+one rouble); keeping it for every type (the measured 37-of-38 failure); sending
+`services: []` for type 1 (identical to omitting it, but states less); refusing
+to quote at all for an unknown contract type; deriving the decision from the
+error codes at runtime instead of from the contract type we already hold.
