@@ -1,6 +1,7 @@
 import type { CarrierCredentials, CarrierLabelDocument } from "@oco/core/carrier-adapter/types";
 import type { OrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
 import { CarrierAuthError } from "@oco/core/carrier-adapter/errors";
+import { normalizeShipmentIds } from "./shipment-ids-request";
 
 /**
  * Max shipments on one акт. Yandex documents no limit of its own (and an empty
@@ -90,13 +91,8 @@ export async function getShipmentsHandoverAct(
   input: { shipmentIds: string[]; companyId: string },
   deps: GetShipmentsHandoverActDeps,
 ): Promise<GetShipmentsHandoverActResult> {
-  const requested = [
-    ...new Set(
-      input.shipmentIds
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0),
-    ),
-  ];
+  // Same trim/dedupe every bulk action uses — see shipment-ids-request.
+  const requested = normalizeShipmentIds(input.shipmentIds);
   if (requested.length === 0) {
     return { ok: false, reason: "empty_selection" };
   }

@@ -5,20 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { getShipmentsHandoverAct } from "@/lib/shipments/get-shipments-handover-act";
 import { handoverActFilename } from "@/lib/shipments/handover-act-filename";
-
-function parseShipmentIds(body: unknown): string[] | null {
-  if (body === null || typeof body !== "object" || Array.isArray(body)) {
-    return null;
-  }
-  const raw = (body as { shipmentIds?: unknown }).shipmentIds;
-  if (!Array.isArray(raw)) {
-    return null;
-  }
-  if (!raw.every((id) => typeof id === "string")) {
-    return null;
-  }
-  return raw;
-}
+import { parseShipmentIds } from "@/lib/shipments/shipment-ids-request";
 
 export const POST = withAuth(
   async (request, user) => {

@@ -2596,3 +2596,86 @@ summed (double-counts the first time a row carries both, and fails invisibly);
 counting the carrier-less row under a "неизвестный" bucket (a carrier that does
 not exist); keeping the cap at three (would have hidden a real carrier on the
 very first load after this change).
+
+## 2026-08-24 · Selecting rows in the shipments list: bulk delete is PARTIAL and answers with a count, while the handover act stays all-or-nothing
+
+**DECIDED BY JULIA, 24.08.** Checkboxes in the shipments table, two actions over
+the selection: export the selected rows to CSV, and delete the drafts among
+them. The request shape `{ shipmentIds }` is the one the handover act already
+speaks — one bulk vocabulary for the cabinet, not a second.
+
+**WHY DELETING IS PARTIAL WHILE THE ACT REFUSES EVERYTHING.** The act produces a
+document the seller signs, so it must match what they picked exactly: one unfit
+row and the whole request is refused, because a document that quietly dropped a
+parcel is worse than no document. Deleting produces no artefact to match. A
+selection that mixes drafts with real orders is the ordinary way a seller tidies
+up after a month of quoting, and refusing all of it would make them hand-
+deselect rows the guard is already able to skip. So the two differ on purpose,
+and the difference is not an inconsistency to be smoothed away later: it follows
+from whether the action leaves something behind that has to agree with the
+selection.
+
+**WHY THE ANSWER IS A NUMBER AND NOT A LIST OF REASONS.** The single-shipment
+delete returns the SAME 404 for «not yours», «not there» and «not deletable»,
+deliberately, so a response cannot confirm that an id exists in another company.
+A per-id report from the bulk route would hand back precisely that oracle: feed
+it ids and read off which ones were «skipped because not a draft» versus never
+matched at all. The seller already knows what they selected, and the
+confirmation told them how many of it were drafts before they committed, so the
+count is the whole of what they need afterwards. The count that is shown is the
+SERVER's, not the number the browser predicted — a row can stop being a draft
+between the page load and the click.
+
+**THE GUARD DID NOT CHANGE, AND THIS IS NOT A THIRD MECHANISM.** Bulk delete
+runs one `deleteMany` carrying the same clause the single delete has always
+carried: company, status DRAFT, no provider order id. Whatever ids arrive, the
+WHERE decides; there is no read-then-delete window for a status to change
+inside, and no id in the request can reach a non-draft, a row with a carrier
+order, or another company's row. The clause is now written ONCE and used by
+both callers — two copies of a destructive guard is the drift that ends with one
+of them forgetting a condition. The audit action is the existing
+`shipment.delete`: this is that operation over a list, so a new action name
+would split one thing into two in the log. Alongside the existing delete and
+anonymize, the cabinet still has exactly two destructive mechanisms — a row
+either goes away or keeps its shape and loses its personal data.
+
+**BOTH NUMBERS ARE NAMED BEFORE THE IRREVERSIBLE STEP.** «Удалить черновиков: N»
+and, only when something is actually staying, «Не будет удалено отправлений: M».
+Saying only the first number on a mixed selection reads as «all of it», and the
+surprise would arrive after the point of no return. The phrasing puts the number
+last after a genitive plural, as everywhere in this cabinet, so it is correct at
+1 as well as at 5 — «Остальные 1 отправлений» is the shape being avoided. The
+confirmation is the two-step, no-modal form the single delete already uses.
+
+**EXPORT GAINED A SECOND ENTRY, NOT A SECOND ASSEMBLY.** `GET` with filters
+stays exactly as it was; `POST` takes the same `{ shipmentIds }`. Both call one
+builder, so the select, the decryption, the carrier-name resolution and the CSV
+are shared and a new column cannot land in only one of them. Export refuses
+nothing by status: exporting is reading, and a draft next to a delivered parcel
+in one file is a legitimate thing to want.
+
+**KNOWN DEBT, named because it is real: there are now TWO selections on this
+screen.** The handover-act panel keeps its own set of ticked ids, pre-seeded
+from the page and living inside the panel, while the table has the new one.
+Ticking a row in the table does not tick it in the act panel and the other way
+round. They were not merged in this slice because the two selections do not mean
+the same thing — the act's is pre-checked by eligibility and deliberately
+re-seeds when the page changes, and merging them means deciding what a single
+selection does when the seller opens the act panel with a delivered parcel
+already ticked. That is a product question with its own answer, not a
+refactoring, and doing it here would have hidden it inside a slice about
+checkboxes.
+
+**NOT COVERED BY A TEST, stated so nobody assumes otherwise:** the checkbox cell
+stops click propagation so ticking a row does not also open the drawer. The
+unit suite has no DOM renderer and this project does not keep browser
+end-to-end tests, so that behaviour rests on a manual check.
+
+Отвергли: making bulk delete all-or-nothing for symmetry with the act (it would
+force hand-deselection for no gain, since the guard cannot be tricked);
+returning per-id skip reasons (rebuilds the existence oracle the single delete
+refuses to be); a separate audit action for bulk deletion (splits one operation
+into two in the log); an `ids` query parameter on the export GET instead of a
+POST (a hundred ids do not belong in a URL); widening the guard so bulk delete
+could also remove cancelled orders (a different decision, with its own
+consequences, deliberately not smuggled in here).

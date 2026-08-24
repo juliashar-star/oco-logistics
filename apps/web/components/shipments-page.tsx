@@ -19,6 +19,12 @@ import {
   cancelRequestErrorMessage,
 } from "@/lib/shipments/cancel-request-message";
 import { shipmentFooterAction } from "@/lib/shipments/shipment-footer-action";
+import {
+  describeBulkDeleteConfirmation,
+  describeBulkDeleteResult,
+} from "@/lib/shipments/describe-bulk-delete";
+import { splitSelectionForDelete } from "@/lib/shipments/split-selection-for-delete";
+import { exportActionLabel } from "@/lib/shipments/describe-export-action";
 import { shouldShowCancelControl } from "@/lib/shipments/should-show-cancel-control";
 import type { ShipmentListItemDto } from "@/lib/shipments/shipment-list-dto";
 import { isHttpsUrl } from "@/lib/url/is-https-url";
@@ -127,12 +133,33 @@ function renderLabelCell(shipment: ShipmentRow) {
   return "—";
 }
 
+/**
+ * Hand the browser a file from a fetch Response. Extracted rather than written a
+ * third time when bulk export arrived — three copies of the same object-URL
+ * dance is three places to leak one.
+ */
+async function downloadResponseAsFile(response: Response, fallbackName: string) {
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? fallbackName;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function ShipmentsSkeleton() {
   return (
     <TableBody>
       {Array.from({ length: SKELETON_ROWS }).map((_, index) => (
         <TableRow key={index}>
-          {Array.from({ length: 9 }).map((__, cellIndex) => (
+          {Array.from({ length: 10 }).map((__, cellIndex) => (
             <TableCell key={cellIndex}>
               <div className="h-4 animate-pulse rounded bg-slate-200" />
             </TableCell>
@@ -174,6 +201,11 @@ export function ShipmentsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTrack(trackInput), 400);
@@ -276,7 +308,101 @@ export function ShipmentsPage() {
     void loadShipments();
   }, [loadShipments]);
 
+  // Selection is dropped whenever the loaded page is replaced — a filter, a
+  // track search, a status sync, a delete. Same reason the act panel re-seeds
+  // itself: the seller changed what they are looking at, and carrying ticks
+  // across a list they no longer see would delete or export rows that are not
+  // on screen. `shipments` is a fresh array on every load, so this fires for
+  // every one of those causes without enumerating them.
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkConfirmOpen(false);
+    setBulkError(null);
+  }, [shipments]);
+
+  const selectionSplit = splitSelectionForDelete(shipments, selectedIds);
+  const selectedCount = selectionSplit.deletable.length + selectionSplit.kept.length;
+  const allOnPageSelected = shipments.length > 0 && selectedCount === shipments.length;
+  const someOnPageSelected = selectedCount > 0 && !allOnPageSelected;
+
+  function toggleRowSelection(id: string) {
+    setBulkNotice(null);
+    setBulkError(null);
+    setBulkConfirmOpen(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllOnPage() {
+    setBulkNotice(null);
+    setBulkError(null);
+    setBulkConfirmOpen(false);
+    setSelectedIds(
+      allOnPageSelected ? new Set() : new Set(shipments.map((row) => row.id)),
+    );
+  }
+
+  const handleBulkDelete = async () => {
+    const shipmentIds = selectionSplit.deletable;
+    if (shipmentIds.length === 0) return;
+
+    setBulkDeleting(true);
+    setBulkError(null);
+    setBulkNotice(null);
+    try {
+      const response = await fetch("/api/shipments/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipmentIds }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setBulkError(
+          typeof data?.error === "string"
+            ? data.error
+            : "Не удалось удалить черновики. Попробуйте позже.",
+        );
+        return;
+      }
+
+      setBulkConfirmOpen(false);
+      // The SERVER's count, not the count we predicted: the guard decides, and
+      // a row may have stopped being a draft between the page load and now.
+      setBulkNotice(
+        describeBulkDeleteResult(
+          typeof data?.deleted === "number" ? data.deleted : 0,
+        ),
+      );
+      router.refresh();
+      await loadShipments();
+    } catch {
+      setBulkError("Не удалось удалить черновики. Попробуйте позже.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  /**
+   * The toolbar's one export. With a selection it POSTs those ids; with none it
+   * GETs whatever the filters describe. Which one ran is not a secret the
+   * seller has to infer — the button's own label says it, see exportActionLabel.
+   *
+   * The ids are taken from the rows on the page rather than from the tick set
+   * directly, so an id can never be sent for a row that is no longer displayed.
+   */
   const handleExportCsv = async () => {
+    const shipmentIds = shipments
+      .filter((row) => selectedIds.has(row.id))
+      .map((row) => row.id);
+
     setExporting(true);
     setExportError(null);
 
@@ -286,9 +412,16 @@ export function ShipmentsPage() {
 
     try {
       const query = params.toString();
-      const response = await fetch(
-        query ? `/api/shipments/export?${query}` : "/api/shipments/export",
-      );
+      const response =
+        shipmentIds.length > 0
+          ? await fetch("/api/shipments/export", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ shipmentIds }),
+            })
+          : await fetch(
+              query ? `/api/shipments/export?${query}` : "/api/shipments/export",
+            );
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -300,19 +433,7 @@ export function ShipmentsPage() {
         return;
       }
 
-      const blob = await response.blob();
-      const disposition = response.headers.get("Content-Disposition") ?? "";
-      const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] ?? "shipments.csv";
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      await downloadResponseAsFile(response, "shipments.csv");
     } catch {
       setExportError("Не удалось экспортировать отправления");
     } finally {
@@ -514,19 +635,7 @@ export function ShipmentsPage() {
         return;
       }
 
-      const blob = await response.blob();
-      const disposition = response.headers.get("Content-Disposition") ?? "";
-      const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] ?? "handover-act.pdf";
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      await downloadResponseAsFile(response, "handover-act.pdf");
     } catch {
       setActError("Не удалось получить акт. Попробуйте позже.");
     } finally {
@@ -587,7 +696,7 @@ export function ShipmentsPage() {
               disabled={exporting}
               className="rounded-lg border border-border px-4 py-2 text-sm text-text-2 hover:bg-surface-2 disabled:opacity-60"
             >
-              {exporting ? "Экспортируем..." : "Экспорт CSV"}
+              {exporting ? "Экспортируем..." : exportActionLabel(selectedCount)}
             </button>
             <button
               type="button"
@@ -728,11 +837,98 @@ export function ShipmentsPage() {
           </p>
         )}
 
+        {bulkNotice && (
+          <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+            {bulkNotice}
+          </p>
+        )}
+
+        {selectedCount > 0 && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            {bulkError && (
+              <p
+                className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800"
+                role="alert"
+              >
+                {bulkError}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-slate-700">
+                Выбрано отправлений: {selectedCount}
+              </span>
+              {!bulkConfirmOpen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkError(null);
+                    setBulkConfirmOpen(true);
+                  }}
+                  disabled={selectionSplit.deletable.length === 0}
+                  className="rounded-lg border border-border bg-white px-4 py-2 text-sm text-text-2 hover:bg-surface-2 disabled:opacity-60"
+                >
+                  Удалить черновики
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Снять выбор
+              </button>
+            </div>
+
+            {bulkConfirmOpen && (
+              <div className="mt-3 space-y-3">
+                <p className="text-sm text-slate-600">
+                  {describeBulkDeleteConfirmation(
+                    selectionSplit.deletable.length,
+                    selectionSplit.kept.length,
+                  )}{" "}
+                  Черновики и всё, что к ним привязано, будут удалены. Это
+                  действие необратимо.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkConfirmOpen(false)}
+                    disabled={bulkDeleting}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkDelete()}
+                    disabled={bulkDeleting}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {bulkDeleting ? "Удаляем..." : "Удалить"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {(loading || total > 0) && (
           <div className="mt-6">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Выбрать все на странице"
+                      checked={allOnPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someOnPageSelected;
+                      }}
+                      onChange={toggleAllOnPage}
+                      disabled={shipments.length === 0}
+                    />
+                  </TableHead>
                   <TableHead>Дата</TableHead>
                   <TableHead>Получатель</TableHead>
                   <TableHead>Перевозчик</TableHead>
@@ -754,6 +950,17 @@ export function ShipmentsPage() {
                       className="cursor-pointer hover:bg-slate-50"
                       onClick={() => openDrawer(shipment)}
                     >
+                      {/* The row's onClick opens the drawer, so this cell stops
+                          the click here — without it every tick would also open
+                          the parcel the seller was only trying to select. */}
+                      <TableCell onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label="Выбрать отправление"
+                          checked={selectedIds.has(shipment.id)}
+                          onChange={() => toggleRowSelection(shipment.id)}
+                        />
+                      </TableCell>
                       <TableCell>{formatDateTime(shipment.createdAt)}</TableCell>
                       <TableCell>
                         <div className="font-medium">{shipment.recipientName}</div>
