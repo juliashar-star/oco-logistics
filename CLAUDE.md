@@ -44,6 +44,10 @@ Efficiency and elegance come after all three.
 - **Never create, modify or cancel anything in a production carrier account.** Sandboxes only:
   `CDEK_BASE_URL` must be `https://api.edu.cdek.ru`, `YANDEX_DELIVERY_BASE_URL` must be the tst host.
   Print the resolved base URL before any call that writes, and stop if it is not a sandbox.
+- **Never guess where a production probe's credentials live.** Ask the human, read them at run time,
+  and copy them nowhere — not into a script, a log, a temp file or a report. The research file the
+  probe produces records the source that ACTUALLY worked, not the one that was planned: two sessions
+  in a row lost time to a recorded credential PREFIX pointing at variables nobody had ever set.
 - **Never commit or push without explicit approval** for that specific commit.
 - **Never start a long-running process** (`npm run dev`, watch modes) unless asked. It never returns
   and looks like a hang. If a change needs a browser check, SAY SO — the human does browser checks.
