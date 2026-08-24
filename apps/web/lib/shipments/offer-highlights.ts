@@ -62,7 +62,8 @@ type Entry = {
 };
 
 /**
- * Fastest of a set, compared AT THE COARSEST PRECISION THE SET SHARES.
+ * EVERY entry that ties for the best deadline of a set, compared AT THE
+ * COARSEST PRECISION THE SET SHARES.
  *
  * The calendar day decides first, because every usable deadline has one. Clock
  * time is consulted ONLY when every offer still in contention carries one.
@@ -80,14 +81,19 @@ type Entry = {
  * order: picking the minimum day first, then narrowing, is a total order at
  * each step, which pairwise «finer of the two» comparisons would not be.
  *
- * Ties: the cheaper offer, then the earlier one in the list.
+ * RETURNS THE WHOLE TIE, not one of it. Both badges need this set, and they
+ * need the SAME one: «быстрее» reduces it to a single winner, «дешевле» keeps
+ * all of it. Splitting the precision rules into two copies is how the two
+ * badges would come to disagree about what «same deadline» means.
  */
-function pickFastest(entries: readonly Entry[]): Entry | null {
+function deadlineLeaders(
+  entries: readonly Entry[],
+): (Entry & { deadline: Deadline })[] {
   const usable = entries.filter(
     (entry): entry is Entry & { deadline: Deadline } => entry.deadline !== null,
   );
   if (usable.length === 0) {
-    return null;
+    return [];
   }
 
   let minDay = usable[0]!.deadline.dayKey;
@@ -103,15 +109,39 @@ function pickFastest(entries: readonly Entry[]): Entry | null {
   const everyLeaderTimed = sameDay.every(
     (entry) => entry.deadline.timeMs !== null,
   );
-  let finalists = sameDay;
-  if (everyLeaderTimed) {
-    let minMs = sameDay[0]!.deadline.timeMs!;
-    for (const entry of sameDay) {
-      if (entry.deadline.timeMs! < minMs) {
-        minMs = entry.deadline.timeMs!;
-      }
+  if (!everyLeaderTimed) {
+    return sameDay;
+  }
+
+  let minMs = sameDay[0]!.deadline.timeMs!;
+  for (const entry of sameDay) {
+    if (entry.deadline.timeMs! < minMs) {
+      minMs = entry.deadline.timeMs!;
     }
-    finalists = sameDay.filter((entry) => entry.deadline.timeMs === minMs);
+  }
+  return sameDay.filter((entry) => entry.deadline.timeMs === minMs);
+}
+
+/**
+ * Fastest of a set — the single «быстрее» winner.
+ *
+ * Ties: the cheaper offer, then the earlier one in the list. UNCHANGED by the
+ * «дешевле» rewrite.
+ *
+ * OPEN QUESTION FOR THE NEXT SLICE, and the reason it is written down here.
+ * `deadlineLeaders` may return SEVERAL equally fast offers; this function then
+ * reduces them to one BY PRICE, and by list position when the price ties too.
+ * So four offers all arriving «завтра» at 150, 525.45, 592.73 and 660 ₽ —
+ * measured on screen 24.08 — put «быстрее» on the 150 ₽ card alone, not on all
+ * four. Nothing is indistinguishable there, so the badge does not claim a
+ * difference that is absent; the defect is subtler. The badge asserts SPEED
+ * while the winner among equally fast offers was chosen on COST, and it says so
+ * nowhere. Behaviour deliberately left as it is in this slice.
+ */
+function pickFastest(entries: readonly Entry[]): Entry | null {
+  const finalists = deadlineLeaders(entries);
+  if (finalists.length === 0) {
+    return null;
   }
 
   return finalists.reduce((best, entry) =>
@@ -170,9 +200,27 @@ export function offerHighlights(
       }
     }
     const tied = priced.filter((entry) => entry.offer.priceRub === minPrice);
-    // Same price → the one that arrives sooner; still tied → the first listed.
-    const winner = tied.length === 1 ? tied[0]! : pickFastest(tied) ?? tied[0]!;
-    addTag(winner.offer.offerId, "cheaper");
+    // EVERY offer at the minimum price that also ties on the best deadline
+    // AMONG THOSE OFFERS — never one of them chosen by list position.
+    //
+    // TWO OFFERS A SELLER CANNOT TELL APART MUST NOT GET DIFFERENT BADGES. The
+    // old rule broke that tie by «first listed», so of fourteen rows identical
+    // in price and date exactly one wore «дешевле» — announcing a difference
+    // that does not exist. Cheapest-but-slower still gets nothing: that one IS
+    // distinguishable, and saying so is the badge's job.
+    //
+    // No suppression when everything ties. Hiding the badge on an all-equal
+    // list would make it depend on a STRANGER: one expensive offer appearing
+    // would pop badges onto every other card, though none of them changed.
+    //
+    // Deadline-less minimums fall back to the whole tie — offers nobody can
+    // order by deadline are indistinguishable on it, which is this rule's
+    // whole premise.
+    const leaders = deadlineLeaders(tied);
+    const winners = leaders.length > 0 ? leaders : tied;
+    for (const winner of winners) {
+      addTag(winner.offer.offerId, "cheaper");
+    }
   }
 
   // ── faster ───────────────────────────────────────────────────────────────

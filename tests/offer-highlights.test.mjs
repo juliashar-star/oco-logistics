@@ -139,17 +139,19 @@ test("equal prices → «дешевле» goes to the faster one", () => {
   assert.equal(tagsOf(map, "slow").includes("cheaper"), false);
 });
 
-test("equal prices and equal speed → the first listed, stably", () => {
+test("equal prices and equal speed → BOTH get «дешевле», in either input order", () => {
   const offers = [
     dayed("first", 400, "2026-08-22"),
     dayed("second", 400, "2026-08-22"),
   ];
-  assert.ok(tagsOf(offerHighlights(offers), "first").includes("cheaper"));
-  // Reversing the input reverses the winner — the rule is «first listed»,
-  // not «whichever id sorts lower».
-  assert.ok(
-    tagsOf(offerHighlights([...offers].reverse()), "second").includes("cheaper"),
-  );
+  // Was «the first listed, stably» until 24.08. Two rows a seller cannot tell
+  // apart must not wear different badges, so position no longer decides.
+  const map = offerHighlights(offers);
+  assert.ok(tagsOf(map, "first").includes("cheaper"));
+  assert.ok(tagsOf(map, "second").includes("cheaper"));
+  const reversed = offerHighlights([...offers].reverse());
+  assert.ok(tagsOf(reversed, "first").includes("cheaper"));
+  assert.ok(tagsOf(reversed, "second").includes("cheaper"));
 });
 
 test("equal deadlines → «быстрее» goes to the cheaper one", () => {
@@ -249,5 +251,72 @@ test("there are exactly two tags — no «оптимально»", () => {
   assert.deepEqual(Object.keys(OFFER_HIGHLIGHT_LABELS).sort(), [
     "cheaper",
     "faster",
+  ]);
+});
+
+// ── «дешевле» is a function of (price, deadline), never of position ─────────
+
+test("several offers at the minimum price AND the same deadline are ALL badged", () => {
+  const map = offerHighlights([
+    dayed("min-1", 400, "2026-08-22"),
+    dayed("min-2", 400, "2026-08-22"),
+    dayed("min-3", 400, "2026-08-22"),
+    dayed("dearer", 900, "2026-08-22"),
+  ]);
+  for (const id of ["min-1", "min-2", "min-3"]) {
+    assert.ok(tagsOf(map, id).includes("cheaper"), id);
+  }
+  assert.equal(tagsOf(map, "dearer").includes("cheaper"), false);
+});
+
+test("at the minimum price but a LATER deadline → no badge; it is distinguishable", () => {
+  const map = offerHighlights([
+    dayed("min-soon-a", 400, "2026-08-22"),
+    dayed("min-soon-b", 400, "2026-08-22"),
+    dayed("min-later", 400, "2026-08-26"),
+  ]);
+  assert.ok(tagsOf(map, "min-soon-a").includes("cheaper"));
+  assert.ok(tagsOf(map, "min-soon-b").includes("cheaper"));
+  assert.equal(tagsOf(map, "min-later").includes("cheaper"), false);
+});
+
+test("a lone minimum is still badged alone", () => {
+  const map = offerHighlights([
+    dayed("only-min", 100, "2026-08-26"),
+    dayed("dearer-1", 400, "2026-08-22"),
+    dayed("dearer-2", 400, "2026-08-22"),
+  ]);
+  assert.ok(tagsOf(map, "only-min").includes("cheaper"));
+  assert.equal(tagsOf(map, "dearer-1").includes("cheaper"), false);
+  assert.equal(tagsOf(map, "dearer-2").includes("cheaper"), false);
+});
+
+test("EVERY offer sharing price and deadline → every one badged, no suppression", () => {
+  // Deliberately not hidden. Suppressing the badge on an all-equal list would
+  // make it depend on a stranger: one expensive offer appearing would pop the
+  // badge onto all four, though none of them changed.
+  const ids = ["a", "b", "c", "d"];
+  const map = offerHighlights(ids.map((id) => dayed(id, 250, "2026-08-23")));
+  for (const id of ids) {
+    assert.ok(tagsOf(map, id).includes("cheaper"), id);
+  }
+});
+
+test("reversing the input changes no «дешевле» badge at all", () => {
+  const offers = [
+    dayed("cheap-soon-1", 400, "2026-08-22"),
+    dayed("cheap-soon-2", 400, "2026-08-22"),
+    dayed("cheap-late", 400, "2026-08-26"),
+    timed("dear-soonest", 900, "2026-08-21T09:00:00+03:00"),
+  ];
+  const cheaperIds = (list) =>
+    [...offerHighlights(list).entries()]
+      .filter(([, tags]) => tags.includes("cheaper"))
+      .map(([id]) => id)
+      .sort();
+  assert.deepEqual(cheaperIds(offers), ["cheap-soon-1", "cheap-soon-2"]);
+  assert.deepEqual(cheaperIds([...offers].reverse()), [
+    "cheap-soon-1",
+    "cheap-soon-2",
   ]);
 });
