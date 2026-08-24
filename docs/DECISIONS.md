@@ -2599,6 +2599,8 @@ very first load after this change).
 
 ## 2026-08-24 · Selecting rows in the shipments list: bulk delete is PARTIAL and answers with a count, while the handover act stays all-or-nothing
 
+**REFINED** (кнопка «Экспорт выбранных» в панели выбора): убрана до отгрузки — экспорт остался ОДНОЙ кнопкой в панели инструментов, меняющей подпись по состоянию выбора: «Экспорт CSV» при пустом выборе, «Экспорт выбранных: N» при непустом. Живая проверка показала, что две кнопки экспорта рядом читаются как дубликат. Всё остальное в силе: сам выбор строк, разделение на удаляемое и остающееся, оба числа в подтверждении, ответ числом без причин и общий охранник.
+
 **DECIDED BY JULIA, 24.08.** Checkboxes in the shipments table, two actions over
 the selection: export the selected rows to CSV, and delete the drafts among
 them. The request shape `{ shipmentIds }` is the one the handover act already
