@@ -261,8 +261,22 @@ type ExpressOfferPrice = {
 
 /**
  * Yandex quotes tariff prices NET of VAT (stated in the cabinet's Express tariff page),
- * and the other family's pricing_total is net too, so the net total_price is the
- * comparable figure.
+ * so the net total_price is the figure this adapter reports. That page is the WHOLE basis
+ * for the choice — nothing else here supports it.
+ *
+ * WHETHER THE OTHER FAMILY IS COMPARABLE IS NOT MEASURED. An earlier version of this
+ * comment asserted that the request/* family's pricing_total is net too; nothing in the
+ * repository ever supported that, and it is the justification a reader would lean on. The
+ * truth is that pricing_total carries no VAT label, has no net/gross sibling to compare
+ * against, and is documented nowhere. (`pricing` sits beside it and equals it exactly on
+ * every offer stored in the LOCAL DEV database — sandbox-contour rows, read-only, not a
+ * production measurement.)
+ * If it turns out to be GROSS, the two families are not comparable and any cross-carrier
+ * price comparison built on them is wrong by the VAT rate — see docs/OFFER_BADGES.md §3
+ * and task 14 in docs/LIVE_ENVIRONMENT_TASKS.md. This provider has already been measured
+ * to contradict its own VAT documentation once: the OpenAPI blurb calls pricing.offer.price
+ * «без НДС», and on prod 27.07 it held the gross figure while net sat in price_raw.
+ *
  * If OCO ever shows prices WITH VAT, that belongs at the display layer applied to every
  * carrier uniformly, never inside one adapter.
  */
