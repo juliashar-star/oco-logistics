@@ -155,8 +155,15 @@ line before committing.
 
 Commit messages are **English**, plain `git commit -m "subject" -m "body"`. The body explains **why**
 in prose a person can read a year later — not a list of changed files. Never mention tooling or
-assistants in a commit message. Only use a message file for Cyrillic, written explicitly as UTF-8,
-deleted immediately, and verified with `git --no-pager log -1 --format=%B`.
+assistants in a commit message. If a body would contain DOUBLE QUOTES, reword it to avoid them
+first — that is cheaper than a temp file. Use a message file for Cyrillic **and for any body that
+genuinely needs the quotes**, written explicitly as UTF-8, deleted immediately, and verified with
+`git --no-pager log -1 --format=%B`.
+
+**Why double quotes need the file.** PowerShell 5.1 re-parses quotes inside a here-string when it
+hands the string to a native executable, so the `-m` argument splits and the remainder arrives as
+pathspecs. The error names nothing about quoting: `pathspec '…' did not match any file(s) known to
+git`. Measured 25.08: no commit is created and staging is left intact, so the retry is safe.
 
 Quote git paths containing `[id]` — git reads brackets as a character class.
 
