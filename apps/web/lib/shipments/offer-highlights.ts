@@ -3,12 +3,13 @@
 // imports "../sender-address").
 import { moscowDayKey } from "../date/format-offer-interval";
 
-export type OfferHighlightTag = "cheaper" | "faster";
+export type OfferHighlightTag = "cheaper" | "faster" | "cheapest_of_fastest";
 
 /** Seller-facing badge text. Lowercase, like the other small card lines. */
 export const OFFER_HIGHLIGHT_LABELS: Record<OfferHighlightTag, string> = {
   cheaper: "дешевле",
   faster: "быстрее",
+  cheapest_of_fastest: "дешевле из быстрых",
 };
 
 /** Only the fields the comparison reads — the card passes whole OfferDto rows. */
@@ -81,10 +82,16 @@ type Entry = {
  * order: picking the minimum day first, then narrowing, is a total order at
  * each step, which pairwise «finer of the two» comparisons would not be.
  *
- * RETURNS THE WHOLE TIE, not one of it. Both badges need this set, and they
- * need the SAME one: «быстрее» reduces it to a single winner, «дешевле» keeps
- * all of it. Splitting the precision rules into two copies is how the two
- * badges would come to disagree about what «same deadline» means.
+ * RETURNS THE WHOLE TIE, and every caller keeps the whole of it. «Быстрее»
+ * badges this set outright; «дешевле из быстрых» narrows it by price and says
+ * so in its own name. Nothing reduces this set silently — that reduction is
+ * exactly what used to make a badge assert speed on a decision taken about
+ * cost.
+ *
+ * NO BUSINESS-DAY ARITHMETIC, and that is deliberate. These are the deadlines
+ * the carrier gave us; a weekend counts as days like any other. Inventing a
+ * working-day calendar here would rank offers on a rule the carrier never
+ * applied, the same way inventing an hour would.
  */
 function deadlineLeaders(
   entries: readonly Entry[],
@@ -122,48 +129,59 @@ function deadlineLeaders(
   return sameDay.filter((entry) => entry.deadline.timeMs === minMs);
 }
 
-/**
- * Fastest of a set — the single «быстрее» winner.
- *
- * Ties: the cheaper offer, then the earlier one in the list. UNCHANGED by the
- * «дешевле» rewrite.
- *
- * OPEN QUESTION FOR THE NEXT SLICE, and the reason it is written down here.
- * `deadlineLeaders` may return SEVERAL equally fast offers; this function then
- * reduces them to one BY PRICE, and by list position when the price ties too.
- * So four offers all arriving «завтра» at 150, 525.45, 592.73 and 660 ₽ —
- * measured on screen 24.08 — put «быстрее» on the 150 ₽ card alone, not on all
- * four. Nothing is indistinguishable there, so the badge does not claim a
- * difference that is absent; the defect is subtler. The badge asserts SPEED
- * while the winner among equally fast offers was chosen on COST, and it says so
- * nowhere. Behaviour deliberately left as it is in this slice.
- */
-function pickFastest(entries: readonly Entry[]): Entry | null {
-  const finalists = deadlineLeaders(entries);
-  if (finalists.length === 0) {
-    return null;
+/** Minimum of a non-empty list of finite prices. */
+function minPriceOf(entries: readonly Entry[]): number {
+  let min = entries[0]!.offer.priceRub;
+  for (const entry of entries) {
+    if (entry.offer.priceRub < min) {
+      min = entry.offer.priceRub;
+    }
   }
-
-  return finalists.reduce((best, entry) =>
-    entry.offer.priceRub < best.offer.priceRub ? entry : best,
-  );
+  return min;
 }
 
 /**
- * Which offers deserve a «дешевле» / «быстрее» badge.
+ * Which offers deserve a «дешевле» / «быстрее» / «дешевле из быстрых» badge.
  *
- * TWO TAGS, NOT THREE. A third — «оптимально» — would have to weigh price
- * against speed against carrier quality, and the quality half has no data
- * behind it: Carrier Score is unbuilt, and rankQuotes substitutes a neutral 50
- * for every carrier. A badge computed from a placeholder is a claim we cannot
- * stand behind, and the landing page promises exactly these two.
+ * A BADGE'S NAME MUST BE TRUE OF WHAT THE BADGE MEASURES. That single rule
+ * shapes all three, and it is why none of them breaks a tie any more: a tie is
+ * settled by badging everyone in it, never by choosing. Every earlier version
+ * chose — «дешевле» once fell back to the earlier deadline and then to list
+ * position, «быстрее» to the lower price — so a word about price was decided by
+ * time, and a word about time by money, with nothing on screen saying so.
+ *
+ * - «дешевле» — EVERY offer at the minimum price. A cheapest offer that arrives
+ *   later is exactly as cheap; the word claims price and nothing else.
+ * - «быстрее» — EVERY offer tying on the best deadline (deadlineLeaders).
+ * - «дешевле из быстрых» — the cheapest offers WITHIN that fastest set. The one
+ *   badge that states a trade-off, and its name says which two things traded.
+ *
+ * THE THIRD BADGE IS EMITTED ONLY WHEN IT SAYS SOMETHING THE OTHER TWO DO NOT,
+ * which takes two conditions, each blocking a different duplicate:
+ *   (a) the global minimum price is NOT among the fastest — otherwise the
+ *       cheapest offer is already one of the fastest, wears both other badges,
+ *       and the third would only restate them;
+ *   (b) the fastest set holds at least TWO DISTINCT prices — otherwise every
+ *       fastest offer is equally cheap, the badge would land on all of them,
+ *       and it would restate «быстрее». This also rules out a single fastest
+ *       offer, where «the cheapest of the fast» is a claim about a set of one.
+ * Together they make the third badge a STRICT subset of «быстрее» that never
+ * overlaps «дешевле». It appears exactly when the cheapest option is slow AND
+ * the fast ones differ in price — the only situation in which a seller has a
+ * trade-off to weigh.
+ *
+ * STILL NOT «ОПТИМАЛЬНО». The third tag is not a quality verdict: it is derived
+ * from the two numbers already on the card. A badge weighing carrier quality
+ * would need Carrier Score, which is unbuilt — rankQuotes substitutes a neutral
+ * 50 for every carrier — and a claim computed from a placeholder is one we
+ * cannot stand behind.
  *
  * FEWER THAN TWO OFFERS → NO BADGES AT ALL. «Дешевле» on a list of one is not
  * a comparison, it is decoration, and it would read as a claim about the market
  * rather than about the list.
  *
  * Keyed by offerId, which the card already treats as unique (it is the React
- * key). One offer can carry both tags.
+ * key). One offer can carry more than one tag.
  */
 export function offerHighlights(
   offers: readonly OfferHighlightInput[],
@@ -189,44 +207,50 @@ export function offerHighlights(
   };
 
   // ── cheaper ──────────────────────────────────────────────────────────────
+  // PRICE ALONE. No deadline enters here: a minimum-price offer that arrives
+  // later is still exactly as cheap, and the word claims nothing about when.
   const priced = entries.filter((entry) =>
     Number.isFinite(entry.offer.priceRub),
   );
-  if (priced.length > 0) {
-    let minPrice = priced[0]!.offer.priceRub;
+  const globalMinPrice = priced.length > 0 ? minPriceOf(priced) : null;
+  if (globalMinPrice !== null) {
     for (const entry of priced) {
-      if (entry.offer.priceRub < minPrice) {
-        minPrice = entry.offer.priceRub;
+      if (entry.offer.priceRub === globalMinPrice) {
+        addTag(entry.offer.offerId, "cheaper");
       }
-    }
-    const tied = priced.filter((entry) => entry.offer.priceRub === minPrice);
-    // EVERY offer at the minimum price that also ties on the best deadline
-    // AMONG THOSE OFFERS — never one of them chosen by list position.
-    //
-    // TWO OFFERS A SELLER CANNOT TELL APART MUST NOT GET DIFFERENT BADGES. The
-    // old rule broke that tie by «first listed», so of fourteen rows identical
-    // in price and date exactly one wore «дешевле» — announcing a difference
-    // that does not exist. Cheapest-but-slower still gets nothing: that one IS
-    // distinguishable, and saying so is the badge's job.
-    //
-    // No suppression when everything ties. Hiding the badge on an all-equal
-    // list would make it depend on a STRANGER: one expensive offer appearing
-    // would pop badges onto every other card, though none of them changed.
-    //
-    // Deadline-less minimums fall back to the whole tie — offers nobody can
-    // order by deadline are indistinguishable on it, which is this rule's
-    // whole premise.
-    const leaders = deadlineLeaders(tied);
-    const winners = leaders.length > 0 ? leaders : tied;
-    for (const winner of winners) {
-      addTag(winner.offer.offerId, "cheaper");
     }
   }
 
   // ── faster ───────────────────────────────────────────────────────────────
-  const fastest = pickFastest(entries);
-  if (fastest !== null) {
-    addTag(fastest.offer.offerId, "faster");
+  // THE WHOLE TIE, unreduced. Offers a seller cannot tell apart on the deadline
+  // must not be told apart by the badge — least of all by their price, which is
+  // not what this word is about.
+  const fastest = deadlineLeaders(entries);
+  for (const entry of fastest) {
+    addTag(entry.offer.offerId, "faster");
+  }
+
+  // ── cheapest of the fastest ──────────────────────────────────────────────
+  const fastestPriced = fastest.filter((entry) =>
+    Number.isFinite(entry.offer.priceRub),
+  );
+  if (globalMinPrice !== null && fastestPriced.length > 0) {
+    const pricesAmongFastest = new Set(
+      fastestPriced.map((entry) => entry.offer.priceRub),
+    );
+    // (a) the cheapest offer is NOT one of the fastest — otherwise it already
+    //     wears «дешевле» and «быстрее» and this would restate them; and
+    // (b) the fastest differ in price — otherwise this set equals «быстрее».
+    const cheapestIsSlow = !pricesAmongFastest.has(globalMinPrice);
+    const fastestDifferInPrice = pricesAmongFastest.size >= 2;
+    if (cheapestIsSlow && fastestDifferInPrice) {
+      const minAmongFastest = minPriceOf(fastestPriced);
+      for (const entry of fastestPriced) {
+        if (entry.offer.priceRub === minAmongFastest) {
+          addTag(entry.offer.offerId, "cheapest_of_fastest");
+        }
+      }
+    }
   }
 
   return result;

@@ -130,13 +130,18 @@ test("the day of a timed offer is its MOSCOW day, not UTC", () => {
 
 // ── ties ───────────────────────────────────────────────────────────────────
 
-test("equal prices → «дешевле» goes to the faster one", () => {
+test("equal prices → BOTH get «дешевле»; the deadline does not enter a price badge", () => {
   const map = offerHighlights([
     dayed("slow", 400, "2026-08-26"),
     dayed("quick", 400, "2026-08-22"),
   ]);
+  // Until 25.08 «дешевле» went to the faster of the two. A word about price
+  // decided by time is the sin this rewrite removes.
   assert.ok(tagsOf(map, "quick").includes("cheaper"));
-  assert.equal(tagsOf(map, "slow").includes("cheaper"), false);
+  assert.ok(tagsOf(map, "slow").includes("cheaper"));
+  // Speed is still said separately, and only about the one that has it.
+  assert.ok(tagsOf(map, "quick").includes("faster"));
+  assert.equal(tagsOf(map, "slow").includes("faster"), false);
 });
 
 test("equal prices and equal speed → BOTH get «дешевле», in either input order", () => {
@@ -154,22 +159,27 @@ test("equal prices and equal speed → BOTH get «дешевле», in either in
   assert.ok(tagsOf(reversed, "second").includes("cheaper"));
 });
 
-test("equal deadlines → «быстрее» goes to the cheaper one", () => {
+test("equal deadlines → BOTH get «быстрее»; the price does not enter a speed badge", () => {
   const map = offerHighlights([
     timed("dear", 900, "2026-08-20T09:00:00.000Z"),
     timed("cheap", 100, "2026-08-20T09:00:00.000Z"),
   ]);
+  // Until 25.08 the cheaper one took «быстрее» — a claim about speed settled
+  // on cost, with nothing on screen saying so.
   assert.ok(tagsOf(map, "cheap").includes("faster"));
-  assert.equal(tagsOf(map, "dear").includes("faster"), false);
+  assert.ok(tagsOf(map, "dear").includes("faster"));
+  // The cheapest IS among the fastest here, so the third badge stays away.
+  assert.equal(tagsOf(map, "cheap").includes("cheapest_of_fastest"), false);
+  assert.equal(tagsOf(map, "dear").includes("cheapest_of_fastest"), false);
 });
 
-test("equal deadlines and equal prices → the first listed", () => {
+test("equal deadlines and equal prices → BOTH get both badges; position decides nothing", () => {
   const map = offerHighlights([
     timed("first", 400, "2026-08-20T09:00:00.000Z"),
     timed("second", 400, "2026-08-20T09:00:00.000Z"),
   ]);
-  assert.ok(tagsOf(map, "first").includes("faster"));
-  assert.equal(tagsOf(map, "second").includes("faster"), false);
+  assert.deepEqual(tagsOf(map, "first").sort(), ["cheaper", "faster"]);
+  assert.deepEqual(tagsOf(map, "second").sort(), ["cheaper", "faster"]);
 });
 
 // ── an offer with no usable deadline ───────────────────────────────────────
@@ -247,9 +257,10 @@ test("the badge wording, character for character", () => {
   assert.equal(OFFER_HIGHLIGHT_LABELS.faster[0], "б");
 });
 
-test("there are exactly two tags — no «оптимально»", () => {
+test("there are exactly three tags — and «оптимально» is still not one of them", () => {
   assert.deepEqual(Object.keys(OFFER_HIGHLIGHT_LABELS).sort(), [
     "cheaper",
+    "cheapest_of_fastest",
     "faster",
   ]);
 });
@@ -269,15 +280,21 @@ test("several offers at the minimum price AND the same deadline are ALL badged",
   assert.equal(tagsOf(map, "dearer").includes("cheaper"), false);
 });
 
-test("at the minimum price but a LATER deadline → no badge; it is distinguishable", () => {
+test("a minimum-price offer with a LATER deadline is STILL «дешевле» — the word claims price only", () => {
   const map = offerHighlights([
     dayed("min-soon-a", 400, "2026-08-22"),
     dayed("min-soon-b", 400, "2026-08-22"),
     dayed("min-later", 400, "2026-08-26"),
   ]);
+  // Yesterday's rule withheld the badge here. It was wrong: arriving later
+  // does not make an offer less cheap.
   assert.ok(tagsOf(map, "min-soon-a").includes("cheaper"));
   assert.ok(tagsOf(map, "min-soon-b").includes("cheaper"));
-  assert.equal(tagsOf(map, "min-later").includes("cheaper"), false);
+  assert.ok(tagsOf(map, "min-later").includes("cheaper"));
+  // Speed is where they differ, and that is where they are told apart.
+  assert.ok(tagsOf(map, "min-soon-a").includes("faster"));
+  assert.ok(tagsOf(map, "min-soon-b").includes("faster"));
+  assert.equal(tagsOf(map, "min-later").includes("faster"), false);
 });
 
 test("a lone minimum is still badged alone", () => {
@@ -314,9 +331,146 @@ test("reversing the input changes no «дешевле» badge at all", () => {
       .filter(([, tags]) => tags.includes("cheaper"))
       .map(([id]) => id)
       .sort();
-  assert.deepEqual(cheaperIds(offers), ["cheap-soon-1", "cheap-soon-2"]);
-  assert.deepEqual(cheaperIds([...offers].reverse()), [
-    "cheap-soon-1",
-    "cheap-soon-2",
+  // cheap-late is at the minimum price too, and now says so.
+  const expected = ["cheap-late", "cheap-soon-1", "cheap-soon-2"];
+  assert.deepEqual(cheaperIds(offers), expected);
+  assert.deepEqual(cheaperIds([...offers].reverse()), expected);
+});
+
+// ── «быстрее» is the whole tie ─────────────────────────────────────────────
+
+test("several offers tying on the best deadline are ALL badged «быстрее»", () => {
+  const map = offerHighlights([
+    dayed("tie-1", 400, "2026-08-22"),
+    dayed("tie-2", 500, "2026-08-22"),
+    dayed("tie-3", 600, "2026-08-22"),
+    dayed("later", 700, "2026-08-26"),
   ]);
+  for (const id of ["tie-1", "tie-2", "tie-3"]) {
+    assert.ok(tagsOf(map, id).includes("faster"), id);
+  }
+  assert.equal(tagsOf(map, "later").includes("faster"), false);
+});
+
+test("a CDEK-shaped list — calendar days only, no clock times — badges the whole day tie", () => {
+  // Every CDEK offer has blank intervals, so the narrowing step can never run:
+  // whatever shares the earliest day stays in the tie. This is the ordinary
+  // shape of a CDEK list, not an edge case.
+  const map = offerHighlights([
+    dayed("cdek-a", 411, "2026-08-22"),
+    dayed("cdek-b", 523, "2026-08-22"),
+    dayed("cdek-c", 640, "2026-08-22"),
+    dayed("cdek-d", 388, "2026-08-22"),
+    dayed("cdek-e", 299, "2026-08-27"),
+  ]);
+  for (const id of ["cdek-a", "cdek-b", "cdek-c", "cdek-d"]) {
+    assert.ok(tagsOf(map, id).includes("faster"), id);
+  }
+  assert.equal(tagsOf(map, "cdek-e").includes("faster"), false);
+  assert.ok(tagsOf(map, "cdek-e").includes("cheaper"));
+});
+
+// ── «дешевле из быстрых» ───────────────────────────────────────────────────
+
+test("the third badge appears when the cheapest is SLOW and the fastest differ in price", () => {
+  const map = offerHighlights([
+    dayed("fast-mid", 500, "2026-08-22"),
+    dayed("fast-dear", 700, "2026-08-22"),
+    dayed("slow-cheap", 300, "2026-08-26"),
+  ]);
+  assert.deepEqual(tagsOf(map, "slow-cheap"), ["cheaper"]);
+  assert.deepEqual(tagsOf(map, "fast-mid").sort(), [
+    "cheapest_of_fastest",
+    "faster",
+  ]);
+  assert.deepEqual(tagsOf(map, "fast-dear"), ["faster"]);
+});
+
+test("the third badge does NOT appear when the cheapest is among the fastest", () => {
+  const map = offerHighlights([
+    dayed("fast-cheap", 300, "2026-08-22"),
+    dayed("fast-dear", 700, "2026-08-22"),
+    dayed("slow", 900, "2026-08-26"),
+  ]);
+  assert.deepEqual(tagsOf(map, "fast-cheap").sort(), ["cheaper", "faster"]);
+  assert.deepEqual(tagsOf(map, "fast-dear"), ["faster"]);
+  assert.deepEqual(tagsOf(map, "slow"), []);
+  for (const id of ["fast-cheap", "fast-dear", "slow"]) {
+    assert.equal(tagsOf(map, id).includes("cheapest_of_fastest"), false, id);
+  }
+});
+
+test("the third badge does NOT appear when every fastest offer shares one price", () => {
+  // Condition (b). Without it this set would equal «быстрее» exactly, and the
+  // second badge would restate the first on the same two cards.
+  const map = offerHighlights([
+    dayed("fast-a", 500, "2026-08-22"),
+    dayed("fast-b", 500, "2026-08-22"),
+    dayed("slow-cheap", 300, "2026-08-26"),
+  ]);
+  assert.deepEqual(tagsOf(map, "fast-a"), ["faster"]);
+  assert.deepEqual(tagsOf(map, "fast-b"), ["faster"]);
+  assert.deepEqual(tagsOf(map, "slow-cheap"), ["cheaper"]);
+});
+
+test("a single fastest offer never gets the third badge — it would speak about a set of one", () => {
+  const map = offerHighlights([
+    timed("only-fast", 890, "2026-08-20T15:00:00+03:00"),
+    dayed("slow-cheap", 157.5, "2026-08-24"),
+  ]);
+  assert.deepEqual(tagsOf(map, "only-fast"), ["faster"]);
+  assert.deepEqual(tagsOf(map, "slow-cheap"), ["cheaper"]);
+});
+
+// ── order independence, across all three badges ────────────────────────────
+
+test("reversing the input changes NO badge of any kind", () => {
+  const offers = [
+    dayed("fast-mid", 500, "2026-08-22"),
+    dayed("fast-dear", 700, "2026-08-22"),
+    dayed("fast-mid-twin", 500, "2026-08-22"),
+    dayed("slow-cheap", 300, "2026-08-26"),
+  ];
+  const snapshot = (list) =>
+    [...offerHighlights(list).entries()]
+      .map(([id, tags]) => [id, [...tags].sort()])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  assert.deepEqual(snapshot(offers), snapshot([...offers].reverse()));
+  assert.deepEqual(snapshot(offers), [
+    ["fast-dear", ["faster"]],
+    ["fast-mid", ["cheapest_of_fastest", "faster"]],
+    ["fast-mid-twin", ["cheapest_of_fastest", "faster"]],
+    ["slow-cheap", ["cheaper"]],
+  ]);
+});
+
+test("the third badge wording, character for character", () => {
+  assert.equal(
+    OFFER_HIGHLIGHT_LABELS.cheapest_of_fastest,
+    "дешевле из быстрых",
+  );
+  assert.equal(OFFER_HIGHLIGHT_LABELS.cheapest_of_fastest[0], "д");
+});
+
+test("a MIXED leading day: the CDEK row and the Yandex row both get «быстрее»", () => {
+  // The most structural case of the two families meeting. CDEK fills only
+  // deliveryDayTo and leaves the intervals blank (map-cdek-tariffs.ts hardcodes
+  // them to ""); Yandex fills only the interval. When they share the leading
+  // Moscow day, the hour-narrowing step CANNOT RUN — it needs every leader to
+  // carry a time — so naming an hour buys the Yandex row no advantage, and the
+  // tie stands at the day.
+  //
+  // This is a consequence of never inventing an hour for a day range, not an
+  // accident of the implementation: giving the CDEK row a fabricated midnight
+  // or end-of-day would decide the badge on a number the carrier never sent.
+  // Both granularities are MEASURED, one per family, not assumed.
+  const map = offerHighlights([
+    dayed("cdek-day", 500, "2026-08-22"),
+    timed("yandex-timed", 700, "2026-08-22T14:00:00+03:00"),
+  ]);
+  assert.ok(tagsOf(map, "cdek-day").includes("faster"));
+  assert.ok(tagsOf(map, "yandex-timed").includes("faster"));
+  // The cheaper of the two is among the fastest, so no third badge anywhere.
+  assert.deepEqual(tagsOf(map, "cdek-day").sort(), ["cheaper", "faster"]);
+  assert.deepEqual(tagsOf(map, "yandex-timed"), ["faster"]);
 });
