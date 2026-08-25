@@ -1,7 +1,8 @@
-// Relative, not the "@/" alias: this module is reached from tests/ through tsx,
-// which does not resolve the Next path alias (same reason build-offer-input.ts
-// imports "../sender-address").
-import { moscowDayKey } from "../date/format-offer-interval";
+// A package specifier, not the "@/" alias: this module is reached from tests/
+// through tsx, which resolves workspace package exports but not the Next path
+// alias (same reason build-offer-input.ts imports "../sender-address").
+import { comparableOfferDeadlines } from "@oco/core/carrier-adapter/offer-deadline";
+import type { OfferDeadline } from "@oco/core/carrier-adapter/offer-deadline";
 
 export type OfferHighlightTag = "cheaper" | "faster" | "cheapest_of_fastest";
 
@@ -22,82 +23,40 @@ export type OfferHighlightInput = {
   deliveryDayTo: string;
 };
 
-const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * When an offer promises to be delivered BY, at the finest precision it gave.
- * `timeMs` is null for a carrier that quoted calendar days only.
- */
-type Deadline = { dayKey: string; timeMs: number | null };
-
-/**
- * THE LATE EDGE, NOT THE EARLY ONE. Ranking by the start of a window flatters
- * the widest interval: an offer promising «today 09:00–21:00» would beat one
- * promising «today 10:00–12:00», although the second is the one a seller can
- * rely on. The late edge is what both carriers actually commit to.
- *
- * A timed interval wins over a day range when both are somehow present: it is
- * the finer of the two, and its calendar day is derived from it rather than
- * read from a field that might disagree. Measured today no adapter fills both —
- * Yandex fills only intervals, CDEK only days.
- */
-function deadlineOf(offer: OfferHighlightInput): Deadline | null {
-  const iso = offer.deliveryIntervalTo?.trim() ?? "";
-  if (iso !== "") {
-    const parsed = new Date(iso);
-    if (!Number.isNaN(parsed.getTime())) {
-      return { dayKey: moscowDayKey(parsed), timeMs: parsed.getTime() };
-    }
-  }
-  const day = offer.deliveryDayTo?.trim() ?? "";
-  if (DAY_KEY_RE.test(day)) {
-    return { dayKey: day, timeMs: null };
-  }
-  return null;
-}
-
 type Entry = {
   offer: OfferHighlightInput;
-  index: number;
-  deadline: Deadline | null;
+  deadline: OfferDeadline | null;
 };
 
 /**
- * EVERY entry that ties for the best deadline of a set, compared AT THE
- * COARSEST PRECISION THE SET SHARES.
+ * EVERY entry that ties for the best deadline of a set.
  *
- * The calendar day decides first, because every usable deadline has one. Clock
- * time is consulted ONLY when every offer still in contention carries one.
+ * THE COMPARISON ITSELF IS NOT HERE. It lives in `comparableOfferDeadlines`, in
+ * packages/core, and the ORDER of the list is built from the very same call —
+ * one definition of «sooner» for the whole screen. Until 25.08 there were two,
+ * and they disagreed: the sort substituted the end of the Moscow day for a day
+ * range, so a Yandex offer was placed above a CDEK offer promising the same day,
+ * while these badges called the two equally fast. Read that module for the rule
+ * itself, for why the hour is masked per DAY rather than per pair, and for the
+ * accepted cost of the masking.
  *
- * NEVER GIVE A DAY RANGE AN HOUR. «Доставка 22–26 августа» says nothing about
- * when on the 22nd, and inventing midnight — or any other hour — to make it
- * comparable would decide the ranking on a number the carrier never sent. That
- * is the same invention the offer card refuses when it renders a day as a day
- * (format-offer-lines.ts), and the same one the planned delivery date refuses
- * when CDEK's blank intervals leave plannedDeliveryDate null rather than
- * fabricating a clock time (submit-order.ts). A ranking rule may not be looser
- * than the rules that display the same values.
- *
- * Comparing at the shared precision also keeps the answer independent of input
- * order: picking the minimum day first, then narrowing, is a total order at
- * each step, which pairwise «finer of the two» comparisons would not be.
+ * What is left here is the selection: the earliest day, and within it the
+ * earliest hour when that day carries hours at all. Masking has already happened
+ * upstream, so `timeMs` is uniform inside one day — either every entry has one
+ * or none does.
  *
  * RETURNS THE WHOLE TIE, and every caller keeps the whole of it. «Быстрее»
  * badges this set outright; «дешевле из быстрых» narrows it by price and says
  * so in its own name. Nothing reduces this set silently — that reduction is
  * exactly what used to make a badge assert speed on a decision taken about
  * cost.
- *
- * NO BUSINESS-DAY ARITHMETIC, and that is deliberate. These are the deadlines
- * the carrier gave us; a weekend counts as days like any other. Inventing a
- * working-day calendar here would rank offers on a rule the carrier never
- * applied, the same way inventing an hour would.
  */
 function deadlineLeaders(
   entries: readonly Entry[],
-): (Entry & { deadline: Deadline })[] {
+): (Entry & { deadline: OfferDeadline })[] {
   const usable = entries.filter(
-    (entry): entry is Entry & { deadline: Deadline } => entry.deadline !== null,
+    (entry): entry is Entry & { deadline: OfferDeadline } =>
+      entry.deadline !== null,
   );
   if (usable.length === 0) {
     return [];
@@ -111,8 +70,6 @@ function deadlineLeaders(
   }
   const sameDay = usable.filter((entry) => entry.deadline.dayKey === minDay);
 
-  // Clock time only when EVERY leader has one — otherwise the day is all they
-  // share, and the day has already decided as much as it can.
   const everyLeaderTimed = sameDay.every(
     (entry) => entry.deadline.timeMs !== null,
   );
@@ -191,10 +148,13 @@ export function offerHighlights(
     return result;
   }
 
+  // `?? null` rather than `!`: the parallel-array promise is real but invisible
+  // to the compiler, and a non-null assertion would hide a later drift instead
+  // of failing on it. Same reason as in sortOffersForSeller.
+  const deadlines = comparableOfferDeadlines(offers, (offer) => offer);
   const entries: Entry[] = offers.map((offer, index) => ({
     offer,
-    index,
-    deadline: deadlineOf(offer),
+    deadline: deadlines[index] ?? null,
   }));
 
   const addTag = (offerId: string, tag: OfferHighlightTag) => {

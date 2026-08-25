@@ -1,68 +1,72 @@
+import { comparableOfferDeadlines } from "./offer-deadline";
 import type { CarrierOffer } from "./types";
 
-const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
- * Milliseconds of deliveryIntervalTo for sort keys.
- * Blank / unparseable interval → fall back to day-precision fields; still
- * +Infinity when neither is usable so unknown deadlines sort last.
- */
-function deliveryDeadlineMs(offer: CarrierOffer): number {
-  const raw = offer.deliveryIntervalTo;
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (trimmed) {
-      const ms = Date.parse(trimmed);
-      if (!Number.isNaN(ms)) {
-        return ms;
-      }
-    }
-  }
-
-  // Day-precision carriers leave interval fields blank and set YYYY-MM-DD.
-  // Moscow has no DST (fixed UTC+03:00); sort by end of that Moscow calendar day.
-  const dayRaw =
-    typeof offer.deliveryDayTo === "string" && offer.deliveryDayTo.trim()
-      ? offer.deliveryDayTo.trim()
-      : typeof offer.deliveryDayFrom === "string"
-        ? offer.deliveryDayFrom.trim()
-        : "";
-  if (DAY_KEY_RE.test(dayRaw)) {
-    const ms = Date.parse(`${dayRaw}T23:59:59.999+03:00`);
-    if (!Number.isNaN(ms)) {
-      return ms;
-    }
-  }
-
-  return Number.POSITIVE_INFINITY;
-}
-
-/**
- * Seller-facing order for a merged offer list:
- * soonest delivery deadline first, then cheaper, then offerId for stability.
- * Does not mutate the input.
+ * Seller-facing order for a merged offer list: soonest first, then cheaper, then
+ * offerId for stability. Does not mutate the input.
+ *
+ * THE DEADLINE COMES FROM comparableOfferDeadlines, the one definition the badges
+ * use as well. Until 25.08 this file had its own: it substituted the END OF THE
+ * MOSCOW DAY for a day range, so a Yandex offer always sorted above a CDEK offer
+ * that promised the same day — one carrier placed above another for nothing but
+ * the format of its reply — while the badges beside the list called the two
+ * equally fast. The screen contradicted itself. Nothing here may reintroduce a
+ * second opinion about what «the same day» means.
+ *
+ * A DEADLINE-LESS OFFER SORTS LAST and keeps its price/id ordering among its
+ * peers; it is not dropped.
+ *
+ * The keys are computed in one pass before sorting, never inside the comparator:
+ * see offer-deadline.ts for why a pairwise «finer of the two» rule would not be
+ * transitive.
  */
 export function sortOffersForSeller(offers: CarrierOffer[]): CarrierOffer[] {
-  return [...offers].sort((a, b) => {
-    const da = deliveryDeadlineMs(a);
-    const db = deliveryDeadlineMs(b);
-    // Do not subtract: Infinity - Infinity is NaN and breaks Array.sort.
-    if (da < db) {
-      return -1;
+  const deadlines = comparableOfferDeadlines(offers, (offer) => offer);
+  // `?? null` rather than an assertion: comparableOfferDeadlines promises an
+  // array parallel to its input, but the compiler cannot see that promise, and a
+  // later signature change would slip through an `as` in silence.
+  const keyed = offers.map((offer, index) => ({
+    offer,
+    deadline: deadlines[index] ?? null,
+  }));
+
+  keyed.sort((a, b) => {
+    const aDeadline = a.deadline;
+    const bDeadline = b.deadline;
+
+    // Exactly one deadline missing → that offer goes last.
+    if ((aDeadline === null) !== (bDeadline === null)) {
+      return aDeadline === null ? 1 : -1;
     }
-    if (da > db) {
-      return 1;
+
+    if (aDeadline !== null && bDeadline !== null) {
+      if (aDeadline.dayKey !== bDeadline.dayKey) {
+        return aDeadline.dayKey < bDeadline.dayKey ? -1 : 1;
+      }
+      // Within one day the mask is uniform: either both carry an hour or
+      // neither does, so this never compares a number against null.
+      const at = aDeadline.timeMs;
+      const bt = bDeadline.timeMs;
+      if (at !== null && bt !== null && at !== bt) {
+        return at < bt ? -1 : 1;
+      }
     }
-    const priceDiff = a.priceRub - b.priceRub;
+    // BOTH deadlines missing lands here too, and that is deliberate: two offers
+    // nobody can place in time are tied on the deadline, so the price and the id
+    // order them exactly as they order any other tie.
+
+    const priceDiff = a.offer.priceRub - b.offer.priceRub;
     if (priceDiff !== 0) {
       return priceDiff;
     }
-    if (a.offerId < b.offerId) {
+    if (a.offer.offerId < b.offer.offerId) {
       return -1;
     }
-    if (a.offerId > b.offerId) {
+    if (a.offer.offerId > b.offer.offerId) {
       return 1;
     }
     return 0;
   });
+
+  return keyed.map((entry) => entry.offer);
 }

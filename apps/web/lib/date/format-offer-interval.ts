@@ -1,4 +1,6 @@
-import { MOSCOW_TIMEZONE } from "./format-date-moscow";
+import { MOSCOW_TIMEZONE, moscowDayKey } from "@oco/core/date/moscow-day";
+
+export { moscowDayKey };
 
 function parseIso(iso: string): Date | null {
   const trimmed = iso.trim();
@@ -7,16 +9,6 @@ function parseIso(iso: string): Date | null {
   }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-/** Calendar day key YYYY-MM-DD in Europe/Moscow. */
-export function moscowDayKey(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: MOSCOW_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
 }
 
 /** Next calendar day after a YYYY-MM-DD key (date-only arithmetic). */

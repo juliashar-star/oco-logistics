@@ -1,4 +1,8 @@
-export const MOSCOW_TIMEZONE = "Europe/Moscow";
+// One definition, in the carrier-neutral layer, because the offers screen
+// compares days in BOTH packages. Re-exported so every existing importer here
+// keeps working unchanged.
+export { MOSCOW_TIMEZONE } from "@oco/core/date/moscow-day";
+import { MOSCOW_TIMEZONE } from "@oco/core/date/moscow-day";
 
 /** Moscow = seller-facing calendar day for Russian logistics; one formatter keeps CSV and timeline naming the same day. */
 export function formatDateMoscow(date: Date): string {
