@@ -213,16 +213,42 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // branch is what keeps all of them. Adding a capacity here would collapse
     // the whole CDEK list to its cheapest row.
     //
-    // WEIGHT ONLY, AND THAT IS THE WHOLE SOURCED TRUTH.
+    // WEIGHT ONLY, AND THAT IS THE WHOLE FILTERABLE TRUTH.
     // Source: https://www.cdek.ru/ru/online-stores/tariffs/ verifiedAt
-    // 2026-07-08, via carrier-picker/registry.ts. CDEK dimension caps appear
-    // NOWHERE in this repository — not in the registry, not in docs/research —
-    // so none are declared and CDEK is not filtered on geometry at all.
+    // 2026-07-08, via carrier-picker/registry.ts.
+    //
+    // NO CDEK DIMENSION CAP IS DECLARED HERE, and the reason has two halves
+    // that must not be merged. The REGISTRY holds none — its cdek entry carries
+    // maxWeightKg and nothing else. docs/research DOES hold geometry
+    // boundaries, but only as SANDBOX brackets (named below), and a seller's
+    // parcel must not be dropped on those. So CDEK is not filtered on geometry.
     //
     // 50 kg is the CARRIER maximum, not a tariff's. One tarifflist call returns
     // many tariffs and this number is the widest of them, so a parcel between
     // the narrowest tariff's cap and 50 kg still gets quoted at tariffs that
-    // will refuse it. Per-tariff caps are not in the repository either.
+    // will refuse it.
+    //
+    // WHERE THE PER-TARIFF BRACKETS ACTUALLY ARE. An earlier version of this
+    // comment said they are nowhere in the repository; that was wrong, and the
+    // same sentence is in the body of commit 929bd58, which cannot be edited.
+    // They are recorded, as BRACKETS, in
+    // docs/research/apiship-yataxi-tariffs-2026-07-08.json (July, via APIShip)
+    // and docs/research/cdek-tariff-limits-edu-2026-08-26.md (direct, on edu).
+    // They still cannot be filtered on: both are SANDBOX, edu carries 24 tariffs
+    // against production's 38 on the same route, the geometry boundaries do not
+    // agree between the two captures, and tariff 2360 does not exist on edu at
+    // all. So 50 kg stays until a production sweep replaces it.
+    //
+    // MEASURED 26.08, AND READ AT THE WIDTH OF THE EVIDENCE: on EDU, contract
+    // type 1, one Moscow→Moscow route, a tariff that will not take the parcel
+    // is simply ABSENT from tariff_codes[] at HTTP 200, with no error code.
+    // That is the SHAPE of the refusal there. NOT established: that production
+    // behaves the same way, or that omission means a CAP at all — CDEK never
+    // labels the reason, so a tariff could vanish for another cause.
+    // IF a production sweep confirms it, then this filter buys a saved call and
+    // a reason we can show the seller rather than protection from an unbuyable
+    // offer, and a false drop by us becomes worse than having no filter. Until
+    // then that is a hypothesis, and not a licence to widen or remove this.
     parcelLimits: { maxWeightKg: 50 },
     getOffers: cdekGetOffers,
     confirmOffer: cdekConfirmOffer,
