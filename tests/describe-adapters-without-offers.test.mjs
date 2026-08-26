@@ -226,3 +226,54 @@ test("neither the adapter key nor the provider key can reach the string", () => 
   assert.equal(result.includes("_xyz"), false);
   assert.equal(result.includes("yataxi"), false);
 });
+
+// ── parcel_too_large ───────────────────────────────────────────────────────
+// A parcel the service will not carry is NOT a statement about the route. The
+// group exists because «не возит по этому направлению» was being shown for a
+// parcel that was simply too big — a sentence about geography for a decision
+// taken about size, and one the seller could not act on.
+
+test("parcel_too_large, one service → singular, about the parcel and not the route", () => {
+  const result = describeAdaptersWithoutOffers([
+    withStatus(COURIER, "parcel_too_large"),
+  ]);
+  assert.equal(
+    result,
+    "Яндекс Доставка · Доставка лёгких посылок в тот же день — не принимает посылку такого веса или размера",
+  );
+  assert.equal(result.includes("направлению"), false);
+});
+
+test("parcel_too_large, several services → plural verb, one sentence", () => {
+  const result = describeAdaptersWithoutOffers([
+    withStatus(COURIER, "parcel_too_large"),
+    withStatus(EXPRESS, "parcel_too_large"),
+  ]);
+  assert.equal(
+    result,
+    "Яндекс Доставка · Доставка лёгких посылок в тот же день, Яндекс Доставка · Доставка в тот же день — не принимают посылку такого веса или размера",
+  );
+});
+
+test("parcel_too_large is stated before the route group", () => {
+  const result = describeAdaptersWithoutOffers([
+    withStatus(CDEK, "no_delivery_options"),
+    withStatus(COURIER, "parcel_too_large"),
+  ]);
+  assert.ok(result);
+  assert.ok(
+    result.indexOf("не принимает посылку") < result.indexOf("не возит"),
+    "the actionable group must come first",
+  );
+});
+
+test("parcel_too_large and no_delivery_options stay separate sentences", () => {
+  const result = describeAdaptersWithoutOffers([
+    withStatus(COURIER, "parcel_too_large"),
+    withStatus(CDEK, "no_delivery_options"),
+  ]);
+  assert.equal(
+    result,
+    "Яндекс Доставка · Доставка лёгких посылок в тот же день — не принимает посылку такого веса или размера; СДЭК · Доставка по России — не возит по этому направлению",
+  );
+});

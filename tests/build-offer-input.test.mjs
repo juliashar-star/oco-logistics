@@ -236,3 +236,40 @@ test("providerKey comes from the registry argument, not a hardcode", () => {
   if (!result.ok) return;
   assert.equal(result.input.providerKey, "other-carrier");
 });
+
+/**
+ * LOAD-BEARING FOR A RULE IN ANOTHER PACKAGE. `parcelFitsServiceLimits` answers
+ * «does not fit» for an empty item list, and the offers fan-out applies that to
+ * every service declaring limits — today all four. An empty array here would
+ * therefore drop every carrier at once and tell the seller the parcel is too
+ * large, about an order with no parcel in it. The only thing preventing that is
+ * this array being a literal of length one. If a future slice makes items come
+ * from the CRM ingest path, this test must fail rather than that behaviour
+ * appearing silently on the offers screen.
+ */
+test("items is always exactly one synthetic entry — the empty-list guard depends on it", () => {
+  for (const shipment of [
+    baseShipment({
+      pickupType: "PVZ",
+      pvzCode: "019c6bee642d770a937e0d33b27f6467",
+      destAddress: null,
+      declaredValue: 250_00,
+    }),
+    baseShipment({
+      pickupType: "COURIER",
+      pvzCode: null,
+      destAddress: "ул. Тверская, 1",
+      declaredValue: 250_00,
+    }),
+  ]) {
+    const result = build({ shipment, company: COMPANY });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(
+      result.input.items.length,
+      1,
+      "an empty items array would drop every carrier with a misleading reason",
+    );
+    assert.ok(Number.isFinite(result.input.items[0].weightG));
+  }
+});

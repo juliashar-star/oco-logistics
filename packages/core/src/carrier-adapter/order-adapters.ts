@@ -20,7 +20,9 @@ import {
 import {
   EXPRESS_TAXI_CLASS_LIMITS,
   expressTaxiClassCapacity,
+  expressTaxiClassParcelLimits,
 } from "./yandex/express-taxi-class-limits";
+import type { ServiceParcelLimits } from "./parcel-fits-service-limits";
 
 /**
  * Order-path capability only — not a full CarrierAdapter.
@@ -51,6 +53,41 @@ export type OrderAdapter = {
    * without rated Express-class caps (e.g. next_day).
    */
   offerLimitCapacity?: number;
+  /**
+   * What this SERVICE will carry. Compared against the parcel ONCE, in the
+   * fan-out, so the rule is written here as data rather than repeated inside
+   * each adapter.
+   *
+   * ABSENT MEANS «NO SOURCED NUMBER», NOT «NO LIMIT», and an absent entry is
+   * never filtered. Every number below carries its source and its verification
+   * date in a comment, and a service whose limits we cannot cite stays
+   * unfiltered on purpose: a parcel wrongly dropped shows the seller a service
+   * named as refusing, with nothing on screen saying why.
+   */
+  parcelLimits?: ServiceParcelLimits;
+  /**
+   * Apply `parcelLimits` ONLY when the destination is a pickup point.
+   *
+   * Exists for `yataxi:next_day`, whose numbers are sourced to the ПВЗ variant
+   * in the registry — «лимит … для ПВЗ Яндекс Маркета и партнёров». Whether the
+   * same caps hold for a COURIER destination of that service is НЕ УСТАНОВЛЕНО,
+   * so the courier branch is left unfiltered. That is a deliberate hole, not an
+   * oversight: carrying a point limit to a door delivery would be an assumption,
+   * and a false drop costs the seller an option they could have bought.
+   */
+  parcelLimitsPointOnly?: boolean;
+  /**
+   * Whether this SERVICE can deliver to a pickup point at all.
+   *
+   * `false` on the Express family, and it is a SCHEMA fact, not a measurement:
+   * the claims calculate route point has no platform_station / point-id field,
+   * so a pickup-point destination cannot be expressed in the request at all.
+   *
+   * Read by the fan-out only to ORDER two refusals — see the comment on
+   * adapterAcceptsParcel. Absent means «no reason to think otherwise», which is
+   * why only the two entries that genuinely cannot are marked.
+   */
+  servesPointDestination?: boolean;
   /**
    * Whether this SERVICE can carry a thermal bag.
    * Same optional shape as offerLimitCapacity. True on Express-family
@@ -99,6 +136,18 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // and we have run no probe for it — so the seller is told the boundary is
     // unknown instead of being left to assume the Express rule applies.
     freeCancelBoundary: FREE_CANCEL_BOUNDARY_UNKNOWN,
+    // Source: https://yandex.ru/support/delivery-profile/ru/other-day/weight-limits
+    // verifiedAt 2026-07-08, via the `pvz` variant in carrier-picker/registry.ts.
+    // ПВЗ ONLY — see parcelLimitsPointOnly. The registry note is explicit that
+    // these are the per-box caps for ПВЗ Яндекс Маркета и партнёров, and that
+    // the whole-order allowance is wider (200 kg / 300 cm side / 500 cm sum);
+    // the per-box numbers are the right ones for one parcel.
+    parcelLimits: {
+      maxWeightKg: 30,
+      maxLongestSideCm: 150,
+      maxSumThreeSidesCm: 300,
+    },
+    parcelLimitsPointOnly: true,
     getOffers: yandexAdapter.getOffers,
     confirmOffer: yandexAdapter.confirmOffer,
     cancelOrder: yandexAdapter.cancelOrder,
@@ -112,6 +161,12 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     offerLimitCapacity: expressTaxiClassCapacity(
       EXPRESS_TAXI_CLASS_LIMITS.express,
     ),
+    // Source: https://yandex.ru/support/delivery-profile/ru/api/express/faq
+    // (quoted in express-taxi-class-limits.ts). Derived from the same constant
+    // the adapter's own filter uses, so the two cannot drift apart.
+    parcelLimits: expressTaxiClassParcelLimits(EXPRESS_TAXI_CLASS_LIMITS.express),
+    // Schema fact — see the field's comment and getExpressOffers.
+    servesPointDestination: false,
     supportsThermalBag: true,
     getOffers: (input, credentials) =>
       getExpressOffers(input, credentials, "express"),
@@ -136,6 +191,10 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     offerLimitCapacity: expressTaxiClassCapacity(
       EXPRESS_TAXI_CLASS_LIMITS.courier,
     ),
+    // Same source and same derivation as the express entry above.
+    parcelLimits: expressTaxiClassParcelLimits(EXPRESS_TAXI_CLASS_LIMITS.courier),
+    // Same schema fact as the express entry above.
+    servesPointDestination: false,
     supportsThermalBag: true,
     getOffers: (input, credentials) =>
       getExpressOffers(input, credentials, "courier"),
@@ -153,6 +212,18 @@ export const ORDER_ADAPTERS: Record<string, OrderAdapter> = {
     // intervals, so they all share one dedupe key, and the unrated-capacity
     // branch is what keeps all of them. Adding a capacity here would collapse
     // the whole CDEK list to its cheapest row.
+    //
+    // WEIGHT ONLY, AND THAT IS THE WHOLE SOURCED TRUTH.
+    // Source: https://www.cdek.ru/ru/online-stores/tariffs/ verifiedAt
+    // 2026-07-08, via carrier-picker/registry.ts. CDEK dimension caps appear
+    // NOWHERE in this repository — not in the registry, not in docs/research —
+    // so none are declared and CDEK is not filtered on geometry at all.
+    //
+    // 50 kg is the CARRIER maximum, not a tariff's. One tarifflist call returns
+    // many tariffs and this number is the widest of them, so a parcel between
+    // the narrowest tariff's cap and 50 kg still gets quoted at tariffs that
+    // will refuse it. Per-tariff caps are not in the repository either.
+    parcelLimits: { maxWeightKg: 50 },
     getOffers: cdekGetOffers,
     confirmOffer: cdekConfirmOffer,
     // THE FREE/PAID RULE HERE IS OURS, not the carrier's. CDEK has no

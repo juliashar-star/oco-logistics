@@ -32,8 +32,16 @@ type AdapterWithoutOffersInput = {
 /** Used when the server could name neither half of the pair. */
 const EMPTY_NAME_FALLBACK = "один из перевозчиков";
 
-/** Fixed order: what the route cannot serve, what broke, what the seller can fix. */
+/**
+ * Fixed order: what the seller can fix right here, what the route cannot serve,
+ * what broke, what the seller can fix in settings.
+ *
+ * `parcel_too_large` comes FIRST because it is the only one the seller can act
+ * on without leaving the parcel fields — the numbers that caused it are on the
+ * same screen.
+ */
 const STATUS_ORDER = [
+  "parcel_too_large",
   "no_delivery_options",
   "unreachable",
   "auth_failed",
@@ -47,6 +55,9 @@ type NoticeGroup = (typeof STATUS_ORDER)[number];
  * a thrown error is ours to read in the log, not theirs to act on.
  */
 function groupOf(status: unknown): NoticeGroup | null {
+  if (status === "parcel_too_large") {
+    return "parcel_too_large";
+  }
   if (status === "no_delivery_options") {
     return "no_delivery_options";
   }
@@ -97,6 +108,12 @@ function phraseForGroup(group: NoticeGroup, names: string[]): string {
   const joined = joinNames(names);
   const many = names.length > 1;
   switch (group) {
+    case "parcel_too_large":
+      // ABOUT THE PARCEL, not the route. Before this group existed, a service
+      // that refused an oversized parcel was reported as «не возит по этому
+      // направлению» — a sentence about geography for a decision taken about
+      // size, and one a seller could not act on: the direction was fine.
+      return `${joined} — ${many ? "не принимают" : "не принимает"} посылку такого веса или размера`;
     case "no_delivery_options":
       return `${joined} — ${many ? "не возят" : "не возит"} по этому направлению`;
     case "unreachable":

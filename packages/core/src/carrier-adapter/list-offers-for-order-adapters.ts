@@ -1,6 +1,7 @@
 import { CarrierAuthError } from "./errors";
 import { dedupeOffersBySameProviderInterval } from "./dedupe-offers-by-same-provider-interval";
 import type { OrderAdapter } from "./order-adapters";
+import { parcelFitsServiceLimits } from "./parcel-fits-service-limits";
 import type { SelectedOrderAdapter } from "./select-order-adapters-for-connected-carriers";
 import { sortOffersForSeller } from "./sort-offers-for-seller";
 import type {
@@ -12,6 +13,7 @@ import type {
 export type OrderAdapterOffersStatus =
   | "ok"
   | "no_delivery_options"
+  | "parcel_too_large"
   | "auth_failed"
   | "timed_out"
   | "failed";
@@ -56,6 +58,48 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
       },
     );
   });
+}
+
+/**
+ * Whether this service's declared limits accept this parcel — ONE rule for every
+ * carrier, applied before the call rather than inside each adapter.
+ *
+ * NO DECLARED LIMITS → ALWAYS TRUE. An absent `parcelLimits` means we hold no
+ * sourced number for that service, never that it carries anything. Filtering on
+ * a guess would hide an option the seller could have bought.
+ *
+ * `parcelLimitsPointOnly` narrows a service whose numbers are sourced only for a
+ * pickup-point destination; with a courier destination it does not filter. See
+ * the field's comment in order-adapters.ts for whose numbers those are and why
+ * the courier branch is left open deliberately.
+ */
+function adapterAcceptsParcel(
+  adapter: OrderAdapter,
+  input: CarrierCreateOrderInput,
+): boolean {
+  const limits = adapter.parcelLimits;
+  if (limits === undefined) {
+    return true;
+  }
+
+  const toPoint = (input.pointOutId ?? "").trim() !== "";
+
+  // THE INSURMOUNTABLE REASON WINS OVER THE FIXABLE ONE, and the order is the
+  // whole point of this branch. A service that cannot deliver to a pickup point
+  // at all will NEVER appear on this route, whatever the parcel weighs. Telling
+  // the seller «не принимает посылку такого веса или размера» would be true and
+  // useless: they would go and shrink a parcel to make a service appear that
+  // cannot appear. So we decline to pre-empt the destination refusal with a
+  // size one — the adapter answers for itself, and its answer is the better of
+  // the two. Both statements are true; only one is worth acting on.
+  if (toPoint && adapter.servesPointDestination === false) {
+    return true;
+  }
+
+  if (adapter.parcelLimitsPointOnly === true && !toPoint) {
+    return true;
+  }
+  return parcelFitsServiceLimits(input.items, limits);
 }
 
 async function runOneAdapter(
@@ -138,9 +182,22 @@ export async function listOffersForOrderAdapters(
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const settled = await Promise.all(
-    selected.map(({ adapter, credentials }) =>
-      runOneAdapter(adapter, input, credentials, timeoutMs),
-    ),
+    selected.map(({ adapter, credentials }) => {
+      // BEFORE THE CALL, not after: a service that cannot carry this parcel is
+      // not asked at all. Its own status says so, distinctly from an adapter
+      // that answered and had nothing — the seller can act on one and not the
+      // other.
+      if (!adapterAcceptsParcel(adapter, input)) {
+        return Promise.resolve({
+          entry: {
+            key: adapter.key,
+            status: "parcel_too_large" as const,
+          },
+          offers: [] as CarrierOffer[],
+        });
+      }
+      return runOneAdapter(adapter, input, credentials, timeoutMs);
+    }),
   );
 
   const offers: CarrierOffer[] = [];

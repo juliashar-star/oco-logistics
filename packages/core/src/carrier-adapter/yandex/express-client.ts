@@ -17,8 +17,10 @@ import {
   OCO_CANCEL_REQUESTED,
   OCO_CANCEL_REQUESTED_TEXT_RU,
 } from "../cancel-event-codes";
+import { parcelFitsServiceLimits } from "../parcel-fits-service-limits";
 import {
   EXPRESS_TAXI_CLASS_LIMITS,
+  expressTaxiClassParcelLimits,
   type ExpressTaxiClass,
   type ExpressTaxiClassLimits,
 } from "./express-taxi-class-limits";
@@ -90,11 +92,23 @@ export function convertNeutralItemToExpressMeasures(item: {
 
 /**
  * Whether this parcel fits a class's documented limits (see EXPRESS_TAXI_CLASS_LIMITS).
- * Sides are compared after sorting both parcel and limit dimensions descending
- * (orientation does not matter). Total weight is sum of weightKg × quantity.
  *
  * Yandex does NOT enforce these at quote time — measured, a 15 kg parcel got
  * courier offers — so this filter is ours and deliberate.
+ *
+ * THE COMPARISON ITSELF IS NO LONGER HERE. It lives in
+ * `parcelFitsServiceLimits`, the neutral rule the fan-out applies to every
+ * service, and nothing in it was ever Express-specific. This function keeps
+ * two things that ARE Express-specific and must not move:
+ *   - the metres→centimetres conversion, done once by the class-limits module;
+ *   - `convertNeutralItemToExpressMeasures`, which THROWS on a missing
+ *     dimension. The neutral rule deliberately tolerates one; this adapter does
+ *     not, and that difference is behaviour, not taste — so the validation runs
+ *     here, before delegating, and an item without sides still throws exactly
+ *     as it did before.
+ * Kept as a second line of defence behind the fan-out filter: an adapter that
+ * refuses a parcel it cannot carry should not depend on a caller remembering to
+ * ask first.
  */
 export function isExpressTaxiClassUsableForParcel(
   items: readonly CarrierOrderItem[],
@@ -103,30 +117,10 @@ export function isExpressTaxiClassUsableForParcel(
   if (items.length === 0) {
     return false;
   }
-
-  let totalWeightKg = 0;
-  const limitSides = [
-    limits.maxLengthM,
-    limits.maxWidthM,
-    limits.maxHeightM,
-  ].sort((a, b) => b - a);
-
   for (const item of items) {
-    const measures = convertNeutralItemToExpressMeasures(item);
-    totalWeightKg += measures.weight * item.quantity;
-    const parcelSides = [measures.length, measures.width, measures.height].sort(
-      (a, b) => b - a,
-    );
-    if (
-      parcelSides[0]! > limitSides[0]! ||
-      parcelSides[1]! > limitSides[1]! ||
-      parcelSides[2]! > limitSides[2]!
-    ) {
-      return false;
-    }
+    convertNeutralItemToExpressMeasures(item);
   }
-
-  return totalWeightKg <= limits.maxWeightKg;
+  return parcelFitsServiceLimits(items, expressTaxiClassParcelLimits(limits));
 }
 
 /**

@@ -1,3 +1,5 @@
+import type { ServiceParcelLimits } from "../parcel-fits-service-limits";
+
 /**
  * Express-family taxi classes we quote today.
  * Documented also: cargo, sdd_multislot — not in this slice.
@@ -37,6 +39,24 @@ export const EXPRESS_TAXI_CLASS_LIMITS: Readonly<
     maxHeightM: 0.5,
   },
 };
+
+/**
+ * The same documented caps in the units every other service declares —
+ * centimetres and kilograms. Derived, never retyped: the metres above stay the
+ * single source, so a corrected cap cannot disagree with itself.
+ */
+export function expressTaxiClassParcelLimits(
+  limits: ExpressTaxiClassLimits,
+): ServiceParcelLimits {
+  return {
+    maxWeightKg: limits.maxWeightKg,
+    maxSideCm: [
+      limits.maxLengthM * 100,
+      limits.maxWidthM * 100,
+      limits.maxHeightM * 100,
+    ],
+  };
+}
 
 /**
  * Comparable capacity of a class's limits — higher means wider.

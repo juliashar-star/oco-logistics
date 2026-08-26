@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { listConnectedCarriers } from "@/lib/shipments/list-connected-carriers";
+import { decideOffersOutcome } from "@/lib/shipments/decide-offers-outcome";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
 
 function resolveOfferServiceTitle(adapterKey: string | undefined): string {
@@ -233,10 +234,16 @@ export const POST = withAuth<{ id: string }>(
         forOffers,
       );
 
-      if (
-        taggedOffers.length > 0 ||
-        adapters.some((entry) => entry.status === "ok")
-      ) {
+      // THE CHOICE OF ANSWER IS NOT MADE HERE. `decideOffersOutcome` owns it,
+      // so every combination of adapter statuses is reachable by a unit test —
+      // route tests need auth + Prisma + Next and are not written, which is how
+      // a fifth status once fell through every branch to a 500.
+      const outcome = decideOffersOutcome({
+        hasOffers: taggedOffers.length > 0,
+        statuses: adapters.map((entry) => entry.status),
+      });
+
+      if (outcome === "offers") {
         // WHICH ADAPTERS CONTRIBUTED NOTHING TO THE LIST THE SELLER IS ABOUT TO
         // SEE. Computed against the offers, not from the status alone: an
         // adapter can answer `ok` with an empty list (Yandex documents it), and
@@ -276,10 +283,7 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      if (
-        adapters.length > 0 &&
-        adapters.every((entry) => entry.status === "no_delivery_options")
-      ) {
+      if (outcome === "no_delivery_options") {
         const quotedOffers = [] as unknown as Prisma.InputJsonValue;
         await prisma.shipment.update({
           where: { id: row.id },
@@ -301,10 +305,7 @@ export const POST = withAuth<{ id: string }>(
         );
       }
 
-      if (
-        adapters.length > 0 &&
-        adapters.every((entry) => entry.status === "auth_failed")
-      ) {
+      if (outcome === "auth_failed") {
         return NextResponse.json(
           {
             error:
