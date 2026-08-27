@@ -40,6 +40,17 @@ enum SelectionMode {
   MANUAL
 }
 
+/// The company's default priority on the offers screen — which card arrives
+/// already selected. EXACTLY TWO VALUES, and deliberately NOT SelectionMode:
+/// that enum carries OPTIMAL, and optimal is the one word we refuse to compute,
+/// because its only implementation scores every carrier with a placeholder 50
+/// (rank-quotes.ts NEUTRAL_CARRIER_SCORE). A type that can hold a state the
+/// product rejects is an invitation to store it.
+enum OfferPriority {
+  CHEAPEST
+  FASTEST
+}
+
 enum ShipmentStatus {
   DRAFT
   SUBMITTING
@@ -69,6 +80,12 @@ model Company {
   senderCity    String?
   senderAddress String?
   senderPhone   String?
+  /// NULL means «the seller has not chosen», which is NOT the same as a value
+  /// we picked for them. No default and no backfill on purpose: with NULL the
+  /// offers screen behaves exactly as it does today — nothing preselected and
+  /// nothing said. A DEFAULT here would give every existing company a
+  /// preference it never expressed.
+  defaultOfferPriority OfferPriority?
   apishipLogin          String?
   apishipPasswordEnc    String?    // пароль APIShip, зашифрован на сервере
   apishipConnectedAt    DateTime?
