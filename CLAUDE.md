@@ -93,6 +93,16 @@ explains the local HOW to whoever is reading that file; `DECISIONS.md` holds the
 written so it can be read from any chat with no access to the code. A decision that lives only in a
 comment is lost the moment nobody opens that file.
 
+**Documents are updated INSIDE the slice that changes behaviour, never afterwards.** A slice that
+ships a change and leaves a document stating the old thing is not finished, however green its tests
+are.
+
+**Anything that will later become USER-FACING documentation gets its OWN file in `docs/` at the
+time it is BUILT** — not a note to write it up later. Written later, the details of how the thing
+actually behaves are already lost, and the public site's documentation would have to be
+reconstructed from the code. `docs/OFFER_BADGES.md` is the model: the rules in plain words, what is
+NOT decided, and what is NOT verified.
+
 ## Anti-regression rules
 
 1. **Shrink the route to nothing.** Decisions — which adapters to call, what counts as empty, how to
