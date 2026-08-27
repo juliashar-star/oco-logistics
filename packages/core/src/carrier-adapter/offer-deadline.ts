@@ -1,9 +1,17 @@
 import { moscowDayKey } from "../date/moscow-day";
 
 /**
- * The fields a deadline is read from. Optional because the two callers carry
- * different shapes: the sort passes a whole CarrierOffer, the badges pass the
- * browser DTO, and only the first has `deliveryDayFrom`.
+ * The fields a deadline is read from. Optional because the callers differ in
+ * OPTIONALITY, not in which fields they hold: the sort passes a whole
+ * CarrierOffer, where the day fields may be absent, while the badges pass the
+ * browser DTO, where they have already been normalised to strings.
+ *
+ * EVERY CALLER CARRIES `deliveryDayFrom`. An earlier version of this comment
+ * said only the sort's CarrierOffer did, and that was wrong in both halves —
+ * the DTO always had it, and OfferHighlightInput now declares it too. The
+ * sentence mattered: it invited a caller to build a narrower object, which is
+ * exactly what happened, and the fallback below silently stopped applying for
+ * CDEK rows that name only a start day.
  */
 export type OfferDeadlineFields = {
   deliveryIntervalTo?: string | null;

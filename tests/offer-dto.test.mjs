@@ -78,7 +78,15 @@ function fakeResolveFreeCancelBoundary(adapterKey) {
   return "unknown";
 }
 
-function mapOffers(result, adaptersWithoutOffers = []) {
+/**
+ * What the route genuinely sends for a company that has not set a priority —
+ * which is every company today, the column being nullable with no backfill.
+ * The route builds it by calling preselectOffer with the real priority, so this
+ * default describes production rather than a value chosen to make a pin pass.
+ */
+const NO_PRESELECT = { offerId: null, reason: "no_rule" };
+
+function mapOffers(result, adaptersWithoutOffers = [], preselect = NO_PRESELECT) {
   return toOffersResponse(
     result,
     fakeResolveServiceTitle,
@@ -86,6 +94,7 @@ function mapOffers(result, adaptersWithoutOffers = []) {
     fakeResolveCarrierName,
     fakeResolveFreeCancelBoundary,
     adaptersWithoutOffers,
+    preselect,
   );
 }
 
@@ -116,7 +125,9 @@ test("fat rawOffer never appears in serialized response", () => {
 // ENVELOPE PIN. deepEqual on the whole object, so any new top-level key fails
 // here — which is what it is for. `adaptersWithoutOffers` was added by the
 // adapter-status notice slice: the fan-out already knew which adapter produced
-// nothing, and the browser had no way to learn it.
+// nothing, and the browser had no way to learn it. `preselect` was added by the
+// default-priority slice, and this pin caught it on the first run — both cases
+// below were updated deliberately, not defaulted away.
 test("no_delivery_options -> ok true, status no_delivery_options, empty offers", () => {
   const response = mapOffers({
     ok: false,
@@ -127,6 +138,7 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
     status: "no_delivery_options",
     offers: [],
     adaptersWithoutOffers: [],
+    preselect: { offerId: null, reason: "no_rule" },
   });
 });
 
@@ -137,7 +149,16 @@ test("ok with empty offers -> ok true, status ok, empty offers", () => {
     status: "ok",
     offers: [],
     adaptersWithoutOffers: [],
+    preselect: { offerId: null, reason: "no_rule" },
   });
+});
+
+test("preselect is carried through verbatim, not recomputed by the mapper", () => {
+  const response = mapOffers({ ok: true, offers: [] }, [], {
+    offerId: "o-1",
+    reason: "rule",
+  });
+  assert.deepEqual(response.preselect, { offerId: "o-1", reason: "rule" });
 });
 
 // ── adaptersWithoutOffers: three fields, and neither key ───────────────────

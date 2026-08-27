@@ -474,3 +474,33 @@ test("a MIXED leading day: the CDEK row and the Yandex row both get «быстр
   assert.deepEqual(tagsOf(map, "cdek-day").sort(), ["cheaper", "faster"]);
   assert.deepEqual(tagsOf(map, "yandex-timed"), ["faster"]);
 });
+
+// ── the min-without-max shape ──────────────────────────────────────────────
+// A CDEK row can name a start day and no end day, and comparableOfferDeadlines
+// falls back to deliveryDayFrom for exactly that. None of the helpers above
+// builds it, so until now this module had no coverage of the field at all and
+// depended on another suite to notice — which is how a caller that dropped it
+// went unseen.
+
+/** A CDEK-shaped offer with only a START day: max blank, min set. */
+const dayedFromOnly = (offerId, priceRub, dayFrom) => ({
+  offerId,
+  priceRub,
+  deliveryIntervalTo: "",
+  deliveryDayTo: "",
+  deliveryDayFrom: dayFrom,
+});
+
+test("an offer with only deliveryDayFrom still has a deadline and can win «быстрее»", () => {
+  const map = offerHighlights([
+    dayedFromOnly("early", 900, "2026-08-22"),
+    dayedFromOnly("late", 100, "2026-08-26"),
+  ]);
+  assert.ok(
+    tagsOf(map, "early").includes("faster"),
+    "the start-day fallback must produce a usable deadline",
+  );
+  assert.equal(tagsOf(map, "late").includes("faster"), false);
+  // And price still decides «дешевле» independently of the deadline.
+  assert.ok(tagsOf(map, "late").includes("cheaper"));
+});

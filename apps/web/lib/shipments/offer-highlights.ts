@@ -13,7 +13,20 @@ export const OFFER_HIGHLIGHT_LABELS: Record<OfferHighlightTag, string> = {
   cheapest_of_fastest: "дешевле из быстрых",
 };
 
-/** Only the fields the comparison reads — the card passes whole OfferDto rows. */
+/**
+ * Only the fields the comparison reads — the card passes whole OfferDto rows.
+ *
+ * ALL THREE DEADLINE FIELDS ARE LISTED, and the third is not decoration.
+ * `comparableOfferDeadlines` falls back to `deliveryDayFrom` when
+ * `deliveryDayTo` is blank (offer-deadline.ts: without it an offer that named
+ * only a start day would have no deadline at all and would sink to the end of
+ * the list). This type used to declare only two, and structural typing hid it:
+ * the screen passes whole DTO rows, so the field arrived anyway, while any
+ * caller that BUILT an object from the declared fields silently dropped it and
+ * got a different answer from the same function. Declaring what is actually
+ * read is what stops a second definition of «sooner» entering through the
+ * input instead of through the comparison.
+ */
 export type OfferHighlightInput = {
   offerId: string;
   priceRub: number;
@@ -21,6 +34,8 @@ export type OfferHighlightInput = {
   deliveryIntervalTo: string;
   /** YYYY-MM-DD late edge; "" when the carrier quoted a timed interval instead. */
   deliveryDayTo: string;
+  /** YYYY-MM-DD early edge; the FALLBACK when deliveryDayTo is blank. */
+  deliveryDayFrom: string;
 };
 
 type Entry = {

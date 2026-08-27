@@ -1,5 +1,7 @@
 import type { CarrierOffersResult } from "@oco/core/carrier-adapter/types";
 
+import type { PreselectResult } from "./preselect-offer";
+
 export type OfferDto = {
   offerId: string;
   expiresAt: string;
@@ -71,6 +73,16 @@ export type OffersResponse = {
    * the sentence is the UI layer's, the same split as freeCancelBoundary.
    */
   adaptersWithoutOffers: OfferAdapterWithoutOffersDto[];
+  /**
+   * Which card arrives already selected, and why — or that none does.
+   *
+   * RIDES ON THIS RESPONSE RATHER THAN A SECOND FETCH, deliberately. Fetched
+   * separately, the list would render unselected and the selection would jump
+   * under the seller's cursor a moment later. Arriving together, it is simply
+   * there. Structure, not prose: the sentence is the UI layer's, same split as
+   * `adaptersWithoutOffers`.
+   */
+  preselect: PreselectResult;
 };
 
 export type ResolveOfferServiceTitle = (
@@ -100,6 +112,10 @@ export type ResolveOfferFreeCancelBoundary = (
  * the fan-out's per-adapter statuses and forgets to pass them would silently
  * ship the old silence, which is the defect. Branches with nothing to report
  * pass an empty array and say so.
+ *
+ * `preselect` is REQUIRED for the same reason. A default of «nothing
+ * preselected» would let a branch that forgot it look exactly like a branch
+ * where the seller has no rule, and the difference would never surface.
  */
 export function toOffersResponse(
   result: CarrierOffersResult,
@@ -108,6 +124,7 @@ export function toOffersResponse(
   resolveCarrierName: ResolveOfferCarrierName,
   resolveFreeCancelBoundary: ResolveOfferFreeCancelBoundary,
   adaptersWithoutOffers: readonly OfferAdapterWithoutOffersDto[],
+  preselect: PreselectResult,
 ): OffersResponse {
   // Named explicitly, like every other field here — never a spread of the
   // fan-out entry, which carries the adapter key.
@@ -123,6 +140,7 @@ export function toOffersResponse(
       status: "no_delivery_options",
       offers: [],
       adaptersWithoutOffers: withoutOffers,
+      preselect,
     };
   }
 
@@ -147,5 +165,6 @@ export function toOffersResponse(
       freeCancelBoundary: resolveFreeCancelBoundary(offer.adapterKey),
     })),
     adaptersWithoutOffers: withoutOffers,
+    preselect,
   };
 }

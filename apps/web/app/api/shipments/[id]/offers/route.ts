@@ -16,6 +16,7 @@ import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { listConnectedCarriers } from "@/lib/shipments/list-connected-carriers";
 import { decideOffersOutcome } from "@/lib/shipments/decide-offers-outcome";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
+import { preselectOffer } from "@/lib/shipments/preselect-offer";
 
 function resolveOfferServiceTitle(adapterKey: string | undefined): string {
   return resolveOrderAdapter(adapterKey).title;
@@ -178,6 +179,11 @@ export const POST = withAuth<{ id: string }>(
           senderCity: true,
           senderAddress: true,
           senderPhone: true,
+          // Read here rather than in a second query further down: this one
+          // already guards the missing-company case, so the preselection cannot
+          // silently report «no priority» for a company that simply was not
+          // found by a redundant round-trip.
+          defaultOfferPriority: true,
         },
       });
 
@@ -271,6 +277,14 @@ export const POST = withAuth<{ id: string }>(
           where: { id: row.id },
           data: { quotedOffers },
         });
+        // WHICH CARD ARRIVES SELECTED. Computed here, on the same list the
+        // seller is about to see, so it cannot disagree with the badges — and
+        // returned on THIS response, because a separate fetch would render the
+        // list unselected and move the selection a moment later.
+        const preselect = preselectOffer(
+          taggedOffers,
+          company.defaultOfferPriority,
+        );
         return NextResponse.json(
           toOffersResponse(
             { ok: true, offers: taggedOffers },
@@ -279,6 +293,7 @@ export const POST = withAuth<{ id: string }>(
             resolveOfferCarrierName,
             resolveOfferFreeCancelBoundary,
             adaptersWithoutOffers,
+            preselect,
           ),
         );
       }
@@ -301,6 +316,11 @@ export const POST = withAuth<{ id: string }>(
             // beside an empty list would be noise, and this slice deliberately
             // changes only the mixed branch.
             [],
+            // The same function on an empty list, with the real priority: it
+            // already distinguishes «no priority set» from «a priority that had
+            // nothing to apply to». Hardcoding either would assert something
+            // this branch does not know.
+            preselectOffer([], company.defaultOfferPriority),
           ),
         );
       }
