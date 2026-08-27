@@ -139,6 +139,9 @@ confidence. A short fixed manual check list is cheaper and more honest.
   MUST be `npx prisma migrate status --schema packages/db/prisma/schema.prisma`; a bare invocation
   always fails for the wrong reason. `npm run db:migrate` is `migrate dev`, which WRITES — never use
   it as a check.
+- **`git ls-files --error-unmatch` cannot answer whether a file is in main.** It reports a merely
+  STAGED file as tracked, so a file staged but never committed passes the check and reads as
+  committed. The test that answers is `git cat-file -e HEAD:<path>`.
 - **Test runner shape:** `test:unit` = `node --import tsx --test tests/*.test.mjs` — **top level of
   `tests/` only, not recursive.** `tests/db/*.db.test.mjs` is the separate `test:db` suite. A test
   file dropped anywhere else silently never runs.
