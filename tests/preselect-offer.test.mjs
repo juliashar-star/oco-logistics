@@ -26,10 +26,12 @@ test("no priority -> nothing preselected, nothing to say", () => {
   assert.deepEqual(preselectOffer(offers, null), {
     offerId: null,
     reason: "no_rule",
+    priority: null,
   });
   assert.deepEqual(preselectOffer(offers, undefined), {
     offerId: null,
     reason: "no_rule",
+    priority: null,
   });
 });
 
@@ -58,10 +60,12 @@ test("empty list with a priority -> not_applicable, because there is nothing to 
   assert.deepEqual(preselectOffer([], "CHEAPEST"), {
     offerId: null,
     reason: "not_applicable",
+    priority: "CHEAPEST",
   });
   assert.deepEqual(preselectOffer([], "FASTEST"), {
     offerId: null,
     reason: "not_applicable",
+    priority: "FASTEST",
   });
 });
 
@@ -75,10 +79,12 @@ test("one offer -> preselected, and reported as single rather than as a rule", (
   assert.deepEqual(preselectOffer(one, "CHEAPEST"), {
     offerId: "only",
     reason: "single",
+    priority: "CHEAPEST",
   });
   assert.deepEqual(preselectOffer(one, "FASTEST"), {
     offerId: "only",
     reason: "single",
+    priority: "FASTEST",
   });
 });
 
@@ -93,6 +99,7 @@ test("CHEAPEST with one minimum -> that offer", () => {
   assert.deepEqual(preselectOffer(offers, "CHEAPEST"), {
     offerId: "cheap",
     reason: "rule",
+    priority: "CHEAPEST",
   });
 });
 
@@ -105,6 +112,7 @@ test("CHEAPEST with two at the same minimum -> nothing, reported as a tie", () =
   assert.deepEqual(preselectOffer(offers, "CHEAPEST"), {
     offerId: null,
     reason: "tie",
+    priority: "CHEAPEST",
   });
 });
 
@@ -118,6 +126,7 @@ test("FASTEST with one earliest deadline -> that offer", () => {
   assert.deepEqual(preselectOffer(offers, "FASTEST"), {
     offerId: "quick",
     reason: "rule",
+    priority: "FASTEST",
   });
 });
 
@@ -130,6 +139,7 @@ test("FASTEST with two sharing the earliest deadline -> nothing, reported as a t
   assert.deepEqual(preselectOffer(offers, "FASTEST"), {
     offerId: null,
     reason: "tie",
+    priority: "FASTEST",
   });
 });
 
@@ -151,6 +161,7 @@ test("an offer with a non-finite price never wins CHEAPEST", () => {
   assert.deepEqual(preselectOffer(offers, "CHEAPEST"), {
     offerId: "real",
     reason: "rule",
+    priority: "CHEAPEST",
   });
 });
 
@@ -161,6 +172,7 @@ test("FASTEST with no usable deadline anywhere -> not_applicable, not a tie", ()
   assert.deepEqual(preselectOffer(offers, "FASTEST"), {
     offerId: null,
     reason: "not_applicable",
+    priority: "FASTEST",
   });
 });
 
@@ -172,6 +184,7 @@ test("CHEAPEST with every price non-finite -> not_applicable, not a tie", () => 
   assert.deepEqual(preselectOffer(offers, "CHEAPEST"), {
     offerId: null,
     reason: "not_applicable",
+    priority: "CHEAPEST",
   });
 });
 
@@ -272,6 +285,7 @@ test("a missing day field is read as absent, the same way the DTO writes it", ()
   assert.deepEqual(preselectOffer(withUndefined, "FASTEST"), {
     offerId: "a",
     reason: "rule",
+    priority: "FASTEST",
   });
 });
 
@@ -292,7 +306,7 @@ test("FASTEST on rows carrying ONLY deliveryDayFrom agrees with what the screen 
   const result = preselectOffer(offers, "FASTEST");
   assert.deepEqual(
     result,
-    { offerId: "early", reason: "rule" },
+    { offerId: "early", reason: "rule", priority: "FASTEST" },
     "the early-edge fallback must produce a usable deadline",
   );
 
@@ -318,5 +332,6 @@ test("a blank deliveryDayTo beside a set deliveryDayFrom is not «no deadline»"
   assert.deepEqual(preselectOffer(offers, "FASTEST"), {
     offerId: "a",
     reason: "rule",
+    priority: "FASTEST",
   });
 });

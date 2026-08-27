@@ -16,7 +16,50 @@ import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { listConnectedCarriers } from "@/lib/shipments/list-connected-carriers";
 import { decideOffersOutcome } from "@/lib/shipments/decide-offers-outcome";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
-import { preselectOffer } from "@/lib/shipments/preselect-offer";
+import {
+  preselectOffer,
+  type OfferPriority,
+  type PreselectOfferInput,
+  type PreselectResult,
+} from "@/lib/shipments/preselect-offer";
+
+/** Grep anchor: the preselection failed and the list was served without one. */
+const PRESELECT_FAILED_LOG_MARKER = "[shipments/offers] preselect failed";
+
+/**
+ * The preselection, isolated from the response it decorates.
+ *
+ * WHY THE POSITION MATTERS, not just what it is. This runs INSIDE the try whose
+ * catch answers «Не удалось получить тарифы» — and by the time it runs the
+ * offers have already been fetched from the carriers and `quotedOffers` has
+ * already been written to the shipment. An unguarded throw here would therefore
+ * discard work that had entirely succeeded and hand the seller a 500 for a
+ * decoration: which card starts out highlighted. A cosmetic feature must not be
+ * able to take down the screen it decorates.
+ *
+ * THE FALLBACK IS «NO PRESELECTION», which is not a special degraded mode — it
+ * is exactly what every company without a stored priority already sees, and the
+ * list renders identically. `not_applicable` rather than `no_rule` because a
+ * throw can only happen once a priority IS set (a null priority returns on the
+ * first line of preselectOffer), and `no_rule` would assert the seller had
+ * chosen nothing. Both are silent, so the seller sees no difference; the
+ * distinction is for whoever reads the response next.
+ *
+ * The failure is LOGGED, never swallowed — a fallback nobody can see is how a
+ * broken rule survives a release. The offer list is deliberately not logged: it
+ * carries no PII, but the input to this call is built from a shipment that does.
+ */
+function preselectOrNothing(
+  offers: readonly PreselectOfferInput[],
+  priority: OfferPriority | null,
+): PreselectResult {
+  try {
+    return preselectOffer(offers, priority);
+  } catch (error) {
+    console.error(PRESELECT_FAILED_LOG_MARKER, error);
+    return { offerId: null, reason: "not_applicable", priority };
+  }
+}
 
 function resolveOfferServiceTitle(adapterKey: string | undefined): string {
   return resolveOrderAdapter(adapterKey).title;
@@ -281,7 +324,7 @@ export const POST = withAuth<{ id: string }>(
         // seller is about to see, so it cannot disagree with the badges — and
         // returned on THIS response, because a separate fetch would render the
         // list unselected and move the selection a moment later.
-        const preselect = preselectOffer(
+        const preselect = preselectOrNothing(
           taggedOffers,
           company.defaultOfferPriority,
         );
@@ -320,7 +363,7 @@ export const POST = withAuth<{ id: string }>(
             // already distinguishes «no priority set» from «a priority that had
             // nothing to apply to». Hardcoding either would assert something
             // this branch does not know.
-            preselectOffer([], company.defaultOfferPriority),
+            preselectOrNothing([], company.defaultOfferPriority),
           ),
         );
       }

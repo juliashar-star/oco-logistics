@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { normalizeRuPhone } from "@/lib/phone/ru-phone";
+import type { OfferPriority } from "@/lib/shipments/preselect-offer";
+import {
+  OFFER_PRIORITY_CHEAPEST_RU,
+  OFFER_PRIORITY_FASTEST_RU,
+  OFFER_PRIORITY_HINT_RU,
+  OFFER_PRIORITY_LEGEND_RU,
+  OFFER_PRIORITY_NONE_RU,
+} from "@/lib/shipments/preselect-notice";
 
 export function CompanySettingsForm() {
   const [name, setName] = useState("");
@@ -14,6 +22,9 @@ export function CompanySettingsForm() {
   const [addressDisplayValue, setAddressDisplayValue] = useState("");
   const [senderPhone, setSenderPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
+  // null IS a state, not «not loaded yet»: it is «Ничего не подставлять», the
+  // NULL column, and the option the seller sees selected until they choose.
+  const [offerPriority, setOfferPriority] = useState<OfferPriority | null>(null);
   const [configured, setConfigured] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -40,6 +51,12 @@ export function CompanySettingsForm() {
       setSenderCity(data.senderCity ?? "");
       setSenderAddress(data.senderAddress ?? "");
       setSenderPhone(data.senderPhone ?? "");
+      setOfferPriority(
+        data.defaultOfferPriority === "CHEAPEST" ||
+          data.defaultOfferPriority === "FASTEST"
+          ? data.defaultOfferPriority
+          : null,
+      );
       setConfigured(Boolean(data.senderConfigured));
     } catch {
       setError("Не удалось загрузить профиль компании");
@@ -76,6 +93,7 @@ export function CompanySettingsForm() {
           senderCity: senderCity.trim(),
           senderAddress: senderAddress.trim(),
           senderPhone: normalizedPhone,
+          defaultOfferPriority: offerPriority,
         }),
       });
       const data = await response.json();
@@ -85,7 +103,7 @@ export function CompanySettingsForm() {
       }
       setSenderPhone(data.senderPhone ?? normalizedPhone);
       setConfigured(true);
-      setMessage("Адрес отправителя сохранён");
+      setMessage("Настройки сохранены");
     } catch {
       setError("Не удалось сохранить профиль");
     } finally {
@@ -180,6 +198,39 @@ export function CompanySettingsForm() {
         )}
       </div>
 
+      {/* THREE STATES, and the first is the current behaviour. «Ничего не
+          подставлять» is the NULL column, not a third enum value — see
+          parse-offer-priority. The strings live in preselect-notice so they
+          are testable; a rule nothing can exercise is a rule nobody watches. */}
+      <fieldset>
+        <legend className="mb-1 block text-sm font-medium text-slate-700">
+          {OFFER_PRIORITY_LEGEND_RU}
+        </legend>
+        <div className="space-y-2">
+          {(
+            [
+              [null, OFFER_PRIORITY_NONE_RU],
+              ["CHEAPEST", OFFER_PRIORITY_CHEAPEST_RU],
+              ["FASTEST", OFFER_PRIORITY_FASTEST_RU],
+            ] as const
+          ).map(([value, label]) => (
+            <label
+              key={label}
+              className="flex items-center gap-2 text-sm text-slate-700"
+            >
+              <input
+                type="radio"
+                name="default-offer-priority"
+                checked={offerPriority === value}
+                onChange={() => setOfferPriority(value)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">{OFFER_PRIORITY_HINT_RU}</p>
+      </fieldset>
+
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           {error}{" "}
@@ -204,7 +255,11 @@ export function CompanySettingsForm() {
         disabled={loading}
         className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
       >
-        {loading ? "Сохранение..." : "Сохранить адрес отправителя"}
+        {/* ONE button for the whole card, and the label must say so: this now
+            saves the sender city, address, phone AND the default priority in a
+            single request. A button per field would let a seller change two
+            things and save one. */}
+        {loading ? "Сохранение..." : "Сохранить настройки"}
       </button>
     </form>
   );

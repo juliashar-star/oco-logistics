@@ -42,6 +42,14 @@ export type PreselectReason =
 export type PreselectResult = {
   offerId: string | null;
   reason: PreselectReason;
+  /**
+   * WHICH CRITERION WAS APPLIED, carried so the result is self-describing.
+   * The wording of the line beside the list depends on it — «стоят одинаково»
+   * versus «приезжают одинаково быстро» — and the browser has no other way to
+   * learn the company's setting on this screen. Structure, not prose: the
+   * sentence is still the UI layer's (preselect-notice).
+   */
+  priority: OfferPriority | null;
 };
 
 /**
@@ -114,15 +122,15 @@ export function preselectOffer(
   priority: OfferPriority | null | undefined,
 ): PreselectResult {
   if (priority == null) {
-    return { offerId: null, reason: "no_rule" };
+    return { offerId: null, reason: "no_rule", priority: null };
   }
   // A priority is set and there is no list to apply it to — the criterion has
   // nothing to measure, which is `not_applicable`, not «no priority».
   if (offers.length === 0) {
-    return { offerId: null, reason: "not_applicable" };
+    return { offerId: null, reason: "not_applicable", priority };
   }
   if (offers.length === 1) {
-    return { offerId: offers[0]!.offerId, reason: "single" };
+    return { offerId: offers[0]!.offerId, reason: "single", priority };
   }
 
   const wanted = priority === "CHEAPEST" ? "cheaper" : "faster";
@@ -132,13 +140,13 @@ export function preselectOffer(
   );
 
   if (winners.length === 1) {
-    return { offerId: winners[0]!.offerId, reason: "rule" };
+    return { offerId: winners[0]!.offerId, reason: "rule", priority };
   }
   if (winners.length > 1) {
-    return { offerId: null, reason: "tie" };
+    return { offerId: null, reason: "tie", priority };
   }
   // No winner at all: nothing in this list carries the thing the criterion
   // measures — no usable price under CHEAPEST, no usable deadline under
   // FASTEST. Not a tie, and not «no priority set».
-  return { offerId: null, reason: "not_applicable" };
+  return { offerId: null, reason: "not_applicable", priority };
 }

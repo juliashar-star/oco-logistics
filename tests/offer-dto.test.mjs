@@ -84,7 +84,7 @@ function fakeResolveFreeCancelBoundary(adapterKey) {
  * The route builds it by calling preselectOffer with the real priority, so this
  * default describes production rather than a value chosen to make a pin pass.
  */
-const NO_PRESELECT = { offerId: null, reason: "no_rule" };
+const NO_PRESELECT = { offerId: null, reason: "no_rule", priority: null };
 
 function mapOffers(result, adaptersWithoutOffers = [], preselect = NO_PRESELECT) {
   return toOffersResponse(
@@ -138,7 +138,7 @@ test("no_delivery_options -> ok true, status no_delivery_options, empty offers",
     status: "no_delivery_options",
     offers: [],
     adaptersWithoutOffers: [],
-    preselect: { offerId: null, reason: "no_rule" },
+    preselect: { offerId: null, reason: "no_rule", priority: null },
   });
 });
 
@@ -149,7 +149,7 @@ test("ok with empty offers -> ok true, status ok, empty offers", () => {
     status: "ok",
     offers: [],
     adaptersWithoutOffers: [],
-    preselect: { offerId: null, reason: "no_rule" },
+    preselect: { offerId: null, reason: "no_rule", priority: null },
   });
 });
 
@@ -157,8 +157,20 @@ test("preselect is carried through verbatim, not recomputed by the mapper", () =
   const response = mapOffers({ ok: true, offers: [] }, [], {
     offerId: "o-1",
     reason: "rule",
+    priority: "CHEAPEST",
   });
-  assert.deepEqual(response.preselect, { offerId: "o-1", reason: "rule" });
+  assert.deepEqual(response.preselect, {
+    offerId: "o-1",
+    reason: "rule",
+    priority: "CHEAPEST",
+  });
+  // THE INNER SHAPE IS PINNED TOO, not just the presence of the key: priority
+  // was added after the envelope key existed, so the envelope pin did not fire.
+  assert.deepEqual(Object.keys(response.preselect), [
+    "offerId",
+    "reason",
+    "priority",
+  ]);
 });
 
 // ── adaptersWithoutOffers: three fields, and neither key ───────────────────

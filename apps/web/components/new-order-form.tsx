@@ -53,6 +53,11 @@ import {
   OFFER_HIGHLIGHT_LABELS,
   offerHighlights,
 } from "@/lib/shipments/offer-highlights";
+import {
+  preselectLineFor,
+  resolvePreselect,
+  type ResolvedPreselect,
+} from "@/lib/shipments/preselect-notice";
 import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offer-lacks-thermal-bag";
 import type { CarrierConfirmWarning } from "@oco/core/carrier-adapter/types";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
@@ -248,6 +253,21 @@ export function NewOrderForm() {
     [yandexOffers],
   );
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  /**
+   * What the rule produced for THIS list, after the membership check. Kept as
+   * state rather than a derived line, because the line depends on the current
+   * selection and must follow it — see preselectLineFor.
+   */
+  const [preselect, setPreselect] = useState<ResolvedPreselect | null>(null);
+  /**
+   * Recomputed on every selection change, deliberately. Stored as a string it
+   * would go stale the moment the seller clicked another card, and «Подставлен
+   * самый дешёвый» would stand over a card they chose themselves.
+   */
+  const preselectLine = useMemo(
+    () => preselectLineFor(preselect, selectedOfferId),
+    [preselect, selectedOfferId],
+  );
   const [draftShipmentId, setDraftShipmentId] = useState<string | null>(null);
   const [noDeliveryToPoint, setNoDeliveryToPoint] = useState(false);
   const [submittingPvz, setSubmittingPvz] = useState(false);
@@ -703,7 +723,30 @@ export function NewOrderForm() {
           : [],
       );
       setYandexOffers(nextOffers);
-      setSelectedOfferId(null);
+      // PRESELECTION, NOT SELECTION. The server says which card the seller's
+      // default points at; they remain free to click another, and doing so
+      // writes nothing anywhere — the departure is this order only.
+      //
+      // The membership check lives in resolvePreselect and happens ONCE. The
+      // selection and the explaining line both read the resolved value, so they
+      // cannot disagree about whether a card was preselected.
+      const raw =
+        offersData.preselect !== null && typeof offersData.preselect === "object"
+          ? offersData.preselect
+          : null;
+      const resolved =
+        raw && typeof raw.reason === "string"
+          ? resolvePreselect(
+              {
+                offerId: typeof raw.offerId === "string" ? raw.offerId : null,
+                reason: raw.reason,
+                priority: raw.priority ?? null,
+              },
+              nextOffers.map((offer) => offer.offerId),
+            )
+          : null;
+      setPreselect(resolved);
+      setSelectedOfferId(resolved?.offerId ?? null);
       calculationSnapshot.current = snapshotFromForm();
 
       if (nextOffers.length === 0) {
@@ -1384,6 +1427,13 @@ export function NewOrderForm() {
               role="status"
             >
               {adaptersWithoutOffersNotice}
+            </p>
+          )}
+          {/* Says WHY a card is already selected, or why none is. Silent for
+              no_rule, single and not_applicable — see preselect-notice. */}
+          {preselectLine && (
+            <p className="mt-2 text-sm text-slate-600" role="status">
+              {preselectLine}
             </p>
           )}
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
