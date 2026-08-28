@@ -57,24 +57,55 @@ test("every adapter refused our credentials → auth failed", () => {
   assert.equal(decide(["auth_failed", "auth_failed"]), "auth_failed");
 });
 
-test("a filtered adapter beside an auth failure is still a server error", () => {
-  // We cannot say «нет вариантов»: one carrier never answered, so whether the
-  // seller has options is unknown. Same reasoning as any other mixed fault.
-  assert.equal(decide(["parcel_too_large", "auth_failed"]), "server_error");
+test("a filtered adapter beside an auth failure is a carrier problem, not ours", () => {
+  // Reversed 28.08. We still cannot say «нет вариантов» — one carrier never
+  // answered — and this outcome does not: it hands the browser both statuses,
+  // which are then named separately. What changed is that we no longer answer
+  // «попробуйте позже» either, which asserted a cause we had not established.
+  assert.equal(
+    decide(["parcel_too_large", "auth_failed"]),
+    "carriers_unreachable",
+  );
 });
 
-test("MIXED FAULTS ARE UNCHANGED: nothing-to-sell beside a fault stays a server error", () => {
-  // Pinned deliberately. This is today's behaviour and this slice does not
-  // touch it — a carrier that did not answer means we do not know.
-  assert.equal(decide(["no_delivery_options", "auth_failed"]), "server_error");
-  assert.equal(decide(["no_delivery_options", "timed_out"]), "server_error");
-  assert.equal(decide(["no_delivery_options", "failed"]), "server_error");
-  assert.equal(decide(["auth_failed", "timed_out"]), "server_error");
+test("MIXED FAULTS ARE REPORTED AS MIXED, not collapsed into our own error", () => {
+  // Reversed 28.08. The old reasoning was half right: aggregating a mixed set
+  // into «нет вариантов» IS a claim we cannot back. But `server_error` was not
+  // silence — it claimed «попробуйте позже», the same words a bug in our code
+  // produces. This outcome aggregates nothing and names each carrier instead.
+  assert.equal(
+    decide(["no_delivery_options", "auth_failed"]),
+    "carriers_unreachable",
+  );
+  assert.equal(
+    decide(["no_delivery_options", "timed_out"]),
+    "carriers_unreachable",
+  );
+  assert.equal(
+    decide(["no_delivery_options", "failed"]),
+    "carriers_unreachable",
+  );
+  assert.equal(decide(["auth_failed", "timed_out"]), "carriers_unreachable");
 });
 
-test("everything broke, or nothing was asked → server error", () => {
-  assert.equal(decide(["failed"]), "server_error");
-  assert.equal(decide(["timed_out"]), "server_error");
+// ── the weld that this slice undoes ────────────────────────────────────────
+// Until 28.08 one test asserted that «everything broke» and «nothing was asked»
+// both mean server_error. They are opposite causes — one is the carriers, one is
+// us — and holding them under a single name is what let the seller be told our
+// generic retry sentence for a carrier outage. Two tests now, so the split is
+// visible in the names.
+
+test("EVERY CARRIER DOWN is the carriers' problem, and the seller is told which", () => {
+  assert.equal(decide(["failed"]), "carriers_unreachable");
+  assert.equal(decide(["timed_out"]), "carriers_unreachable");
+  assert.equal(decide(["failed", "timed_out"]), "carriers_unreachable");
+  assert.equal(decide(["failed", "failed"]), "carriers_unreachable");
+});
+
+test("NOTHING WAS ASKED is OUR problem, and stays a server error", () => {
+  // An empty status list means the fan-out returned no entries at all. No
+  // carrier can be named because none was reached, and «попробуйте позже» is
+  // honest here: the next attempt runs our code again.
   assert.equal(decide([]), "server_error");
 });
 
@@ -86,4 +117,13 @@ test("an unknown future status never collapses to a statement", () => {
     decide(["no_delivery_options", "some_future_status"]),
     "server_error",
   );
+});
+
+test("an unknown status is not swept into «the carriers are down» either", () => {
+  // The new outcome is an ALLOW-LIST, not `!== "ok"`. A sixth status beside a
+  // known carrier-side one must still surface as ours, or the parcel_too_large
+  // trap reopens one door down: a status nothing understands would be reported
+  // to the seller as a carrier outage.
+  assert.equal(decide(["failed", "some_future_status"]), "server_error");
+  assert.equal(decide(["timed_out", "some_future_status"]), "server_error");
 });

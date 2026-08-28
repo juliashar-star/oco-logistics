@@ -34,6 +34,7 @@ import {
   pickupPointFilterStatusLine,
   visiblePickupPointOptions,
 } from "@/lib/shipments/visible-pickup-point-options";
+import { describeCarriersUnreachable } from "@/lib/shipments/describe-carriers-unreachable";
 import { offerCardHeading } from "@/lib/shipments/offer-card-heading";
 import type {
   CarrierDto,
@@ -710,6 +711,32 @@ export function NewOrderForm() {
         setOfferAdaptersWithoutOffers([]);
         setSelectedOfferId(null);
         calculationSnapshot.current = snapshotFromForm();
+        return;
+      }
+
+      // THE CARRIERS DID NOT ANSWER — and `noDeliveryToPoint` must stay FALSE
+      // here, which is the whole difference from the branch above. Its text
+      // tells the seller there is no delivery to this point; after a run where
+      // a carrier was silent, we do not know that, and saying it would be the
+      // one claim this outcome exists to avoid. The adapter list carries the
+      // real message, named carrier by carrier.
+      if (offersData.status === "carriers_unreachable") {
+        setNoDeliveryToPoint(false);
+        setYandexOffers([]);
+        setSelectedOfferId(null);
+        setPreselect(null);
+        setOfferAdaptersWithoutOffers(
+          Array.isArray(offersData.adaptersWithoutOffers)
+            ? offersData.adaptersWithoutOffers
+            : [],
+        );
+        setError(
+          describeCarriersUnreachable(offersData.adaptersWithoutOffers) ??
+            "Тарифы не пришли. Попробуйте рассчитать ещё раз.",
+        );
+        // Snapshot NOT taken: nothing was learned about this form's parameters,
+        // so the next press must re-run rather than be treated as a repeat of a
+        // calculation that never happened.
         return;
       }
 

@@ -292,27 +292,32 @@ export const POST = withAuth<{ id: string }>(
         statuses: adapters.map((entry) => entry.status),
       });
 
-      if (outcome === "offers") {
-        // WHICH ADAPTERS CONTRIBUTED NOTHING TO THE LIST THE SELLER IS ABOUT TO
-        // SEE. Computed against the offers, not from the status alone: an
-        // adapter can answer `ok` with an empty list (Yandex documents it), and
-        // same-provider dedupe can remove everything it did send. The status
-        // still rides along so the UI can say WHY where it knows.
-        // Only the two seller-facing strings cross — never `entry.key`, which is
-        // the registry key, and never providerKey behind it.
-        const adapterKeysWithOffers = new Set(
-          taggedOffers
-            .map((offer) => offer.adapterKey)
-            .filter((key): key is string => typeof key === "string"),
-        );
-        const adaptersWithoutOffers = adapters
-          .filter((entry) => !adapterKeysWithOffers.has(entry.key))
-          .map((entry) => ({
-            carrierName: resolveOfferCarrierName(entry.key),
-            serviceTitle: resolveOfferServiceTitle(entry.key),
-            status: entry.status,
-          }));
+      // WHICH ADAPTERS CONTRIBUTED NOTHING TO THE LIST THE SELLER IS ABOUT TO
+      // SEE. Computed against the offers, not from the status alone: an
+      // adapter can answer `ok` with an empty list (Yandex documents it), and
+      // same-provider dedupe can remove everything it did send. The status
+      // still rides along so the UI can say WHY where it knows.
+      // Only the two seller-facing strings cross — never `entry.key`, which is
+      // the registry key, and never providerKey behind it.
+      //
+      // HOISTED OUT OF THE `offers` BRANCH ON 28.08. It used to be computed
+      // there alone, so a carrier was named only when some OTHER adapter had
+      // succeeded — the worse the run, the less the seller was told. The
+      // all-unreachable case needs exactly this list.
+      const adapterKeysWithOffers = new Set(
+        taggedOffers
+          .map((offer) => offer.adapterKey)
+          .filter((key): key is string => typeof key === "string"),
+      );
+      const adaptersWithoutOffers = adapters
+        .filter((entry) => !adapterKeysWithOffers.has(entry.key))
+        .map((entry) => ({
+          carrierName: resolveOfferCarrierName(entry.key),
+          serviceTitle: resolveOfferServiceTitle(entry.key),
+          status: entry.status,
+        }));
 
+      if (outcome === "offers") {
         // CarrierOffer.rawOffer is `unknown`; Prisma.InputJsonValue rejects it
         // without a cast. Same pattern as persist-tariff-quotes (as InputJsonValue).
         const quotedOffers = taggedOffers as unknown as Prisma.InputJsonValue;
@@ -364,6 +369,34 @@ export const POST = withAuth<{ id: string }>(
             // nothing to apply to». Hardcoding either would assert something
             // this branch does not know.
             preselectOrNothing([], company.defaultOfferPriority),
+          ),
+        );
+      }
+
+      if (outcome === "carriers_unreachable") {
+        // HTTP 200 WITH A DISCRIMINATOR, like no_delivery_options. This is a
+        // true answer about the world — the carriers did not answer — not a
+        // failure of this request, and a 5xx would be read by the form's error
+        // branch, which returns before it looks at `adaptersWithoutOffers`. The
+        // per-carrier statuses ARE the message here, so they must survive.
+        //
+        // The draft's quotedOffers are deliberately NOT overwritten: this run
+        // learned nothing about what the carriers can carry, and blanking a
+        // previous successful quote would destroy an answer we still have.
+        console.error("[shipments/offers] carriers unreachable", adapters);
+        return NextResponse.json(
+          toOffersResponse(
+            { ok: false, reason: "no_delivery_options" },
+            resolveOfferServiceTitle,
+            resolveOfferSupportsThermalBag,
+            resolveOfferCarrierName,
+            resolveOfferFreeCancelBoundary,
+            // NOT empty, unlike the branch above: there the seller is told the
+            // whole story by one sentence, here the story IS which carrier said
+            // what, and a mixed set can hold two different answers at once.
+            adaptersWithoutOffers,
+            preselectOrNothing([], company.defaultOfferPriority),
+            "carriers_unreachable",
           ),
         );
       }

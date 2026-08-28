@@ -64,9 +64,21 @@ export type OfferAdapterWithoutOffersDto = {
   status: string;
 };
 
+/**
+ * WHY A DISCRIMINATOR AND NOT AN HTTP CODE. Every one of these is a real answer
+ * about the world, so all three ship as HTTP 200 and the browser reads this
+ * field. `carriers_unreachable` in particular must not be a 5xx: the form's
+ * error branch returns before it reads `adaptersWithoutOffers`, so a non-2xx
+ * would throw away the per-carrier statuses that are the whole point of it.
+ */
+export type OffersResponseStatus =
+  | "ok"
+  | "no_delivery_options"
+  | "carriers_unreachable";
+
 export type OffersResponse = {
   ok: true;
-  status: "ok" | "no_delivery_options";
+  status: OffersResponseStatus;
   offers: OfferDto[];
   /**
    * Adapters that were asked and returned nothing usable. Structure, not prose —
@@ -125,6 +137,7 @@ export function toOffersResponse(
   resolveFreeCancelBoundary: ResolveOfferFreeCancelBoundary,
   adaptersWithoutOffers: readonly OfferAdapterWithoutOffersDto[],
   preselect: PreselectResult,
+  emptyStatus: Exclude<OffersResponseStatus, "ok"> = "no_delivery_options",
 ): OffersResponse {
   // Named explicitly, like every other field here — never a spread of the
   // fan-out entry, which carries the adapter key.
@@ -137,7 +150,13 @@ export function toOffersResponse(
   if (!result.ok) {
     return {
       ok: true,
-      status: "no_delivery_options",
+      // THE CALLER NAMES THE EMPTY CASE, because `result.ok` cannot tell them
+      // apart: `CarrierOffersResult` has one failure reason, and «the carriers
+      // do not serve this route» and «the carriers did not answer» are the same
+      // shape to it while being opposite answers to the seller. Defaulted so
+      // the existing branch reads unchanged, and typed to exclude "ok" so no
+      // caller can label an empty list as a successful one.
+      status: emptyStatus,
       offers: [],
       adaptersWithoutOffers: withoutOffers,
       preselect,
