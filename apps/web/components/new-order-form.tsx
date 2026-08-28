@@ -34,7 +34,7 @@ import {
   pickupPointFilterStatusLine,
   visiblePickupPointOptions,
 } from "@/lib/shipments/visible-pickup-point-options";
-import { shouldShowOfferServiceTitle } from "@/lib/shipments/should-show-offer-service-title";
+import { offerCardHeading } from "@/lib/shipments/offer-card-heading";
 import type {
   CarrierDto,
   PickupPointDto,
@@ -793,7 +793,7 @@ export function NewOrderForm() {
     }
 
     if (!selectedKey || !quoteIds[selectedKey]) {
-      setError("Выберите вариант доставки в таблице");
+      setError("Выберите тариф в таблице");
       return;
     }
 
@@ -1417,7 +1417,7 @@ export function NewOrderForm() {
             }
             return (
               <p className="mt-2 text-sm text-slate-500">
-                Варианты действительны до {formatMoscowClockTime(sharedExpiry)}
+                Тарифы действительны до {formatMoscowClockTime(sharedExpiry)}
               </p>
             );
           })()}
@@ -1441,30 +1441,39 @@ export function NewOrderForm() {
               const isSelected = selectedOfferId === offer.offerId;
               const now = new Date();
               const pickupLine = formatOfferPickupLine(offer, now);
-              const service = offer.serviceName
-                ? offer.serviceName
-                : shouldShowOfferServiceTitle(yandexOffers)
-                  ? offer.serviceTitle
-                  : "";
-              const heading = service
-                ? `${offer.carrierName} · ${service}`
-                : offer.carrierName;
+              const heading = offerCardHeading(offer, yandexOffers);
               return (
                 <button
                   key={offer.offerId}
                   type="button"
                   onClick={() => setSelectedOfferId(offer.offerId)}
-                  className={`rounded-xl border px-4 py-3 text-left transition ${
+                  /* The 4px left edge is reserved in BOTH states and only
+                     coloured in one, so selecting a card cannot shift the grid
+                     — and the difference a seller sees is a bar that is there
+                     or absent, not two shades of the same thing. bg-primary-soft
+                     rather than bg-sky-50: it comes from the same --primary
+                     family as the border, so a theme change moves them together
+                     instead of leaving the card half in the brand. */
+                  className={`rounded-xl border border-l-4 px-4 py-3 text-left transition ${
                     isSelected
-                      ? "border-primary bg-sky-50 ring-2 ring-primary/30"
-                      : "border-slate-200 bg-white hover:bg-slate-50"
+                      ? "border-primary bg-primary-soft ring-2 ring-primary/30"
+                      : "border-l-transparent border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                 >
                   {heading ? (
                     <div className="text-xs text-slate-500">{heading}</div>
                   ) : null}
+                  {/* LABELLED, and paired with «Забор:» below. The two lines
+                      name the two ends of the journey, which is the only way a
+                      seller can tell them apart — the dates alone cannot say
+                      which is which. The bare noun and nothing more: what the
+                      window actually closes on is «не установлено» for all
+                      three families, and for a ПВЗ order the carrier may be
+                      quoting arrival at the point rather than to the recipient
+                      (docs/CARRIER_QUESTIONS.md Я-15, С-5). Size and weight
+                      unchanged — this stays the dominant line. */}
                   <div className="text-sm font-medium text-slate-900">
-                    {formatOfferDeliveryLine(offer, now)}
+                    Доставка: {formatOfferDeliveryLine(offer, now)}
                   </div>
                   {pickupLine ? (
                     <div className="mt-1 text-sm text-slate-600">
@@ -1610,7 +1619,7 @@ export function NewOrderForm() {
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-slate-900">
-              Варианты доставки
+              Тарифы доставки
               {meta && (
                 <span className="ml-2 text-sm font-normal text-slate-500">
                   {meta.fromCity}
