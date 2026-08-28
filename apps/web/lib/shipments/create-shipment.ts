@@ -100,7 +100,7 @@ export async function createShipment(input: CreateShipmentInput): Promise<Create
   });
 
   if (!selectedQuote) {
-    throw new Error("Выбранный вариант доставки не найден");
+    throw new Error("Выбранный тариф не найден");
   }
 
   const allQuoteIds = [...new Set([input.tariffQuoteId, ...input.tariffQuoteIds])];

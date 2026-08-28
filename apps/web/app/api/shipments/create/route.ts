@@ -63,7 +63,7 @@ export const POST = withAuth(async (request, user) => {
       body.deliveryTimeEnd != null ? String(body.deliveryTimeEnd).trim() || undefined : undefined;
 
     if (!tariffQuoteId) {
-      return NextResponse.json({ error: "Выберите вариант доставки" }, { status: 400 });
+      return NextResponse.json({ error: "Выберите тариф" }, { status: 400 });
     }
 
     if (!destCity) {
@@ -167,9 +167,9 @@ export const POST = withAuth(async (request, user) => {
 
     if (error instanceof Error) {
       const clientErrors = [
-        "Выбранный вариант доставки не найден",
-        "Не все варианты тарифов найдены",
-        "Вариант тарифа принадлежит другой компании",
+        "Выбранный тариф не найден",
+        "Не все тарифы найдены",
+        "Тариф принадлежит другой компании",
         STALE_TARIFF_QUOTES_ERROR,
         "Подтвердите правовое основание",
         "Укажите город отправления",

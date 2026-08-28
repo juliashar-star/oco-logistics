@@ -29,7 +29,7 @@ export type OfferPriority = "CHEAPEST" | "FASTEST";
  *
  * `tie` is NOT the answer for the empty-winner case either. A tie means several
  * offers are indistinguishable on the criterion; here there is nothing to tie,
- * and «несколько вариантов стоят одинаково» about a list where no offer has a
+ * and «у нескольких тарифов одинаковая цена» about a list where no offer has a
  * price would be false.
  */
 export type PreselectReason =

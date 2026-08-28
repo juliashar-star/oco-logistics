@@ -108,12 +108,12 @@ export async function linkTariffQuotesToShipment(
   });
 
   if (quotes.length !== uniqueIds.length) {
-    throw new Error("Не все варианты тарифов найдены");
+    throw new Error("Не все тарифы найдены");
   }
 
   for (const quote of quotes) {
     if (quote.companyId !== companyId) {
-      throw new Error("Вариант тарифа принадлежит другой компании");
+      throw new Error("Тариф принадлежит другой компании");
     }
     if (quote.shipmentId && quote.shipmentId !== shipmentId) {
       throw new Error(STALE_TARIFF_QUOTES_ERROR);

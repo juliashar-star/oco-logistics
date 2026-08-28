@@ -22,8 +22,8 @@ export function CompanySettingsForm() {
   const [addressDisplayValue, setAddressDisplayValue] = useState("");
   const [senderPhone, setSenderPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
-  // null IS a state, not «not loaded yet»: it is «Ничего не подставлять», the
-  // NULL column, and the option the seller sees selected until they choose.
+  // null IS a state, not «not loaded yet»: it is «Не выбирать — выберу сам»,
+  // the NULL column, and the option the seller sees selected until they choose.
   const [offerPriority, setOfferPriority] = useState<OfferPriority | null>(null);
   const [configured, setConfigured] = useState(false);
   const [message, setMessage] = useState("");
@@ -198,8 +198,8 @@ export function CompanySettingsForm() {
         )}
       </div>
 
-      {/* THREE STATES, and the first is the current behaviour. «Ничего не
-          подставлять» is the NULL column, not a third enum value — see
+      {/* THREE STATES, and the first is the current behaviour. «Не выбирать —
+          выберу сам» is the NULL column, not a third enum value — see
           parse-offer-priority. The strings live in preselect-notice so they
           are testable; a rule nothing can exercise is a rule nobody watches. */}
       <fieldset>

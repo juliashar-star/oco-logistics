@@ -91,7 +91,7 @@ export const POST = withAuth<{ id: string }>(
       body = await request.json();
     } catch {
       return NextResponse.json(
-        { error: "Выберите вариант доставки" },
+        { error: "Выберите тариф" },
         { status: 400 },
       );
     }
@@ -105,7 +105,7 @@ export const POST = withAuth<{ id: string }>(
         : "";
     if (!offerIdRaw) {
       return NextResponse.json(
-        { error: "Выберите вариант доставки" },
+        { error: "Выберите тариф" },
         { status: 400 },
       );
     }
@@ -283,7 +283,7 @@ export const POST = withAuth<{ id: string }>(
           return NextResponse.json(
             {
               error:
-                "Срок действия варианта истёк. Запросите тарифы заново.",
+                "Срок действия тарифа истёк. Запросите тарифы заново.",
             },
             { status: 409 },
           );

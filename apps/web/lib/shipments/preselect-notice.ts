@@ -1,10 +1,17 @@
 import type { OfferPriority, PreselectReason } from "./preselect-offer";
 
-/** The three states of the settings control. «Nothing» is the NULL column. */
-export const OFFER_PRIORITY_LEGEND_RU = "Что подставлять в новом заказе";
-export const OFFER_PRIORITY_NONE_RU = "Ничего не подставлять";
-export const OFFER_PRIORITY_CHEAPEST_RU = "Самый дешёвый вариант";
-export const OFFER_PRIORITY_FASTEST_RU = "Самый быстрый вариант";
+/**
+ * The three states of the settings control. «Nothing» is the NULL column.
+ *
+ * ONE WORD FOR ONE THING: «тариф». The screen used to carry «вариант», «оффер»
+ * and «тариф» for the same row, and a seller reading three words has to work out
+ * whether they name three things. The offers table already headed its column
+ * «Тариф», so that is the word the rest of the product moved to.
+ */
+export const OFFER_PRIORITY_LEGEND_RU = "Какой тариф выбирать автоматически";
+export const OFFER_PRIORITY_NONE_RU = "Не выбирать — выберу сам";
+export const OFFER_PRIORITY_CHEAPEST_RU = "Самый дешёвый";
+export const OFFER_PRIORITY_FASTEST_RU = "Самый быстрый";
 
 /**
  * Said under the control, because the setting is worth nothing to a seller who
@@ -12,16 +19,27 @@ export const OFFER_PRIORITY_FASTEST_RU = "Самый быстрый вариан
  * order, and the setting is untouched.
  */
 export const OFFER_PRIORITY_HINT_RU =
-  "Подставленный вариант можно заменить в любом заказе — настройка от этого не изменится.";
+  "Выбранный тариф можно заменить в любом заказе — настройка от этого не изменится.";
 
 /**
  * The line beside the offer list, or null when nothing is to be said.
  *
- * «ИЗ ПОКАЗАННЫХ» IS LOAD-BEARING, not filler. A pickup point narrows the list
- * to the carrier that owns it, so the set the rule chose from can be one
- * carrier's tariffs or a single option. «Самый дешёвый» on its own would be a
- * claim about the market; «самый дешёвый из показанных» is true of every list
- * the seller can actually see, however it was narrowed.
+ * IT NAMES THE REASON, because a selection a seller cannot explain is one they
+ * have to undo to trust. «Приоритет задан в настройках» tells them WHY this row
+ * is selected and where to change it, which is the difference between a helpful
+ * default and a screen that moved on its own.
+ *
+ * NO LINK TO SETTINGS, deliberately. The sender-address banner directly above
+ * already links to the same page, and two links to one destination on one screen
+ * read as two destinations.
+ *
+ * «ИЗ ПОКАЗАННЫХ» IS LOAD-BEARING, not filler, and the two rule sentences carry
+ * both it and the reason. A chosen pickup point narrows the list to the carrier
+ * that owns it, so the set the rule chose from can be one carrier's tariffs.
+ * Without the scoping phrase the line claims the cheapest tariff that EXISTS,
+ * which is more than we know; with it the sentence stays true however the list
+ * was narrowed. The tie sentences need no such phrase — «у нескольких тарифов»
+ * is already a claim about some tariffs rather than about all of them.
  *
  * THREE REASONS SAY NOTHING, each for its own reason. `no_rule`: the seller set
  * no priority, so there is nothing to explain. `single`: one offer, no
@@ -32,10 +50,11 @@ export const OFFER_PRIORITY_HINT_RU =
  * it were folded into `no_rule`, a sentence added here later for «no priority
  * set» would appear for a seller whose priority IS set.
  *
- * COUNT-NOUN AGREEMENT IS AVOIDED, not solved: «несколько вариантов стоят» is
- * correct for two and for fourteen, and no number stands before a noun. Present
- * tense throughout, so nothing agrees with a carrier's gender. No provider key,
- * no adapter key, no carrier name — the line is about the parcel and the list.
+ * COUNT-NOUN AGREEMENT IS AVOIDED, not solved: «у нескольких тарифов» puts the
+ * noun in the genitive plural, which is correct for two and for fourteen alike,
+ * and no number stands before it. Present tense throughout, so nothing agrees
+ * with a carrier's gender. No provider key, no adapter key, no carrier name —
+ * the line is about the parcel and the list.
  */
 export function preselectNotice(
   preselect: { reason: PreselectReason; priority: OfferPriority | null },
@@ -46,16 +65,16 @@ export function preselectNotice(
   }
   if (reason === "rule") {
     return priority === "CHEAPEST"
-      ? "Подставлен самый дешёвый из показанных."
-      : "Подставлен самый быстрый из показанных.";
+      ? "Выбран самый дешёвый из показанных тарифов — приоритет задан в настройках."
+      : "Выбран самый быстрый из показанных тарифов — приоритет задан в настройках.";
   }
   if (reason === "tie") {
-    // «Показанных» on these two as well: all four sentences are claims about
-    // the list on screen, which a chosen pickup point may have narrowed to one
-    // carrier. Without it the line would read as a claim about the market.
+    // NAMES WHAT TIED, not just that something did. A seller told «несколько
+    // тарифов одинаковы» learns nothing they can act on; told the PRICE is the
+    // same, they know to decide on the deadline instead, and the reverse.
     return priority === "CHEAPEST"
-      ? "Несколько показанных вариантов стоят одинаково — выберите сами."
-      : "Несколько показанных вариантов приезжают одинаково быстро — выберите сами.";
+      ? "У нескольких тарифов одинаковая цена — выберите подходящий."
+      : "У нескольких тарифов одинаковый срок — выберите подходящий.";
   }
   return null;
 }

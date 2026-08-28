@@ -16,25 +16,25 @@ const notice = (reason, priority) => preselectNotice({ reason, priority });
 
 // ── the four sentences, exactly ────────────────────────────────────────────
 
-test("rule → says which criterion was applied, and only about the shown list", () => {
+test("rule → says which criterion was applied and where it was set", () => {
   assert.equal(
     notice("rule", "CHEAPEST"),
-    "Подставлен самый дешёвый из показанных.",
+    "Выбран самый дешёвый из показанных тарифов — приоритет задан в настройках.",
   );
   assert.equal(
     notice("rule", "FASTEST"),
-    "Подставлен самый быстрый из показанных.",
+    "Выбран самый быстрый из показанных тарифов — приоритет задан в настройках.",
   );
 });
 
-test("tie → says the options are indistinguishable and hands the choice back", () => {
+test("tie → names what tied and hands the choice back", () => {
   assert.equal(
     notice("tie", "CHEAPEST"),
-    "Несколько показанных вариантов стоят одинаково — выберите сами.",
+    "У нескольких тарифов одинаковая цена — выберите подходящий.",
   );
   assert.equal(
     notice("tie", "FASTEST"),
-    "Несколько показанных вариантов приезжают одинаково быстро — выберите сами.",
+    "У нескольких тарифов одинаковый срок — выберите подходящий.",
   );
 });
 
@@ -100,25 +100,50 @@ test("no provider key, adapter key or carrier name reaches a seller", () => {
   }
 });
 
-test("«из показанных» is present on both rule sentences, and is not decoration", () => {
-  // It keeps the claim true when a pickup point has narrowed the list to one
-  // carrier: «самый дешёвый» alone would be a claim about the market.
+test("«из показанных» scopes both rule sentences to the list on screen", () => {
+  // A chosen pickup point narrows the list to the carrier that owns it, so the
+  // rule may be choosing among one carrier's tariffs. Without this phrase the
+  // line would claim the cheapest tariff that exists, which is more than we
+  // know. The tie sentences need no equivalent: «у нескольких тарифов» is
+  // already about some tariffs rather than all of them.
   assert.ok(notice("rule", "CHEAPEST").includes("из показанных"));
   assert.ok(notice("rule", "FASTEST").includes("из показанных"));
+});
+
+test("both rule sentences name where the priority was set, and it is not decoration", () => {
+  // A selection the seller cannot explain is one they have to undo to trust.
+  // Naming the setting is what makes the line actionable rather than merely
+  // informative — it says where to go to change the behaviour.
+  assert.ok(notice("rule", "CHEAPEST").includes("приоритет задан в настройках"));
+  assert.ok(notice("rule", "FASTEST").includes("приоритет задан в настройках"));
+});
+
+test("each tie sentence names WHICH field tied, never just that something did", () => {
+  // «одинаковы» alone gives the seller nothing to decide on. Told the price is
+  // equal they weigh the deadline, and the reverse.
+  assert.ok(notice("tie", "CHEAPEST").includes("одинаковая цена"));
+  assert.ok(notice("tie", "FASTEST").includes("одинаковый срок"));
+});
+
+test("one word for one thing: «тариф», never «вариант» or «оффер»", () => {
+  for (const text of EVERY_STRING) {
+    assert.equal(/вариант/i.test(text), false, `«вариант» in: ${text}`);
+    assert.equal(/оффер/i.test(text), false, `«оффер» in: ${text}`);
+  }
 });
 
 test("the hint states the scope of a departure: this order, setting untouched", () => {
   assert.equal(
     OFFER_PRIORITY_HINT_RU,
-    "Подставленный вариант можно заменить в любом заказе — настройка от этого не изменится.",
+    "Выбранный тариф можно заменить в любом заказе — настройка от этого не изменится.",
   );
 });
 
 test("the three control options are the ones the spec fixed", () => {
-  assert.equal(OFFER_PRIORITY_LEGEND_RU, "Что подставлять в новом заказе");
-  assert.equal(OFFER_PRIORITY_NONE_RU, "Ничего не подставлять");
-  assert.equal(OFFER_PRIORITY_CHEAPEST_RU, "Самый дешёвый вариант");
-  assert.equal(OFFER_PRIORITY_FASTEST_RU, "Самый быстрый вариант");
+  assert.equal(OFFER_PRIORITY_LEGEND_RU, "Какой тариф выбирать автоматически");
+  assert.equal(OFFER_PRIORITY_NONE_RU, "Не выбирать — выберу сам");
+  assert.equal(OFFER_PRIORITY_CHEAPEST_RU, "Самый дешёвый");
+  assert.equal(OFFER_PRIORITY_FASTEST_RU, "Самый быстрый");
 });
 
 // ── the line follows the SELECTION, not the moment the offers arrived ───────
@@ -152,7 +177,7 @@ test("the rule line stands while its card is selected and clears when another is
   const resolved = { offerId: "b", reason: "rule", priority: "CHEAPEST" };
   assert.equal(
     preselectLineFor(resolved, "b"),
-    "Подставлен самый дешёвый из показанных.",
+    "Выбран самый дешёвый из показанных тарифов — приоритет задан в настройках.",
   );
   assert.equal(preselectLineFor(resolved, "a"), null);
   assert.equal(preselectLineFor(resolved, null), null);
@@ -162,7 +187,7 @@ test("the tie line stands while nothing is selected and clears once something is
   const resolved = { offerId: null, reason: "tie", priority: "FASTEST" };
   assert.equal(
     preselectLineFor(resolved, null),
-    "Несколько показанных вариантов приезжают одинаково быстро — выберите сами.",
+    "У нескольких тарифов одинаковый срок — выберите подходящий.",
   );
   assert.equal(preselectLineFor(resolved, "a"), null);
 });
