@@ -130,25 +130,120 @@ test("FASTEST with one earliest deadline -> that offer", () => {
   });
 });
 
-test("FASTEST with two sharing the earliest deadline -> nothing, reported as a tie", () => {
+test("FASTEST follows «дешевле» when the third badge is suppressed as redundant", () => {
+  // Also reversed on 28.08. This is the OTHER branch of resolveFastestTie: the
+  // globally cheapest offer is itself among the fastest, so offer-highlights
+  // suppresses «дешевле из быстрых» — it would only restate «дешевле» — and the
+  // helper falls back to the «дешевле» tag. Same visible guarantee either way:
+  // the winner wears a badge naming why it won.
   const offers = [
     offer("a", 100, { dayTo: "2026-09-01" }),
     offer("b", 300, { dayTo: "2026-09-01" }),
     offer("c", 200, { dayTo: "2026-09-05" }),
   ];
   assert.deepEqual(preselectOffer(offers, "FASTEST"), {
-    offerId: null,
-    reason: "tie",
+    offerId: "a",
+    reason: "rule",
     priority: "FASTEST",
   });
+
+  const tags = offerHighlights(offers);
+  assert.ok((tags.get("a") ?? []).includes("cheaper"));
+  assert.ok((tags.get("a") ?? []).includes("faster"));
+  assert.equal((tags.get("a") ?? []).includes("cheapest_of_fastest"), false);
 });
 
-test("FASTEST does not break the tie by price, which is what the badge refuses too", () => {
+test("FASTEST breaks a deadline tie by price — and the badges already say which won", () => {
+  // Reversed on 28.08 from «does not break the tie by price». The boundary is
+  // not «never choose» but «never choose silently»: here the chosen card wears
+  // «дешевле», so the screen states the reason. See docs/OFFER_PRESELECT.md §4.
   const offers = [
     offer("dearer-but-same-day", 900, { dayTo: "2026-09-01" }),
     offer("cheaper-same-day", 100, { dayTo: "2026-09-01" }),
   ];
-  assert.equal(preselectOffer(offers, "FASTEST").offerId, null);
+  const result = preselectOffer(offers, "FASTEST");
+  assert.equal(result.offerId, "cheaper-same-day");
+  assert.equal(result.reason, "rule");
+
+  // …and the claim above is checked, not assumed: the winner carries a badge.
+  const tags = offerHighlights(offers);
+  assert.ok((tags.get("cheaper-same-day") ?? []).includes("cheaper"));
+});
+
+test("CHEAPEST does NOT break a price tie by deadline — the asymmetry, pinned", () => {
+  // The mirror rule was deliberately NOT shipped: there is no «быстрее из
+  // дешёвых» badge, so the winner would be indistinguishable on screen from the
+  // cards it beat, and the decision would rest on something never mentioned.
+  const offers = [
+    offer("same-price-sooner", 500, { dayTo: "2026-09-01" }),
+    offer("same-price-later", 500, { dayTo: "2026-09-09" }),
+  ];
+  const result = preselectOffer(offers, "CHEAPEST");
+  assert.equal(result.offerId, null);
+  assert.equal(result.reason, "tie");
+
+  // The reason it must stay a tie: nothing distinguishes the sooner one on
+  // screen. Both wear «дешевле», and there is no tag for «sooner among these».
+  const tags = offerHighlights(offers);
+  assert.deepEqual(tags.get("same-price-sooner"), ["cheaper", "faster"]);
+  assert.deepEqual(tags.get("same-price-later"), ["cheaper"]);
+});
+
+test("FASTEST stays a tie when the fastest all share one price", () => {
+  const offers = [
+    offer("a", 500, { dayTo: "2026-09-01" }),
+    offer("b", 500, { dayTo: "2026-09-01" }),
+  ];
+  const result = preselectOffer(offers, "FASTEST");
+  assert.equal(result.offerId, null);
+  assert.equal(result.reason, "tie");
+});
+
+test("FASTEST stays a tie when several share the cheapest price among the fastest", () => {
+  // Two at 100 tie for cheapest WITHIN the fastest group, so no single card is
+  // singled out — and a slower, cheaper offer keeps the global minimum away
+  // from the fastest set so the third badge is the one doing the work.
+  const offers = [
+    offer("fast-cheap-1", 100, { dayTo: "2026-09-01" }),
+    offer("fast-cheap-2", 100, { dayTo: "2026-09-01" }),
+    offer("fast-dear", 900, { dayTo: "2026-09-01" }),
+    offer("slow-cheapest", 50, { dayTo: "2026-09-09" }),
+  ];
+  const result = preselectOffer(offers, "FASTEST");
+  assert.equal(result.offerId, null);
+  assert.equal(result.reason, "tie");
+});
+
+test("FASTEST follows «дешевле из быстрых» when the global minimum is slower", () => {
+  // The six-CDEK case from 28.08 in miniature: the cheapest offer overall is
+  // slow, so the fastest group carries the third badge rather than «дешевле».
+  const offers = [
+    offer("fast-cheaper", 295, { dayTo: "2026-09-01" }),
+    offer("fast-dearer", 5650, { dayTo: "2026-09-01" }),
+    offer("slow-cheapest", 100, { dayTo: "2026-09-09" }),
+  ];
+  const result = preselectOffer(offers, "FASTEST");
+  assert.equal(result.offerId, "fast-cheaper");
+  assert.equal(result.reason, "rule");
+
+  const tags = offerHighlights(offers);
+  assert.ok((tags.get("fast-cheaper") ?? []).includes("cheapest_of_fastest"));
+  // The winner is NOT the globally cheapest — the criterion the seller asked
+  // for still wins; price only ordered what the deadline left equal.
+  assert.ok((tags.get("fast-cheaper") ?? []).includes("faster"));
+  assert.equal((tags.get("fast-cheaper") ?? []).includes("cheaper"), false);
+});
+
+test("FASTEST stays a tie when no offer among the fastest has a usable price", () => {
+  // No arithmetic here or in the helper — the badge layer filters non-finite
+  // prices before tagging, so neither tag exists and the count is zero.
+  const offers = [
+    offer("broken-1", Number.NaN, { dayTo: "2026-09-01" }),
+    offer("broken-2", Number.NaN, { dayTo: "2026-09-01" }),
+  ];
+  const result = preselectOffer(offers, "FASTEST");
+  assert.equal(result.offerId, null);
+  assert.equal(result.reason, "tie");
 });
 
 // ── unusable inputs ────────────────────────────────────────────────────────

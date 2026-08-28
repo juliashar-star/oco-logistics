@@ -32,9 +32,13 @@ test("tie → names what tied and hands the choice back", () => {
     notice("tie", "CHEAPEST"),
     "У нескольких тарифов одинаковая цена — выберите подходящий.",
   );
+  // NOT symmetric, and deliberately so: reaching a tie under FASTEST now proves
+  // the price matched too, because any difference would have been broken by the
+  // badge. Saying only «одинаковый срок» would send the seller to compare
+  // prices we already know are equal.
   assert.equal(
     notice("tie", "FASTEST"),
-    "У нескольких тарифов одинаковый срок — выберите подходящий.",
+    "У нескольких тарифов совпали и цена, и срок — выберите подходящий.",
   );
 });
 
@@ -119,10 +123,12 @@ test("both rule sentences name where the priority was set, and it is not decorat
 });
 
 test("each tie sentence names WHICH field tied, never just that something did", () => {
-  // «одинаковы» alone gives the seller nothing to decide on. Told the price is
-  // equal they weigh the deadline, and the reverse.
+  // «одинаковы» alone gives the seller nothing to decide on. Under CHEAPEST the
+  // price is what matched and the deadline is what they weigh next; under
+  // FASTEST both matched, and the sentence has to say so or it points them at a
+  // comparison that cannot help.
   assert.ok(notice("tie", "CHEAPEST").includes("одинаковая цена"));
-  assert.ok(notice("tie", "FASTEST").includes("одинаковый срок"));
+  assert.ok(notice("tie", "FASTEST").includes("и цена, и срок"));
 });
 
 test("one word for one thing: «тариф», never «вариант» or «оффер»", () => {
@@ -187,7 +193,7 @@ test("the tie line stands while nothing is selected and clears once something is
   const resolved = { offerId: null, reason: "tie", priority: "FASTEST" };
   assert.equal(
     preselectLineFor(resolved, null),
-    "У нескольких тарифов одинаковый срок — выберите подходящий.",
+    "У нескольких тарифов совпали и цена, и срок — выберите подходящий.",
   );
   assert.equal(preselectLineFor(resolved, "a"), null);
 });

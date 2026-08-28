@@ -71,10 +71,19 @@ export function preselectNotice(
   if (reason === "tie") {
     // NAMES WHAT TIED, not just that something did. A seller told «несколько
     // тарифов одинаковы» learns nothing they can act on; told the PRICE is the
-    // same, they know to decide on the deadline instead, and the reverse.
+    // same, they know to decide on the deadline instead.
+    //
+    // THE TWO SENTENCES ARE NOT SYMMETRIC ANY MORE, because the two branches
+    // are not. Under CHEAPEST a tie means the price matched and nothing else was
+    // looked at — the deadline may well differ, and the seller decides on it.
+    // Under FASTEST a tie now means the deadline matched AND the price did too:
+    // a difference in price would have been broken by the badge (see
+    // resolveFastestTie), so reaching this line proves both are equal. Saying
+    // only «одинаковый срок» there would send the seller to compare prices that
+    // we already know are the same.
     return priority === "CHEAPEST"
       ? "У нескольких тарифов одинаковая цена — выберите подходящий."
-      : "У нескольких тарифов одинаковый срок — выберите подходящий.";
+      : "У нескольких тарифов совпали и цена, и срок — выберите подходящий.";
   }
   return null;
 }

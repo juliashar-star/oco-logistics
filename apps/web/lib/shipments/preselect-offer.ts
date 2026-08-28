@@ -1,4 +1,5 @@
 import { offerHighlights, type OfferHighlightInput } from "./offer-highlights";
+import { resolveFastestTie } from "./resolve-fastest-tie";
 
 /**
  * The company's default priority. Deliberately its OWN two-value union rather
@@ -100,10 +101,20 @@ function asHighlightInput(offer: PreselectOfferInput): OfferHighlightInput {
  * winner where the badge tags the whole set, ranks speed by the EARLY edge where
  * the badge uses the late one, and its «optimal» rests on a placeholder score.
  *
- * A TIE PRESELECTS NOTHING. The badge rules refuse to break a tie on principle —
- * two offers a seller cannot tell apart on a criterion must not be told apart by
- * us — and a rule that quietly chose one would reintroduce exactly the hidden
- * tie-break those rules removed. The caller says so on screen instead.
+ * A TIE PRESELECTS NOTHING — EXCEPT WHERE A BADGE ALREADY NAMES THE WINNER.
+ * The rule the badges enforce is not «never choose», it is «never choose
+ * silently»: the defect they were rewritten to remove was a badge deciding on a
+ * parameter its own name did not mention. So under FASTEST, when several offers
+ * tie on the deadline and the screen ALREADY marks one of them as the cheapest
+ * of that group, the selection follows the badge and the seller can read why it
+ * won. Nothing is compared here to reach that — see resolveFastestTie.
+ *
+ * UNDER CHEAPEST A TIE STILL PRESELECTS NOTHING, and the asymmetry is deliberate.
+ * There is no «быстрее из дешёвых» badge, so breaking a price tie by deadline
+ * would land the selection on a card the screen marks no differently from its
+ * neighbours — a choice made on something never mentioned, which is the very
+ * defect the boundary exists to keep out. docs/OFFER_PRESELECT.md §4 records
+ * both halves and the measurement behind them.
  *
  * `single` HAS ITS OWN BRANCH because `offerHighlights` returns an empty map for
  * a list shorter than two: «дешевле» on a list of one is decoration, not a
@@ -143,6 +154,17 @@ export function preselectOffer(
     return { offerId: winners[0]!.offerId, reason: "rule", priority };
   }
   if (winners.length > 1) {
+    // FASTEST ONLY, and the asymmetry is the decision — see resolveFastestTie
+    // and docs/OFFER_PRESELECT.md §4. The pick is whichever offer the badges
+    // ALREADY single out by price among the fastest, so the screen names the
+    // reason it won; nothing is compared here. CHEAPEST falls straight through
+    // to `tie` as before, because no badge would name its reason.
+    if (priority === "FASTEST") {
+      const narrowed = resolveFastestTie(winners, tags);
+      if (narrowed !== null) {
+        return { offerId: narrowed, reason: "rule", priority };
+      }
+    }
     return { offerId: null, reason: "tie", priority };
   }
   // No winner at all: nothing in this list carries the thing the criterion
