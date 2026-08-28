@@ -11,17 +11,6 @@ function parseIso(iso: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-/** Next calendar day after a YYYY-MM-DD key (date-only arithmetic). */
-function nextCalendarDayKey(dayKey: string): string {
-  const [year, month, day] = dayKey.split("-").map(Number);
-  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
-  noonUtc.setUTCDate(noonUtc.getUTCDate() + 1);
-  const y = noonUtc.getUTCFullYear();
-  const m = String(noonUtc.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(noonUtc.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 export function formatMoscowClockTime(date: Date): string {
   return new Intl.DateTimeFormat("ru-RU", {
     timeZone: MOSCOW_TIMEZONE,
@@ -31,21 +20,23 @@ export function formatMoscowClockTime(date: Date): string {
   }).format(date);
 }
 
-function formatMoscowDayLabel(date: Date, now: Date): string {
-  const day = moscowDayKey(date);
-  const today = moscowDayKey(now);
-  if (day === today) {
-    return "сегодня";
-  }
-  if (day === nextCalendarDayKey(today)) {
-    return "завтра";
-  }
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: MOSCOW_TIMEZONE,
-    weekday: "short",
-    day: "numeric",
-    month: "long",
-  }).format(date);
+/**
+ * ONE SHAPE FOR A DAY, and it is the same shape each end of a range already
+ * used: «27 августа». Built from `moscowDayMonthParts` rather than a second
+ * `Intl` call, because a second call is a second decision about what a day looks
+ * like, kept in step only by whoever remembers both exist.
+ *
+ * NO RELATIVE LABELS, AND NO WEEKDAY. «сегодня» and «завтра» cannot be written
+ * for a range — a range has two ends and neither is today — so the screen spoke
+ * two vocabularies at once and the seller had to hold «завтра» against
+ * «27–28 августа» in their head to see which was sooner. An absolute date
+ * compares with every other absolute date, which is the only thing this line is
+ * for. The weekday went with them: it was carried by one branch out of three, so
+ * it made the same day look different depending on which branch produced it.
+ */
+function formatMoscowDayLabel(date: Date): string {
+  const { day, month } = moscowDayMonthParts(date);
+  return `${day} ${month}`;
 }
 
 /**
@@ -64,27 +55,27 @@ export function formatOfferInterval(
     return "";
   }
   if (from && !to) {
-    return `${formatMoscowDayLabel(from, now)}, ${formatMoscowClockTime(from)}`;
+    return `${formatMoscowDayLabel(from)}, ${formatMoscowClockTime(from)}`;
   }
   if (!from && to) {
-    return `${formatMoscowDayLabel(to, now)}, ${formatMoscowClockTime(to)}`;
+    return `${formatMoscowDayLabel(to)}, ${formatMoscowClockTime(to)}`;
   }
 
   // both usable
   if (from!.getTime() <= now.getTime()) {
-    return `${formatMoscowDayLabel(to!, now)}, до ${formatMoscowClockTime(to!)}`;
+    return `${formatMoscowDayLabel(to!)}, до ${formatMoscowClockTime(to!)}`;
   }
   if (moscowDayKey(from!) === moscowDayKey(to!)) {
-    return `${formatMoscowDayLabel(from!, now)}, ${formatMoscowClockTime(from!)}–${formatMoscowClockTime(to!)}`;
+    return `${formatMoscowDayLabel(from!)}, ${formatMoscowClockTime(from!)}–${formatMoscowClockTime(to!)}`;
   }
-  return `${formatMoscowDayLabel(from!, now)} ${formatMoscowClockTime(from!)} — ${formatMoscowDayLabel(to!, now)} ${formatMoscowClockTime(to!)}`;
+  return `${formatMoscowDayLabel(from!)} ${formatMoscowClockTime(from!)} — ${formatMoscowDayLabel(to!)} ${formatMoscowClockTime(to!)}`;
 }
 
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Parse YYYY-MM-DD as noon UTC (same approach as nextCalendarDayKey) so the
- * calendar day cannot shift across a timezone boundary. Never `new Date(dayKey)`.
+ * Parse YYYY-MM-DD as noon UTC so the calendar day cannot shift across a
+ * timezone boundary. Never `new Date(dayKey)`.
  */
 function parseDayKeyNoonUtc(dayKey: string): Date | null {
   const trimmed = dayKey.trim();
@@ -117,7 +108,12 @@ function moscowDayMonthParts(date: Date): { day: string; month: string } {
 
 /**
  * Seller-facing day-precision delivery range (no clock time).
- * `now` is injected so today/tomorrow labels stay unit-testable.
+ *
+ * `now` IS NO LONGER READ. It was here for the «сегодня» / «завтра» labels, and
+ * those are gone — every day now renders as an absolute date. The parameter is
+ * kept so the two exported formatters still take the same three arguments, and
+ * because `formatOfferInterval` genuinely needs it. Dropping it is a signature
+ * change, and one worth making deliberately rather than as a side effect.
  */
 export function formatOfferDeliveryDays(
   dayFrom: string,
@@ -131,14 +127,14 @@ export function formatOfferDeliveryDays(
     return "";
   }
   if (from && !to) {
-    return formatMoscowDayLabel(from, now);
+    return formatMoscowDayLabel(from);
   }
   if (!from && to) {
-    return formatMoscowDayLabel(to, now);
+    return formatMoscowDayLabel(to);
   }
 
   if (moscowDayKey(from!) === moscowDayKey(to!)) {
-    return formatMoscowDayLabel(from!, now);
+    return formatMoscowDayLabel(from!);
   }
 
   const fromMonth = moscowDayKey(from!).slice(0, 7);
