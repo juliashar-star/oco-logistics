@@ -26,6 +26,19 @@ export type OfferDeadlineFields = {
  */
 export type OfferDeadline = { dayKey: string; timeMs: number | null };
 
+/**
+ * WHICH FAMILY OF FIELDS the day was read from. Not needed by the screen, which
+ * only ever wants the day itself; needed by the decision record, which has to
+ * state what it derived the day from so a stored row can be re-read years later
+ * without guessing.
+ */
+export type OfferDeadlineBasis = "CALENDAR_DAY" | "INTERVAL";
+
+/** `OfferDeadline` plus the family it came from. See `offerDeadlineWithBasis`. */
+export type OfferDeadlineWithBasis = OfferDeadline & {
+  basis: OfferDeadlineBasis;
+};
+
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function trimmed(value: string | null | undefined): string {
@@ -47,23 +60,44 @@ function trimmed(value: string | null | undefined): string {
  * offer that named only a start day would have no deadline at all and would sink
  * to the end of the list, which is worse than placing it on the day it named.
  */
-function rawDeadline(fields: OfferDeadlineFields): OfferDeadline | null {
+export function offerDeadlineWithBasis(
+  fields: OfferDeadlineFields,
+): OfferDeadlineWithBasis | null {
   const iso = trimmed(fields.deliveryIntervalTo);
   if (iso !== "") {
     const parsed = new Date(iso);
     const ms = parsed.getTime();
     if (!Number.isNaN(ms)) {
-      return { dayKey: moscowDayKey(parsed), timeMs: ms };
+      return { dayKey: moscowDayKey(parsed), timeMs: ms, basis: "INTERVAL" };
     }
   }
 
   const dayTo = trimmed(fields.deliveryDayTo);
   const day = dayTo !== "" ? dayTo : trimmed(fields.deliveryDayFrom);
   if (DAY_KEY_RE.test(day)) {
-    return { dayKey: day, timeMs: null };
+    return { dayKey: day, timeMs: null, basis: "CALENDAR_DAY" };
   }
 
   return null;
+}
+
+/**
+ * The screen's view: the same decision with the basis dropped.
+ *
+ * ONE IMPLEMENTATION, TWO VIEWS, and the stripping is why. Adding `basis` to
+ * what `comparableOfferDeadlines` returns would have been simpler to write and
+ * wrong to ship: callers compare these objects whole (`assert.deepEqual` in
+ * offer-deadline.test.mjs), so a widened shape is a behaviour change dressed as
+ * an addition. A second entry point costs one function and keeps the guarantee
+ * that the decision record and the offers screen can never derive a different
+ * day — which is the entire reason the record reads from here at all.
+ */
+function rawDeadline(fields: OfferDeadlineFields): OfferDeadline | null {
+  const withBasis = offerDeadlineWithBasis(fields);
+  if (withBasis === null) {
+    return null;
+  }
+  return { dayKey: withBasis.dayKey, timeMs: withBasis.timeMs };
 }
 
 /**

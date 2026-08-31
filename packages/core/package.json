@@ -27,6 +27,7 @@
     "./carrier-adapter/narrow-adapters-to-point-carrier": "./src/carrier-adapter/narrow-adapters-to-point-carrier.ts",
     "./carrier-adapter/dedupe-offers-by-same-provider-interval": "./src/carrier-adapter/dedupe-offers-by-same-provider-interval.ts",
     "./carrier-adapter/offer-deadline": "./src/carrier-adapter/offer-deadline.ts",
+    "./shipment-decision": "./src/shipment-decision.ts",
     "./carrier-adapter/sort-offers-for-seller": "./src/carrier-adapter/sort-offers-for-seller.ts",
     "./carrier-adapter/provider-seller-display-names": "./src/carrier-adapter/provider-seller-display-names.ts",
     "./carrier-adapter/carrier-cabinet-names": "./src/carrier-adapter/carrier-cabinet-names.ts",

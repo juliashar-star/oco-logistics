@@ -13,6 +13,8 @@ import { decryptShipmentRecipientPii } from "@/lib/recipient-pii";
 import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { submitOrder } from "@/lib/shipments/submit-order";
+import { recordShipmentDecision } from "@/lib/shipments/record-shipment-decision";
+import { RULES_VERSION } from "@oco/core/shipment-decision";
 
 function isCarrierOffer(value: unknown): value is CarrierOffer {
   if (value === null || typeof value !== "object") {
@@ -119,6 +121,8 @@ export const POST = withAuth<{ id: string }>(
         id: true,
         quotedOffers: true,
         companyId: true,
+        // Copied onto the decision record; the route does not read it.
+        selectionMode: true,
         idempotencyKey: true,
         declaredValue: true,
         weightG: true,
@@ -244,6 +248,17 @@ export const POST = withAuth<{ id: string }>(
       });
 
       if (result.ok) {
+        // The route decides nothing here and cannot fail because of this call:
+        // recordShipmentDecision never throws, by construction.
+        await recordShipmentDecision(prisma, {
+          shipmentId: row.id,
+          offers: row.quotedOffers,
+          selectedOfferId: offerIdRaw,
+          selectionMode: row.selectionMode,
+          rulesVersion: RULES_VERSION,
+          now: new Date(),
+        });
+
         return NextResponse.json({
           ok: true,
           requestId: result.requestId,

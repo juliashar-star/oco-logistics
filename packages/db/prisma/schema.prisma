@@ -72,6 +72,23 @@ enum CarrierConfirmWarning {
   UNKNOWN
 }
 
+/// Which family of offer fields the recorded deadline day was derived from.
+/// INTERVAL = deliveryIntervalTo, and it WINS whenever it is usable. CALENDAR_DAY
+/// = deliveryDayTo, with deliveryDayFrom as the fallback when it is blank.
+/// deliveryIntervalFrom is not read at all — the LATE edge of a window is what a
+/// carrier commits to, and the early edge would flatter the widest interval.
+/// The day is computed by `offerDeadlineWithBasis` in
+/// packages/core/src/carrier-adapter/offer-deadline.ts — the same code the offers
+/// screen resolves its own day with, so a stored decision can never name a day
+/// the seller was not shown.
+/// Measured 31.08.2026, and it is a fact about today's adapters rather than a
+/// guarantee: the two families do not co-occur on one offer — CDEK fills days
+/// and leaves intervals "", Yandex fills intervals and no day field.
+enum DeadlineBasis {
+  CALENDAR_DAY
+  INTERVAL
+}
+
 model Company {
   id            String     @id @default(cuid())
   name          String
@@ -227,6 +244,7 @@ model Shipment {
 
   quotes          TariffQuote[]
   trackingEvents  TrackingEvent[]
+  decision        ShipmentDecision?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -333,4 +351,66 @@ model CarrierCredential {
 
   @@unique([companyId, providerKey])
   @@index([companyId])
+}
+
+/// One row per shipment, written once at submit: what was chosen, out of what,
+/// and by which rules. A SNAPSHOT on purpose — chosenServiceName and
+/// chosenPriceRub duplicate Shipment.selectedOfferServiceName / plannedCost
+/// deliberately, so that a later edit to the Shipment cannot rewrite what the
+/// seller was actually shown. Absent for shipments created before this model,
+/// and absent when the write failed after the carrier order already existed:
+/// the order matters more than the report, so a report must count rows without
+/// a decision instead of assuming every shipment has one.
+model ShipmentDecision {
+  id         String   @id @default(cuid())
+  shipmentId String   @unique
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  /// Which revision of the decision rules produced this row. Bumped when the
+  /// rules change, so old rows stay readable instead of being reinterpreted.
+  rulesVersion Int
+  decidedAt    DateTime
+
+  /// Copied from Shipment.selectionMode, same nullability: NULL means the row
+  /// predates the field or nothing was recorded, not «MANUAL».
+  selectionMode SelectionMode?
+
+  chosenAdapterKey      String
+  chosenServiceName     String?
+  /// KOPECKS, like Shipment.plannedCost — the two are compared, and a ruble
+  /// column between them would round the difference away.
+  chosenPriceKop        Int
+  chosenPriceIsEstimate Boolean
+
+  /// @db.Date on purpose: these are CALENDAR DAYS and are compared as such. A
+  /// timestamp would carry a time zone and shift the day across a boundary.
+  chosenDeadlineDay   DateTime?      @db.Date
+  chosenDeadlineBasis DeadlineBasis?
+
+  /// Cheapest offer that was no later than the chosen one and strictly cheaper.
+  /// All four NULL together when no such offer existed.
+  altAdapterKey  String?
+  altPriceKop    Int?
+  /// THE ESTIMATE FLAG MUST STAND ON BOTH SIDES, because two prices are being
+  /// compared and only one of them may be a commitment. CDEK's price is marked
+  /// an estimate on 100% of its offers, and the 28.08 production measurement
+  /// showed it is systematically BELOW the invoice, because the mandatory
+  /// declared-value fee cannot be quoted by any calculator method available to
+  /// us (docs/research/cdek-insurance-parameter-2026-08-28.md). Comparing a
+  /// firm price against an estimate without carrying the flag would manufacture
+  /// an overpayment claim that the numbers do not support.
+  /// NULLABLE because there may be no alternative at all, and false would be a
+  /// statement about an offer that does not exist.
+  altPriceIsEstimate Boolean?
+  altDeadlineDay DateTime? @db.Date
+
+  offersTotal   Int
+  carriersTotal Int
+  /// Whether every offer in the list carried an adapterKey. False means the
+  /// comparison cannot be attributed per carrier and the row must be excluded
+  /// from per-carrier reporting rather than counted as one carrier.
+  attributionComplete Boolean
+
+  @@index([decidedAt])
+  @@index([chosenAdapterKey])
 }
