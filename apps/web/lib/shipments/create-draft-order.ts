@@ -2,7 +2,6 @@ import type {
   PickupType,
   PrismaClient,
   ProductCategory,
-  SelectionMode,
   Shipment,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -30,7 +29,6 @@ export type CreateDraftInput = {
   handoverMode: "COURIER" | "DROP_OFF";
   recipientName: string;
   recipientPhone: string;
-  selectionMode: SelectionMode;
   legalBasisConfirmed: boolean;
   needsThermalBag?: boolean;
 };
@@ -100,7 +98,11 @@ export async function createDraftOrder(
     needsThermalBag: input.needsThermalBag === true,
     recipientName: encryptedRecipient.recipientName,
     recipientPhone: encryptedRecipient.recipientPhone,
-    selectionMode: input.selectionMode,
+    // selectionMode is DELIBERATELY ABSENT from draftFields. This object is
+    // shared by create AND updateMany (see the note above), so listing the mode
+    // here would rewrite it on every re-quote — overwriting a value the submit
+    // step had set correctly with one the draft step cannot know. The draft is
+    // built before any offer exists; only submit knows what was chosen.
     legalBasisConfirmed: true,
     quotedOffers: Prisma.DbNull,
     selectedOfferId: null,

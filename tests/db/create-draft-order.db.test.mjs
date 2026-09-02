@@ -64,7 +64,8 @@ function draftInput(companyId, idempotencyKey, overrides = {}) {
     pickupType: /** @type {const} */ ("COURIER"),
     recipientName: overrides.recipientName ?? "Иван Тестов",
     recipientPhone: "+79001234567",
-    selectionMode: /** @type {const} */ ("MANUAL"),
+    // selectionMode is deliberately absent: a draft does not carry it. It is
+    // written at submit, because only then is it known.
     legalBasisConfirmed: overrides.legalBasisConfirmed ?? true,
   };
 }

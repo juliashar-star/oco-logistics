@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import type { SelectionMode } from "@prisma/client";
 import { ApishipError } from "@oco/apiship";
 import { withAuth } from "@/lib/auth/with-auth";
 import { canUseApiship } from "@/lib/apiship-client-for-company";
@@ -7,9 +6,8 @@ import { prisma } from "@/lib/db";
 import { logAuditEvent } from "@/lib/audit/log";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { createShipment } from "@/lib/shipments/create-shipment";
+import { parseSelectionMode } from "@/lib/shipments/resolve-selection-mode";
 import { STALE_TARIFF_QUOTES_ERROR } from "@/lib/tariff-quotes/persist-tariff-quotes";
-
-const SELECTION_MODES = new Set<SelectionMode>(["FAST", "CHEAP", "OPTIMAL", "MANUAL"]);
 
 export const POST = withAuth(async (request, user) => {
   const company = await prisma.company.findFirst({
@@ -47,7 +45,13 @@ export const POST = withAuth(async (request, user) => {
     const destAddress = String(body.destAddress ?? "").trim();
     const recipientName = String(body.recipientName ?? "").trim();
     const recipientPhone = String(body.recipientPhone ?? "").trim();
-    const selectionMode = String(body.selectionMode ?? "MANUAL") as SelectionMode;
+    // NULL IS A LEGAL ANSWER, and «MANUAL» is no longer the default. Until
+    // 31.08 an absent field became MANUAL, so a card placed by the company's
+    // rule was recorded as a human choice — three roads led to the same value
+    // and nothing could tell them apart. Blank now means «nobody said», which
+    // the column already accepts. One parser for every route that reads this
+    // field; this route refuses rubbish, submit stores null and logs.
+    const parsedSelectionMode = parseSelectionMode(body.selectionMode);
     const legalBasisConfirmed = Boolean(body.legalBasisConfirmed);
     const weightG = Number(body.weightG);
     const lengthCm = Number(body.lengthCm);
@@ -111,7 +115,11 @@ export const POST = withAuth(async (request, user) => {
       );
     }
 
-    if (!SELECTION_MODES.has(selectionMode)) {
+    // Blank passes, rubbish does not. The two are different states: «no mode
+    // was determined» is a fact we intend to store, «FASTEST» in a field that
+    // holds FAST is a caller error. This route may refuse, because nothing has
+    // been created yet.
+    if (!parsedSelectionMode.ok) {
       return NextResponse.json({ error: "Некорректный режим выбора" }, { status: 400 });
     }
 
@@ -132,7 +140,7 @@ export const POST = withAuth(async (request, user) => {
       pickupType: pickupType === "COURIER" ? "COURIER" : "PVZ",
       recipientName,
       recipientPhone: normalizedRecipientPhone.value,
-      selectionMode,
+      selectionMode: parsedSelectionMode.value,
       legalBasisConfirmed,
       declaredValueRub:
         body.declaredValueRub != null ? Number(body.declaredValueRub) : undefined,

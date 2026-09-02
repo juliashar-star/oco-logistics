@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import type { SelectionMode } from "@prisma/client";
 import { isKnownPickupPointProviderKey } from "@oco/core/carrier-adapter/pickup-point-adapters";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import { normalizeRecipientPhone } from "@/lib/phone/normalize-recipient-phone";
 import { createDraftOrder } from "@/lib/shipments/create-draft-order";
 import { parcelEntryCeilingError } from "@/lib/shipments/format-parcel-entry-summary";
-
-const SELECTION_MODES = new Set<SelectionMode>(["FAST", "CHEAP", "OPTIMAL", "MANUAL"]);
 
 export const POST = withAuth(async (request, user) => {
   try {
@@ -20,7 +17,11 @@ export const POST = withAuth(async (request, user) => {
     const deliveryComment = String(body.deliveryComment ?? "").trim() || undefined;
     const recipientName = String(body.recipientName ?? "").trim();
     const recipientPhone = String(body.recipientPhone ?? "").trim();
-    const selectionMode = String(body.selectionMode ?? "MANUAL") as SelectionMode;
+    // selectionMode is NOT read here. A draft is created BEFORE the offers
+    // exist, so nothing has been chosen and no rule has run: any value sent at
+    // this point could only describe the previous quote, and `draftFields`
+    // below rewrites the whole row on every re-quote, so it would overwrite a
+    // correct value with a stale one. The mode arrives on the submit request.
     const legalBasisConfirmed = Boolean(body.legalBasisConfirmed);
     if (
       "needsThermalBag" in body &&
@@ -136,10 +137,6 @@ export const POST = withAuth(async (request, user) => {
       return NextResponse.json({ error: ceilingError }, { status: 400 });
     }
 
-    if (!SELECTION_MODES.has(selectionMode)) {
-      return NextResponse.json({ error: "Некорректный режим выбора" }, { status: 400 });
-    }
-
     const result = await createDraftOrder(prisma, {
       companyId: user.companyId,
       createdByUserId: user.userId,
@@ -159,7 +156,6 @@ export const POST = withAuth(async (request, user) => {
       handoverMode,
       recipientName,
       recipientPhone: normalizedRecipientPhone.value,
-      selectionMode,
       legalBasisConfirmed,
       needsThermalBag,
       declaredValueRub:

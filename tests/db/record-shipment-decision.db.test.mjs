@@ -143,6 +143,66 @@ describe("recordShipmentDecision against a real database", { concurrency: false 
     assert.equal(rows.length, 0);
   });
 
+  // THE TRAP THIS TEST EXISTS FOR. The submit route reads the shipment row
+  // BEFORE submitOrder runs, so `row.selectionMode` there is the draft's copy —
+  // always null now that the draft no longer writes it. Passing that stale copy
+  // to the decision record would leave Shipment correct and the decision empty,
+  // and the two would disagree about the same order. The route passes the
+  // freshly parsed value instead; this pins the consequence.
+  test("(v) the decision carries the SAME mode the shipment does", async () => {
+    const shipment = await seedShipment();
+
+    // What the submit route does, in the same order: write the mode onto the
+    // shipment, then record the decision with the value it parsed — never by
+    // re-reading the row.
+    const parsedFromRequest = "FAST";
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: { selectionMode: parsedFromRequest },
+    });
+    await recordShipmentDecision(
+      prisma,
+      args(shipment.id, { selectionMode: parsedFromRequest }),
+    );
+
+    const stored = await prisma.shipment.findUnique({
+      where: { id: shipment.id },
+    });
+    const decision = await prisma.shipmentDecision.findUnique({
+      where: { shipmentId: shipment.id },
+    });
+
+    assert.equal(stored.selectionMode, "FAST");
+    assert.equal(decision.selectionMode, "FAST");
+    assert.equal(
+      decision.selectionMode,
+      stored.selectionMode,
+      "the decision and the shipment must never disagree about the mode",
+    );
+  });
+
+  test("(vi) a null mode is recorded as null on both sides, not as MANUAL", async () => {
+    const shipment = await seedShipment();
+    await prisma.shipment.update({
+      where: { id: shipment.id },
+      data: { selectionMode: null },
+    });
+    await recordShipmentDecision(
+      prisma,
+      args(shipment.id, { selectionMode: null }),
+    );
+
+    const stored = await prisma.shipment.findUnique({
+      where: { id: shipment.id },
+    });
+    const decision = await prisma.shipmentDecision.findUnique({
+      where: { shipmentId: shipment.id },
+    });
+
+    assert.equal(stored.selectionMode, null);
+    assert.equal(decision.selectionMode, null);
+  });
+
   test("(iv) an unusable offers blob writes no row at all", async () => {
     const shipment = await seedShipment();
     const original = console.error;

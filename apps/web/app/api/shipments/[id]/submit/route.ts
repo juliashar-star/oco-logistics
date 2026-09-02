@@ -14,6 +14,7 @@ import { buildOfferInput } from "@/lib/shipments/build-offer-input";
 import { getCarrierCredentials } from "@/lib/shipments/get-carrier-credentials";
 import { submitOrder } from "@/lib/shipments/submit-order";
 import { recordShipmentDecision } from "@/lib/shipments/record-shipment-decision";
+import { parseSelectionMode } from "@/lib/shipments/resolve-selection-mode";
 import { RULES_VERSION } from "@oco/core/shipment-decision";
 
 function isCarrierOffer(value: unknown): value is CarrierOffer {
@@ -105,6 +106,27 @@ export const POST = withAuth<{ id: string }>(
       typeof (body as { offerId: unknown }).offerId === "string"
         ? (body as { offerId: string }).offerId.trim()
         : "";
+    // RUBBISH BECOMES NULL HERE, IT DOES NOT REFUSE THE REQUEST. Unlike the
+    // creation route, this one may already be one step from a live carrier
+    // order, and a mode nobody can read is not a reason to withhold a shipment
+    // from a seller. The order outranks the report.
+    //
+    // The value is NEVER logged: it came from a browser and could be anything,
+    // including something a log must not carry. Only the fact and the shipment.
+    const parsedSelectionMode = parseSelectionMode(
+      body !== null && typeof body === "object"
+        ? (body as { selectionMode?: unknown }).selectionMode
+        : undefined,
+    );
+    if (!parsedSelectionMode.ok) {
+      console.error("[shipments/submit] SELECTION_MODE_UNREADABLE", {
+        shipmentId,
+      });
+    }
+    const selectionMode = parsedSelectionMode.ok
+      ? parsedSelectionMode.value
+      : null;
+
     if (!offerIdRaw) {
       return NextResponse.json(
         { error: "Выберите тариф" },
@@ -121,8 +143,6 @@ export const POST = withAuth<{ id: string }>(
         id: true,
         quotedOffers: true,
         companyId: true,
-        // Copied onto the decision record; the route does not read it.
-        selectionMode: true,
         idempotencyKey: true,
         declaredValue: true,
         weightG: true,
@@ -245,6 +265,7 @@ export const POST = withAuth<{ id: string }>(
         confirm: orderAdapter.confirmOffer,
         providerKey: orderAdapter.providerKey,
         orderAdapterKey: orderAdapter.key,
+        selectionMode,
       });
 
       if (result.ok) {
@@ -254,7 +275,12 @@ export const POST = withAuth<{ id: string }>(
           shipmentId: row.id,
           offers: row.quotedOffers,
           selectedOfferId: offerIdRaw,
-          selectionMode: row.selectionMode,
+          // THE FRESHLY PARSED VALUE — the same variable submitOrder was given
+          // above, so the two tables can never name different modes. The row is
+          // deliberately not consulted: it is read before submitOrder runs, so
+          // its copy would be the draft's, and the draft no longer writes this
+          // field at all. That is why it is not in the select either.
+          selectionMode,
           rulesVersion: RULES_VERSION,
           now: new Date(),
         });

@@ -28,7 +28,8 @@ export type CreateShipmentInput = {
   pickupType: PickupType;
   recipientName: string;
   recipientPhone: string;
-  selectionMode: SelectionMode;
+  /** NULL means «no mode was determined», which is not the same as MANUAL. */
+  selectionMode: SelectionMode | null;
   legalBasisConfirmed: boolean;
   declaredValueRub?: number;
   deliveryDate?: string;

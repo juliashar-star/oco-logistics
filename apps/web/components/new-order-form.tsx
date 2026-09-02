@@ -77,7 +77,12 @@ type Quote = {
   tags: RankTag[];
 };
 
-type SelectionMode = "FAST" | "CHEAP" | "OPTIMAL" | "MANUAL";
+// Imported rather than declared a third time: the union already exists in
+// resolve-selection-mode.ts, and two copies is how they stop matching.
+import {
+  resolveSelectionModeFromPreselect,
+  type SelectionMode,
+} from "@/lib/shipments/resolve-selection-mode";
 
 type CreateResult = {
   shipmentId: string;
@@ -219,7 +224,11 @@ export function NewOrderForm() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteIds, setQuoteIds] = useState<Record<string, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>("MANUAL");
+  // NULL, not "MANUAL". Until 31.08 this started as MANUAL and was never
+  // touched on the offers path, so a card placed by the company's rule was
+  // written down as a human choice. Null means «nobody has said yet», and only
+  // an actual click or an actual rule verdict may replace it.
+  const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(null);
   const [meta, setMeta] = useState<{
     fromCity?: string;
     destCity?: string;
@@ -299,6 +308,9 @@ export function NewOrderForm() {
     setIntervalsLoading(false);
     setYandexOffers([]);
     setSelectedOfferId(null);
+    // Cleared with the selection it describes. Left behind, a mode from the
+    // previous quote would be attached to the next one.
+    setSelectionMode(null);
     setDraftShipmentId(null);
     setNoDeliveryToPoint(false);
     setYandexSubmitResult(null);
@@ -667,7 +679,10 @@ export function NewOrderForm() {
           legalBasisConfirmed: true,
           needsThermalBag: pickupType === "COURIER" && needsThermalBag,
           declaredValueRub: declared,
-          selectionMode,
+          // selectionMode is NOT sent here on purpose. A draft is created
+          // BEFORE the offers exist, so at this moment nothing has been chosen
+          // and no rule has run — whatever was sent could only describe the
+          // PREVIOUS quote. It rides on the submit request instead.
         }),
       });
 
@@ -710,6 +725,7 @@ export function NewOrderForm() {
         setYandexOffers([]);
         setOfferAdaptersWithoutOffers([]);
         setSelectedOfferId(null);
+        setSelectionMode(null);
         calculationSnapshot.current = snapshotFromForm();
         return;
       }
@@ -724,6 +740,7 @@ export function NewOrderForm() {
         setNoDeliveryToPoint(false);
         setYandexOffers([]);
         setSelectedOfferId(null);
+        setSelectionMode(null);
         setPreselect(null);
         setOfferAdaptersWithoutOffers(
           Array.isArray(offersData.adaptersWithoutOffers)
@@ -774,6 +791,19 @@ export function NewOrderForm() {
           : null;
       setPreselect(resolved);
       setSelectedOfferId(resolved?.offerId ?? null);
+      // THE VERDICT IS NOT THROWN AWAY ANY MORE. `reason` and `priority` were
+      // already computed and already here; until 31.08 only `offerId` was read
+      // and the rest was dropped, which is why every order looked manual.
+      // Null when the rule did not speak — a click will then say MANUAL, and if
+      // no click comes, null is the honest record.
+      setSelectionMode(
+        resolved === null
+          ? null
+          : resolveSelectionModeFromPreselect({
+              reason: resolved.reason,
+              priority: resolved.priority,
+            }),
+      );
       calculationSnapshot.current = snapshotFromForm();
 
       if (nextOffers.length === 0) {
@@ -919,7 +949,14 @@ export function NewOrderForm() {
       const response = await fetch(`/api/shipments/${draftShipmentId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId: selectedOfferId }),
+        // THE MODE RIDES HERE, NOT ON THE DRAFT. Only at this moment is it
+        // known: the offers have arrived, the rule has run or the seller has
+        // clicked, and the state below reflects which. On the draft request
+        // none of that had happened yet.
+        body: JSON.stringify({
+          offerId: selectedOfferId,
+          selectionMode,
+        }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -1473,7 +1510,13 @@ export function NewOrderForm() {
                 <button
                   key={offer.offerId}
                   type="button"
-                  onClick={() => setSelectedOfferId(offer.offerId)}
+                  onClick={() => {
+                    setSelectedOfferId(offer.offerId);
+                    // A person clicked. This is the ONLY place on the offers
+                    // path that may say MANUAL, and it overrides whatever the
+                    // rule had put there — the seller departed from it.
+                    setSelectionMode("MANUAL");
+                  }}
                   /* The 4px left edge is reserved in BOTH states and only
                      coloured in one, so selecting a card cannot shift the grid
                      — and the difference a seller sees is a bar that is there

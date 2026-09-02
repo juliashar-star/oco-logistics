@@ -724,4 +724,77 @@ describe("submitOrder", { concurrency: false }, () => {
     assert.equal(row.status, "CREATED");
     assert.equal(row.orderAdapterKey, DEFAULT_ORDER_ADAPTER.key);
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // selectionMode now travels on the SUBMIT request and is written in the same
+  // updateMany as selectedOfferId. Before 02.09 it was written at draft time,
+  // where nothing has been chosen yet, and `draftFields` rewrote it on every
+  // re-quote — so a rule-placed card was stored as a human choice.
+  // ────────────────────────────────────────────────────────────────────────
+
+  /** @param {string|null} selectionMode */
+  async function submitWithMode(label, selectionMode) {
+    const { company, shipment } = await seedDraftShipment(
+      `Mode Co ${label}`,
+      `submit-mode-${label}-${Date.now()}@example.com`,
+    );
+    const REQUEST_ID = `yandex-request-mode-${label}`;
+
+    const result = await submitOrder(prisma, {
+      shipmentId: shipment.id,
+      companyId: company.id,
+      offer: OFFER,
+      input: ORDER_INPUT,
+      credentials: CREDS,
+      providerKey: "test-provider",
+      orderAdapterKey: "yataxi:next_day",
+      selectionMode,
+      confirm: async () => ({
+        requestId: REQUEST_ID,
+        rawResponse: { request_id: REQUEST_ID },
+        warnings: [],
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    const row = await assertNotSubmitting(prisma, shipment.id);
+    assert.equal(row.status, "CREATED");
+    return row;
+  }
+
+  test("(xvi) a real mode reaches the column, beside selectedOfferId", async () => {
+    const row = await submitWithMode("fast", "FAST");
+    assert.equal(row.selectionMode, "FAST");
+    // The pairing is the point: both are written by the same updateMany, so
+    // the mode can never describe an offer other than the one recorded.
+    assert.equal(row.selectedOfferId, OFFER.offerId);
+  });
+
+  test("(xvii) every SelectionMode value survives the round trip", async () => {
+    for (const mode of ["CHEAP", "OPTIMAL", "MANUAL"]) {
+      const row = await submitWithMode(mode.toLowerCase(), mode);
+      assert.equal(row.selectionMode, mode);
+    }
+  });
+
+  test("(xviii) null reaches the column AS NULL, not as MANUAL", async () => {
+    const row = await submitWithMode("null", null);
+    assert.equal(row.selectionMode, null);
+    assert.equal(row.selectedOfferId, OFFER.offerId);
+  });
+
+  test("(xix) the draft never carries a mode — it is null until submit", async () => {
+    const { shipment } = await seedDraftShipment(
+      "Draft Mode Co",
+      `submit-mode-draft-${Date.now()}@example.com`,
+    );
+    const before = await prisma.shipment.findUnique({
+      where: { id: shipment.id },
+    });
+    assert.equal(
+      before.selectionMode,
+      null,
+      "a freshly seeded draft must not carry a selection mode",
+    );
+  });
 });

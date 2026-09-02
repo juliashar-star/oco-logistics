@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, SelectionMode } from "@prisma/client";
 import {
   CarrierAuthError,
   CarrierOfferExpiredError,
@@ -35,6 +35,15 @@ export type SubmitOrderArgs = {
   providerKey: string;
   /** ORDER_ADAPTERS key written to Shipment.orderAdapterKey on CREATED. */
   orderAdapterKey: string;
+  /**
+   * How the seller arrived at this offer, as the BROWSER reported it. NULL
+   * means no mode was determined, which is not the same as MANUAL.
+   *
+   * It arrives on the submit request rather than being read from the row,
+   * because the draft is written before any offer exists and therefore cannot
+   * know it. The server cannot verify it either — see docs/DECISION_RECORD.md.
+   */
+  selectionMode: SelectionMode | null;
 };
 
 export type SubmitOrderResult =
@@ -83,6 +92,7 @@ export async function submitOrder(
     confirm,
     providerKey,
     orderAdapterKey,
+    selectionMode,
   } = args;
 
   const capture = await captureForSubmit(prisma, shipmentId, companyId);
@@ -153,6 +163,10 @@ export async function submitOrder(
           providerKey,
           orderAdapterKey,
           selectedOfferId: offer.offerId,
+          // Written HERE, beside the offer it describes, and nowhere earlier:
+          // the draft step cannot know it, and until 31.08 it wrote a stale
+          // «MANUAL» that survived to this row and read as a human choice.
+          selectionMode,
           // The carrier's own name for what was bought (CDEK: tariff_name,
           // e.g. «Посылка склад-склад»). THE VALUE WAS ALREADY IN HAND HERE and
           // was simply dropped: the row kept the offer id but nothing naming the
