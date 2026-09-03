@@ -63,6 +63,13 @@ import { shouldShowOfferLacksThermalBag } from "@/lib/shipments/should-show-offe
 import type { CarrierConfirmWarning } from "@oco/core/carrier-adapter/types";
 import { shipmentLabelCell } from "@/lib/shipments/shipment-list-labels";
 import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
+import { isSellerReadiness } from "@/lib/seller-readiness";
+import {
+  CALCULATION_GATE_MESSAGES,
+  createSubmitGate,
+  resolveCalculationGate,
+  type ReadinessState,
+} from "@/lib/shipments/calculation-gate";
 
 type RankTag = "fast" | "cheap" | "optimal";
 
@@ -221,6 +228,37 @@ export function NewOrderForm() {
     : undefined;
   const [senderConfigured, setSenderConfigured] = useState(true);
   const [senderCity, setSenderCity] = useState<string | null>(null);
+  /**
+   * THREE STATES, not two, and the third is the point.
+   *
+   * «loading» — the request is in flight. It is NOT «не знаю»: the answer is
+   * coming, so a calculation waits for it rather than creating a draft that a
+   * known-missing carrier would waste. A single null conflated this with the
+   * case below, and the recipient's name, phone and address went to the
+   * database for a calculation that was refused a moment later.
+   *
+   * «unavailable» — the request finished and gave us nothing usable (an error,
+   * or a route too old to send the field). THIS is «не знаю», and «не знаю»
+   * never blocks: the screen degrades to its previous behaviour.
+   *
+   * «ready» — we know.
+   */
+  const [readinessState, setReadinessState] = useState<ReadinessState>({
+    status: "loading",
+  });
+  const readiness =
+    readinessState.status === "ready" ? readinessState.value : null;
+  /** Button label only. The GUARD is the ref below — a state flag cannot guard. */
+  const [checkingReadiness, setCheckingReadiness] = useState(false);
+  /**
+   * Synchronous one-at-a-time guard. `loading` and `checkingReadiness` are
+   * useState, so two clicks in one tick both read the previous render's value
+   * and both proceed; a closure variable flips on the first call.
+   */
+  const submitGate = useRef(createSubmitGate());
+  /** Retires a request whose answer is no longer wanted on screen. */
+  const readinessRequestId = useRef(0);
+  const readinessAbort = useRef<AbortController | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteIds, setQuoteIds] = useState<Record<string, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -379,19 +417,68 @@ export function NewOrderForm() {
     }
   }
 
-  useEffect(() => {
-    fetch("/api/settings/company")
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) {
+  /**
+   * RETURNS the state it obtained. The caller must use the returned value —
+   * `setReadinessState` below is for rendering only, and reading React state
+   * back after an await gives the snapshot from the render that already
+   * happened, which is precisely the bug this shape removes.
+   *
+   * WHAT MAY WRITE TO THE SCREEN. Every setState here is gated on the request
+   * generation. A request the gate stopped waiting for is still in flight, and
+   * without this it would repaint the banner AFTER the calculation already went
+   * ahead — telling the seller about a carrier when the draft is already
+   * written. Same counter idea as pointsRequestId / intervalsRequestId above.
+   *
+   * The RETURN VALUE is not gated: a superseded request must not paint, but the
+   * caller that is still awaiting it deserves a truthful answer.
+   */
+  const loadReadiness = useCallback(async (): Promise<ReadinessState> => {
+    const id = (readinessRequestId.current += 1);
+    const controller = new AbortController();
+    readinessAbort.current = controller;
+    const mayPaint = () => id === readinessRequestId.current;
+
+    try {
+      const r = await fetch("/api/settings/company", { signal: controller.signal });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (mayPaint()) {
           setSenderConfigured(false);
-          return;
+          setReadinessState({ status: "unavailable" });
         }
+        return { status: "unavailable" };
+      }
+      // A route too old to send the field, or a malformed one, is «не знаю» —
+      // NOT «no carrier». Treating an absent field as an absent carrier would
+      // disable the calculate button for everyone on a bad rollout.
+      const next: ReadinessState = isSellerReadiness(data.readiness)
+        ? { status: "ready", value: data.readiness }
+        : { status: "unavailable" };
+      if (mayPaint()) {
         setSenderConfigured(Boolean(data.senderConfigured));
         setSenderCity(data.senderCity || null);
-      })
-      .catch(() => setSenderConfigured(false));
+        setReadinessState(next);
+      }
+      return next;
+    } catch {
+      if (mayPaint()) {
+        setSenderConfigured(false);
+        setReadinessState({ status: "unavailable" });
+      }
+      return { status: "unavailable" };
+    }
   }, []);
+
+  useEffect(() => {
+    void loadReadiness();
+    // ON UNMOUNT: abort the request and retire the generation, so a fetch that
+    // returns after this instance is gone calls no setState at all. Aborting
+    // also stops the network work, which a flag alone would leave running.
+    return () => {
+      readinessRequestId.current += 1;
+      readinessAbort.current?.abort();
+    };
+  }, [loadReadiness]);
 
   const loadPoints = useCallback(async (city: string) => {
     const trimmed = city.trim();
@@ -818,12 +905,65 @@ export function NewOrderForm() {
 
   async function handleCalculate(event: React.FormEvent) {
     event.preventDefault();
+
+    // SYNCHRONOUS, and first. Two clicks in one tick would otherwise both pass
+    // any useState flag and both reach create-draft.
+    if (!submitGate.current.tryEnter()) {
+      return;
+    }
+    try {
+      await runCalculate();
+    } finally {
+      submitGate.current.release();
+    }
+  }
+
+  async function runCalculate() {
     setError("");
     setCreateResult(null);
     setRecalculateHint(null);
 
-    if (!senderConfigured) {
-      setError("Сначала укажите город отправления в настройках компании");
+    // BEFORE create-draft, deliberately: a refused calculation must not leave
+    // the recipient's data in the database. The checks stand here, not only in
+    // the disabled button, because a form can still be submitted by keyboard.
+    //
+    // The gate WAITS while the answer is still coming and skips only when the
+    // request finished without one. Its decision is taken from the value the
+    // loader RETURNS — reading React state or a ref after the await gives the
+    // snapshot from the render that already happened, and that is what let a
+    // draft carrying the recipient's data reach the database.
+    const wasLoading = readinessState.status === "loading";
+    if (wasLoading) setCheckingReadiness(true);
+    let gate;
+    try {
+      gate = await resolveCalculationGate({
+        state: readinessState,
+        load: loadReadiness,
+      });
+    } finally {
+      if (wasLoading) setCheckingReadiness(false);
+    }
+
+    // THE SCREEN ADOPTS WHAT THE GATE DECIDED ON. On a timeout the gate resolved
+    // to «unavailable» while `readinessState` was still «loading», so without
+    // this the form would keep waiting on an answer nobody is using — and the
+    // late reply would repaint the banner after the draft was already written.
+    // Retiring the generation is the half that silences that late reply.
+    if (readinessState.status === "loading") {
+      readinessRequestId.current += 1;
+      setReadinessState(gate.state);
+    }
+
+    if (!gate.proceed) {
+      setError(CALCULATION_GATE_MESSAGES[gate.reason]);
+      return;
+    }
+
+    // FROM THE RESOLVED STATE, not from the closure: `senderConfigured` still
+    // holds the value of the render this handler was created in, which on a
+    // first fast click is the optimistic default.
+    if (gate.state.status === "ready" && !gate.state.value.senderConfigured) {
+      setError(CALCULATION_GATE_MESSAGES.no_sender);
       return;
     }
 
@@ -998,12 +1138,67 @@ export function NewOrderForm() {
     </Link>
   );
 
+  // The CONNECTION tab, not «Компания». settingsLink lands on the sender
+  // address, which is the wrong page for «подключите перевозчика».
+  const connectionLink = (label: string) => (
+    <Link href="/dashboard/settings?tab=connection" className="underline">
+      {label}
+    </Link>
+  );
+
+  const pickerLink = (label: string) => (
+    <Link href="/dashboard/carrier-picker" className="underline">
+      {label}
+    </Link>
+  );
+
+  /**
+   * Which step this screen warns about, or null for none.
+   *
+   * Only the two steps this form can act on, and only the FIRST of them, taken
+   * from `nextStep`. A null readiness means «не знаю» and warns about nothing.
+   */
+  const blockingStep =
+    readiness?.nextStep === "connect_carrier" ||
+    readiness?.nextStep === "sender_address"
+      ? readiness.nextStep
+      : null;
+
+  /**
+   * BLOCKS ONLY ON A KNOWN ABSENCE. `readiness` must have arrived AND say the
+   * carrier is missing. Without this the offers path would create a DRAFT
+   * shipment — recipient name, phone and address written to the database — only
+   * to be refused by the route a moment later. Not creating it is data
+   * minimisation first and convenience second.
+   */
+  const blockedByMissingCarrier = readiness !== null && !readiness.carrierConnected;
+
   return (
     <div className="space-y-8">
-      {!senderConfigured && (
+      {/*
+        ONE banner, never two stacked. `nextStep` exists precisely to answer
+        «what is the FIRST thing still missing», and stacking the address notice
+        under the carrier notice would ask the seller to fix two things at once
+        without saying which comes first.
+
+        `verify_email` gets no banner HERE on purpose: CabinetShell already shows
+        VerificationBanner above this page, and a second one would be the same
+        double stack. `first_shipment` gets none either — that step closes by
+        using this very form.
+      */}
+      {blockingStep === "connect_carrier" && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Укажите адрес отправителя в {settingsLink("настройках")} — без него расчёт тарифов
-          недоступен.
+          Чтобы рассчитать доставку, подключите своего перевозчика в{" "}
+          {connectionLink("настройках")}. Договора с перевозчиком ещё нет? Сравните
+          условия в {pickerLink("подборе перевозчика")} — подключение для этого не
+          нужно.
+        </p>
+      )}
+
+      {blockingStep === "sender_address" && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Укажите город и телефон отправителя в {settingsLink("настройках")} — без них
+          расчёт тарифов недоступен.
         </p>
       )}
 
@@ -1416,10 +1611,39 @@ export function NewOrderForm() {
 
         <button
           type="submit"
-          disabled={loading || !legalBasisConfirmed}
+          disabled={
+            loading ||
+            checkingReadiness ||
+            !legalBasisConfirmed ||
+            blockedByMissingCarrier
+          }
           className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-60"
         >
-          {loading ? (
+          {checkingReadiness ? (
+            <>
+              <svg
+                className="-ml-1 mr-2 inline h-4 w-4 animate-spin text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              Проверяем настройки...
+            </>
+          ) : loading ? (
             <>
               <svg
                 className="-ml-1 mr-2 inline h-4 w-4 animate-spin text-white"

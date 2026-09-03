@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import {
+  isSellerReadiness,
+  isStepDone,
+  STEP_ORDER,
+  type SellerReadinessStep,
+} from "@/lib/seller-readiness";
+
 type DashboardStatsData = {
   totalShipments: number;
   shipmentsLast30Days: number;
@@ -10,7 +17,105 @@ type DashboardStatsData = {
   totalSpend: number;
   spendLast30Days: number;
   topCarriers: { name: string; count: number }[];
+  readiness?: unknown;
 };
+
+/**
+ * What one step says, closed or open. Keyed by step so the list above can be
+ * driven by STEP_ORDER instead of repeating the order in markup.
+ */
+function stepContent(step: SellerReadinessStep, done: boolean): React.ReactNode {
+  switch (step) {
+    case "verify_email":
+      // NO «отправить письмо повторно» LINK HERE. While this step is open,
+      // CabinetShell is already showing VerificationBanner above the page with
+      // that exact button. The step stays in the list — it is genuinely open —
+      // but a second link to the same action is the double stack the form
+      // avoids for the same reason.
+      return done ? "Email подтверждён" : "Подтвердите email";
+
+    case "sender_address":
+      return done ? (
+        "Адрес отправителя указан"
+      ) : (
+        <Link
+          href="/dashboard/settings?tab=company"
+          className="underline-offset-2 hover:underline"
+        >
+          Укажите город и телефон отправителя
+        </Link>
+      );
+
+    case "connect_carrier":
+      return done ? (
+        "Перевозчик подключён"
+      ) : (
+        <>
+          <Link
+            href="/dashboard/settings?tab=connection"
+            className="underline-offset-2 hover:underline"
+          >
+            Подключите своего перевозчика
+          </Link>
+          {/*
+            THE WAY OUT for a seller who has no carrier contract yet. Without it
+            this step is a wall: OCO signs no carrier contracts, so «подключите»
+            assumes one the seller may not have. The picker needs no connection
+            at all — measured.
+          */}
+          <br />
+          <span className="text-text-3">
+            Нет договора с перевозчиком?{" "}
+            <Link
+              href="/dashboard/carrier-picker"
+              className="underline-offset-2 hover:underline"
+            >
+              Сравните условия в подборе
+            </Link>
+          </span>
+        </>
+      );
+
+    case "first_shipment":
+      return done ? (
+        "Первое отправление создано"
+      ) : (
+        <Link href="/new-order" className="underline-offset-2 hover:underline">
+          Создайте первое отправление
+        </Link>
+      );
+  }
+}
+
+/** A closed step, or an open one with the links that close it. */
+function StepRow({
+  done,
+  children,
+}: {
+  done: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex items-start gap-2 py-1.5 text-sm text-text-2">
+      {done ? (
+        <span
+          className="flex h-4 w-4 shrink-0 items-center justify-center text-sm font-bold text-success"
+          aria-hidden
+        >
+          ✓
+        </span>
+      ) : (
+        <span
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-warning text-[10px] font-bold leading-none text-warning"
+          aria-hidden
+        >
+          !
+        </span>
+      )}
+      <span>{children}</span>
+    </li>
+  );
+}
 
 function formatRubles(amount: number): string {
   return `${amount.toLocaleString("ru-RU", {
@@ -88,7 +193,17 @@ export function DashboardStats({
     };
   }, []);
 
-  const showOnboarding = !loading && stats?.totalShipments === 0;
+  /**
+   * The checklist lives while ANY step is open, not while there are no
+   * shipments. The old condition hid it the moment a first shipment appeared,
+   * even with an unverified email and no sender address behind it — and showed
+   * it to a seller who had nothing left to do but wait.
+   *
+   * null readiness = «не знаю» (a stale route, a failed request), and «не знаю»
+   * shows nothing rather than guessing which step is open.
+   */
+  const readiness = isSellerReadiness(stats?.readiness) ? stats.readiness : null;
+  const showOnboarding = !loading && readiness !== null && !readiness.allDone;
 
   return (
     <div>
@@ -159,64 +274,29 @@ export function DashboardStats({
         </>
       )}
 
-      {showOnboarding && (
+      {showOnboarding && readiness && (
         <div className="mt-4 rounded-lg bg-primary-soft p-5">
+          {/*
+            NO NUMBER IN THE HEADING, on purpose. «Три шага» was already wrong
+            the moment a fourth was added, and a count in a heading drifts away
+            from the list under it every time the list changes. The steps
+            themselves say how many there are.
+          */}
           <h3 className="mb-3 text-sm font-semibold text-primary">
-            Три шага до первой доставки
+            Шаги до первой доставки
           </h3>
+          {/*
+            RENDERED BY STEP_ORDER, not by four rows placed in the right order by
+            hand. Hand-placed rows are a second copy of the order, and a second
+            copy drifts — the same defect this whole slice exists to remove. Add
+            a step to the constant and it appears here, in its place.
+          */}
           <ol>
-            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
-              {emailVerified ? (
-                <span
-                  className="flex h-4 w-4 shrink-0 items-center justify-center text-sm font-bold text-success"
-                  aria-hidden
-                >
-                  ✓
-                </span>
-              ) : (
-                <span
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-warning text-[10px] font-bold leading-none text-warning"
-                  aria-hidden
-                >
-                  !
-                </span>
-              )}
-              {emailVerified ? (
-                <span>Email подтверждён</span>
-              ) : (
-                <span>
-                  Подтвердите email —{" "}
-                  <Link href="/verify-email" className="underline-offset-2 hover:underline">
-                    отправить письмо повторно
-                  </Link>
-                </span>
-              )}
-            </li>
-            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
-              <input
-                type="checkbox"
-                readOnly
-                className="h-4 w-4 shrink-0 rounded border-border"
-                aria-hidden
-              />
-              <Link
-                href="/dashboard/settings?tab=company"
-                className="underline-offset-2 hover:underline"
-              >
-                Указать адрес, откуда отправляете посылки
-              </Link>
-            </li>
-            <li className="flex items-center gap-2 py-1.5 text-sm text-text-2">
-              <input
-                type="checkbox"
-                readOnly
-                className="h-4 w-4 shrink-0 rounded border-border"
-                aria-hidden
-              />
-              <Link href="/new-order" className="underline-offset-2 hover:underline">
-                Создать первую посылку
-              </Link>
-            </li>
+            {STEP_ORDER.map((step) => (
+              <StepRow key={step} done={isStepDone(readiness, step)}>
+                {stepContent(step, isStepDone(readiness, step))}
+              </StepRow>
+            ))}
           </ol>
         </div>
       )}

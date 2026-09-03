@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
+import { loadSellerReadiness } from "@/lib/load-seller-readiness";
+import { isSenderConfigured } from "@/lib/seller-readiness";
 import { normalizeRuPhone } from "@/lib/phone/ru-phone";
 import {
   OFFER_PRIORITY_INVALID_RU,
@@ -34,15 +36,31 @@ export const GET = withAuth(async (request, user) => {
   const senderAddress = company.senderAddress?.trim() ?? "";
   const senderPhone = company.senderPhone?.trim() ?? "";
 
+  // Served from here because the new-order form already fetches this route on
+  // mount — the check it needs costs no extra round-trip.
+  const readiness = await loadSellerReadiness(prisma, {
+    companyId: user.companyId,
+    emailVerified: user.emailVerified,
+    senderCity,
+    senderPhone,
+  });
+
   return NextResponse.json({
     name: company.name,
     senderCity,
     senderAddress,
     senderPhone,
-    senderConfigured: Boolean(senderCity),
+    // NOW CITY **AND** PHONE, from the one rule in seller-readiness.ts. It used
+    // to be `Boolean(senderCity)`, which let a company with no phone read as
+    // configured and then be refused at the quote by build-offer-input.ts. Both
+    // banners that show this field become truthful rather than broken: the green
+    // one promises the address «подставляется в расчёт тарифов», and without a
+    // phone that promise was false.
+    senderConfigured: readiness.senderConfigured,
     // null is a real answer here, not a missing field: it means the seller has
     // not chosen, and the form renders «Ничего не подставлять».
     defaultOfferPriority: company.defaultOfferPriority ?? null,
+    readiness,
   });
 });
 
@@ -107,7 +125,12 @@ export const POST = withAuth(async (request, user) => {
       senderCity,
       senderAddress,
       senderPhone: senderPhone ?? "",
-      senderConfigured: true,
+      // COMPUTED, not hardcoded `true`. A save that stores a city and no phone
+      // does not make the sender configured under the city-AND-phone rule, and
+      // saying it does would put the green banner on a company the quote will
+      // refuse. Only the two sender fields are judged here — the counts belong
+      // to GET, and a save cannot have changed them.
+      senderConfigured: isSenderConfigured(senderCity, senderPhone),
       defaultOfferPriority: saved?.defaultOfferPriority ?? null,
     });
   } catch {

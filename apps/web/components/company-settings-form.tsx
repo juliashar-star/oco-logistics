@@ -102,7 +102,13 @@ export function CompanySettingsForm() {
         return;
       }
       setSenderPhone(data.senderPhone ?? normalizedPhone);
-      setConfigured(true);
+      // FROM THE RESPONSE, never `true`. The route computes senderConfigured by
+      // the order path's rule — city AND phone — so painting the green banner
+      // on a successful save told a company that saved a city without a phone
+      // that its address «подставляется в расчёт тарифов», and the calculation
+      // then refused. A save succeeding and a sender being usable are two
+      // different facts.
+      setConfigured(Boolean(data.senderConfigured));
       setMessage("Настройки сохранены");
     } catch {
       setError("Не удалось сохранить профиль");
@@ -125,10 +131,16 @@ export function CompanySettingsForm() {
         </p>
       )}
 
+      {/*
+        CITY AND PHONE — the same rule the order path applies. The old text asked
+        for «город и адрес склада», which is neither what the route checks nor
+        what a quote needs: the address line is optional, the phone is not.
+        «Неточным» was wrong too — without these the calculation is refused, not
+        approximate.
+      */}
       {!configured && (
         <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
-          Укажите город и адрес склада или офиса, откуда вы отгружаете посылки. Без этого расчёт
-          тарифов будет неточным.
+          Укажите город и телефон отправителя. Без них расчёт тарифов недоступен.
         </p>
       )}
 

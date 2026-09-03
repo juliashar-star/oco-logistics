@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import type { ShipmentStatus } from "@prisma/client";
 import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { tallyShipmentsByCarrier } from "@/lib/shipments/tally-shipments-by-carrier";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
+import { SHIPMENT_STATUSES_NOT_REAL } from "@/lib/load-seller-readiness";
+import { describeSellerReadiness } from "@/lib/seller-readiness";
 
 function kopecksToRubles(kopecks: number): number {
   return kopecks / 100;
 }
-
-const NON_REAL_STATUSES: ShipmentStatus[] = ["DRAFT", "SUBMITTING"];
 
 export const GET = withAuth(async (_request, user) => {
   const now = new Date();
@@ -18,9 +17,11 @@ export const GET = withAuth(async (_request, user) => {
   const last7Days = new Date(now);
   last7Days.setDate(last7Days.getDate() - 7);
 
+  // The one list, read straight from where it is declared. A local alias here
+  // was a second NAME for it, and a second name is how a second list starts.
   const baseWhere = {
     companyId: user.companyId,
-    status: { notIn: NON_REAL_STATUSES },
+    status: { notIn: [...SHIPMENT_STATUSES_NOT_REAL] },
   };
 
   try {
@@ -31,6 +32,11 @@ export const GET = withAuth(async (_request, user) => {
       totalSpendAgg,
       spendLast30DaysAgg,
       carrierGroups,
+      // The readiness inputs ride along in the SAME Promise.all — the dashboard
+      // already waits for this batch, so the checklist costs no second request
+      // and no extra latency.
+      company,
+      connectedCarrierCount,
     ] = await Promise.all([
       prisma.shipment.count({ where: baseWhere }),
       prisma.shipment.count({
@@ -54,6 +60,11 @@ export const GET = withAuth(async (_request, user) => {
         where: baseWhere,
         _count: { _all: true },
       }),
+      prisma.company.findFirst({
+        where: { id: user.companyId },
+        select: { senderCity: true, senderPhone: true },
+      }),
+      prisma.carrierCredential.count({ where: { companyId: user.companyId } }),
     ]);
 
     const carrierIds = carrierGroups
@@ -90,6 +101,17 @@ export const GET = withAuth(async (_request, user) => {
       count: entry.count,
     }));
 
+    // `totalShipments` IS the completed count — baseWhere already excludes
+    // DRAFT and SUBMITTING — so the readiness object reuses it rather than
+    // asking the database the same question twice.
+    const readiness = describeSellerReadiness({
+      emailVerified: user.emailVerified,
+      senderCity: company?.senderCity ?? null,
+      senderPhone: company?.senderPhone ?? null,
+      connectedCarrierCount,
+      completedShipmentCount: totalShipments,
+    });
+
     return NextResponse.json({
       totalShipments,
       shipmentsLast30Days,
@@ -97,6 +119,7 @@ export const GET = withAuth(async (_request, user) => {
       totalSpend: kopecksToRubles(totalSpendAgg._sum.plannedCost ?? 0),
       spendLast30Days: kopecksToRubles(spendLast30DaysAgg._sum.plannedCost ?? 0),
       topCarriers,
+      readiness,
     });
   } catch {
     console.error("dashboard stats failed");

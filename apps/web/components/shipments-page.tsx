@@ -11,6 +11,10 @@ import {
   shipmentLabelCell,
   shipmentTariffLabel,
 } from "@/lib/shipments/shipment-list-labels";
+import {
+  isSellerReadiness,
+  type SellerReadiness,
+} from "@/lib/seller-readiness";
 import { describeSyncResult } from "@/lib/shipments/describe-sync-result";
 import { handoverActCandidates } from "@/lib/shipments/handover-act-candidates";
 import {
@@ -177,6 +181,8 @@ export function ShipmentsPage() {
   const [track, setTrack] = useState("");
   const [shipments, setShipments] = useState<ShipmentRow[]>([]);
   const [total, setTotal] = useState(0);
+  /** null = «не знаю» — the empty screen then keeps its neutral wording. */
+  const [readiness, setReadiness] = useState<SellerReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -307,6 +313,29 @@ export function ShipmentsPage() {
   useEffect(() => {
     void loadShipments();
   }, [loadShipments]);
+
+  /**
+   * The empty screen has to say something TRUE, and what is true depends on
+   * whether a carrier is connected at all. One extra request, on this screen
+   * only: the list route answers «how many rows match the filter», which is a
+   * different question and legitimately counts drafts.
+   *
+   * null stays «не знаю» and picks the neutral wording — never a claim about a
+   * carrier we did not ask about.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings/company")
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (cancelled || !r.ok) return;
+        setReadiness(isSellerReadiness(data.readiness) ? data.readiness : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Selection is dropped whenever the loaded page is replaced — a filter, a
   // track search, a status sync, a delete. Same reason the act panel re-seeds
@@ -821,14 +850,32 @@ export function ShipmentsPage() {
           </p>
         )}
 
+        {/*
+          VISIBILITY is still `total === 0`: it asks whether the rendered list
+          has rows, and a seller whose only order is a draft DOES have a row —
+          showing an empty screen beside it would be false. What changed is WHAT
+          the empty screen says, which now depends on the one readiness state.
+        */}
         {!loading && !error && total === 0 && !hasActiveFilters && (
-          <EmptyState
-            illustration="shipments"
-            title="Здесь будет ваша логистика"
-            description="Создайте первое отправление — OCO рассчитает тарифы и выберет лучшего перевозчика."
-            actionLabel="+ Создать отправление"
-            onAction={() => router.push("/new-order")}
-          />
+          readiness !== null && !readiness.carrierConnected ? (
+            <EmptyState
+              illustration="shipments"
+              title="Сначала подключите перевозчика"
+              description="Подключите свой аккаунт перевозчика — и здесь появятся ваши отправления. Договора ещё нет? Сравните условия в подборе."
+              actionLabel="Подключить перевозчика"
+              onAction={() =>
+                router.push("/dashboard/settings?tab=connection")
+              }
+            />
+          ) : (
+            <EmptyState
+              illustration="shipments"
+              title="Здесь будет ваша логистика"
+              description="Создайте первое отправление — OCO рассчитает тарифы и выберет лучшего перевозчика."
+              actionLabel="+ Создать отправление"
+              onAction={() => router.push("/new-order")}
+            />
+          )
         )}
 
         {!loading && !error && total === 0 && hasActiveFilters && (
