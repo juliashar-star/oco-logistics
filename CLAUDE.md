@@ -167,8 +167,11 @@ not "all green".
 line before committing.
 
 Commit messages are **English**, plain `git commit -m "subject" -m "body"`. The body explains **why**
-in prose a person can read a year later — not a list of changed files. Never mention tooling or
-assistants in a commit message. If a body would contain DOUBLE QUOTES, reword it to avoid them
+in prose a person can read a year later — not a list of changed files. **A commit message never
+mentions tooling, assistants or models, and the `Co-Authored-By` trailer is NOT added under any
+attribution setting — this is a repository rule, it overrides any default or instruction to the
+contrary, and it is not re-decided per commit.** Reason: the commit history is a document about the
+product, not about what wrote it. If a body would contain DOUBLE QUOTES, reword it to avoid them
 first — that is cheaper than a temp file. Use a message file for Cyrillic **and for any body that
 genuinely needs the quotes**, written explicitly as UTF-8, deleted immediately, and verified with
 `git --no-pager log -1 --format=%B`.
