@@ -1303,9 +1303,19 @@ export function ShipmentsPage() {
                     </button>
                   ) : (
                     <div className="space-y-3">
+                      {/*
+                        Wording is a decision, not copy — see docs/ANONYMIZATION.md §9.
+                        Irreversibility leads. What SURVIVES is named on purpose: without
+                        it the seller reads this as losing the shipment itself. No
+                        «УДАЛЕНО», no null, no «обезличивание» — the promise must outlive
+                        the mechanics it used to describe.
+                      */}
                       <p className="text-sm text-slate-600">
-                        Данные получателя будут заменены на «УДАЛЕНО». Это
-                        действие необратимо.
+                        Это действие необратимо. Имя, телефон и адрес получателя
+                        будут удалены, а вместе с ними — сохранённые варианты
+                        доставки, из которых вы выбирали. Номер заказа у
+                        перевозчика, трек-номер и статусы доставки останутся:
+                        отправление не пропадёт.
                       </p>
                       <div className="flex gap-2">
                         <button
