@@ -198,6 +198,17 @@ git`. Measured 25.08: no commit is created and staging is left intact, so the re
 
 Quote git paths containing `[id]` — git reads brackets as a character class.
 
+**A text that must be reproduced VERBATIM and is no longer in context is asked
+for again, never reconstructed.** This covers a commit message dictated by the
+human, a seller-facing string, a quoted clause — anything whose value is that it
+is exactly what was written. Long conversations get compacted, and compaction
+keeps a SUMMARY of what was said, not the words: twice on 04.09.2026 a commit
+message supplied word for word survived only as «use the exact message
+supplied». **Stop and ask for it again.** A paraphrase is not the same text, and
+it is indistinguishable from the real one afterwards — the commit history would
+record the retelling as the human's own words. Asking costs one message; the
+wrong text is permanent.
+
 ## Seller-facing Russian
 
 - A status says **where the parcel is** or **what happened** — never how we feel about it. A return is
