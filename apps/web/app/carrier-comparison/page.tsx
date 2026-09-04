@@ -93,11 +93,23 @@ function formatHealthStatus(carrier: Carrier): string | null {
   return null;
 }
 
+/**
+ * WRITTEN FOR THE READER OF THIS PAGE, who is not our seller yet.
+ *
+ * The dash said nothing at all. The obvious replacement — «подключение через
+ * OCO пока не построено» — was rejected: that is a statement about US, and this
+ * visitor needs to know what THEY can do, not what state our code is in. «Пока»
+ * also reads as a promise of a date we have not given.
+ *
+ * So the negative case names the route that is actually open to them: a direct
+ * contract with the carrier. True for every carrier on this table, including the
+ * two we connect — with those, OCO then drives the seller's own account.
+ */
 function formatOcoAvailability(carrier: Carrier): string {
   if (carrier.connectableViaOco) {
-    return "Доступен для подключения";
+    return "Подключается через OCO";
   }
-  return "—";
+  return "Договор напрямую с перевозчиком";
 }
 
 export default function CarrierComparisonPage() {

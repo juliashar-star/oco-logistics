@@ -10,9 +10,9 @@ import {
   isCarrierConnectionRequestBlocked,
   recordCarrierConnectionRequestAttempt,
 } from "@/lib/auth/rate-limit";
-import { fetchConnectedCarriers } from "@/lib/carrier-picker/connected-carriers";
 import { formatDateMoscow } from "@/lib/date/format-date-moscow";
 import { prisma } from "@/lib/db";
+import { requestCarrierConnection } from "@/lib/carriers/request-carrier-connection";
 
 export const POST = withAuth(async (request, user) => {
   try {
@@ -28,39 +28,50 @@ export const POST = withAuth(async (request, user) => {
     const body = await request.json();
     const providerKey = String(body.providerKey ?? "").trim();
 
-    const carrier = CARRIER_REGISTRY.find((c) => c.providerKey === providerKey);
-    if (!carrier) {
+    // WHICH FIELDS AND WHICH REFUSALS is decided by the service, not here — a
+    // guard living in a route is a guard no test reaches, and this one also
+    // exists in the picker's markup, where anyone with a terminal walks past it.
+    const result = await requestCarrierConnection(prisma, {
+      companyId: user.companyId,
+      providerKey,
+    });
+
+    // All four refusals answer 400, like the two that were here before: none of
+    // them is a state conflict, they are all «this action does not apply».
+    if (result.status === "unknown_provider") {
       return NextResponse.json({ error: "Неизвестный перевозчик" }, { status: 400 });
     }
-    if (carrier.healthStatus === "discontinued") {
+    if (result.status === "discontinued") {
       return NextResponse.json(
         { error: "Этот перевозчик больше не работает" },
         { status: 400 },
       );
     }
-
-    const connectedCarriers = await fetchConnectedCarriers(user.companyId);
-    if (connectedCarriers?.includes(providerKey)) {
+    if (result.status === "already_connected") {
       return NextResponse.json(
         { error: "Этот перевозчик уже подключён" },
         { status: 400 },
       );
     }
-
-    const existing = await prisma.carrierConnectionRequest.findUnique({
-      where: { companyId_providerKey: { companyId: user.companyId, providerKey } },
-    });
-    if (existing) {
+    if (result.status === "connectable_by_oco") {
+      return NextResponse.json(
+        {
+          error:
+            "Этого перевозчика можно подключить прямо сейчас — заявка не нужна. Откройте настройки, вкладка «Подключение».",
+        },
+        { status: 400 },
+      );
+    }
+    if (result.status === "already_requested") {
       return NextResponse.json({
         ok: true,
         alreadyRequested: true,
-        createdAt: existing.createdAt.toISOString(),
+        createdAt: result.createdAt.toISOString(),
       });
     }
 
-    const created = await prisma.carrierConnectionRequest.create({
-      data: { companyId: user.companyId, providerKey },
-    });
+    const carrier = CARRIER_REGISTRY.find((c) => c.providerKey === providerKey)!;
+    const created = { createdAt: result.createdAt };
 
     const company = await prisma.company.findUnique({ where: { id: user.companyId } });
     try {

@@ -7,6 +7,11 @@ import {
   type RankedCarrier,
 } from "@oco/core";
 import { Badge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button-link";
+import {
+  describeCarrierPickerAction,
+  isRequestAction,
+} from "@/lib/carriers/carrier-picker-action";
 import { EmptyState } from "@/components/ui/empty-state";
 
 const PROFILE_NULL_REASONS: Record<string, string> = {
@@ -94,6 +99,24 @@ export function CarrierPickerDashboardForm() {
 
   function getPendingRequestAt(carrier: CarrierWithPending): string | null {
     return pendingRequestAtOverrides[carrier.providerKey] ?? carrier.pendingRequestAt ?? null;
+  }
+
+  /**
+   * The card's whole decision, in one call. `discontinued` is passed for
+   * completeness rather than because it can happen: ranking drops discontinued
+   * carriers in BOTH of its paths — rank.ts:237 in the main pass over the
+   * registry and rank.ts:290 in the profile-matched one — so that branch is
+   * unreachable from this screen today. The function is shared, though, and a
+   * card that silently assumed otherwise would be a trap for whoever changes
+   * the ranking.
+   */
+  function actionFor(carrier: CarrierWithPending) {
+    return describeCarrierPickerAction({
+      providerKey: carrier.providerKey,
+      isConnected: carrier.isConnected,
+      pendingRequestAt: getPendingRequestAt(carrier),
+      discontinued: carrier.healthStatus === "discontinued",
+    });
   }
 
   async function handleConnectionRequest(providerKey: string) {
@@ -326,7 +349,14 @@ export function CarrierPickerDashboardForm() {
             />
           ) : (
             <>
-              {carriers.some((carrier) => !carrier.isConnected) && (
+              {/*
+                ONLY WHEN SOMEONE ON THIS LIST ACTUALLY NEEDS A REQUEST. The old
+                condition was «any carrier not connected», so the paragraph
+                explained a button that, for CDEK and Yandex, should never have
+                been there — and it appeared even on a list where every card
+                offers a connection instead.
+              */}
+              {carriers.some((carrier) => isRequestAction(actionFor(carrier))) && (
                 <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500">
                   Договоры и аккаунты со службами доставки вы оформляете напрямую с перевозчиком.
                   Кнопка «Запросить техническую интеграцию» — это сигнал команде OCO, что вам нужна
@@ -336,13 +366,17 @@ export function CarrierPickerDashboardForm() {
               )}
               <ol className="space-y-3">
               {carriers.map((carrier, index) => {
-                const contractInstruction = !carrier.isConnected
-                  ? formatContractInstruction(carrier)
-                  : null;
-                const ocoNote = !carrier.isConnected ? formatOcoConnectionNote(carrier) : null;
-                const pendingRequestAt = !carrier.isConnected
-                  ? getPendingRequestAt(carrier)
-                  : null;
+                // ONE DECISION, taken by a function a test can reach. This used
+                // to be a chain of `!carrier.isConnected` in the markup, which
+                // never asked whether OCO can connect the carrier itself — so a
+                // seller without CDEK was invited to request an integration for
+                // CDEK.
+                const action = actionFor(carrier);
+                const contractInstruction =
+                  action === "none" ? null : formatContractInstruction(carrier);
+                const ocoNote = action === "none" ? null : formatOcoConnectionNote(carrier);
+                const pendingRequestAt =
+                  action === "request_pending" ? getPendingRequestAt(carrier) : null;
                 const requestStatus = requestStatuses[carrier.providerKey] ?? "idle";
                 const requestError =
                   typeof requestStatus === "string" &&
@@ -376,7 +410,7 @@ export function CarrierPickerDashboardForm() {
                           >
                             {carrier.isConnected ? "Подключён" : "Не подключён"}
                           </Badge>
-                          {!carrier.isConnected && pendingRequestAt && (
+                          {pendingRequestAt && (
                             <Badge className="bg-info-soft text-info">
                               Заявка на интеграцию отправлена {formatRequestDate(pendingRequestAt)}
                             </Badge>
@@ -390,7 +424,21 @@ export function CarrierPickerDashboardForm() {
                         {ocoNote && (
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{ocoNote}</p>
                         )}
-                        {!carrier.isConnected && !pendingRequestAt && (
+                        {/*
+                          THE WAY OUT OF THE FUNNEL. A seller who came here from
+                          «нет договора — сравните условия» could compare and
+                          then had nowhere to go: the card offered only a request
+                          to OCO, even for a carrier OCO connects in a minute.
+                        */}
+                        {action === "connect" && (
+                          <ButtonLink
+                            href="/dashboard/settings?tab=connection"
+                            className="mt-2"
+                          >
+                            Подключить
+                          </ButtonLink>
+                        )}
+                        {action === "request" && (
                           <button
                             type="button"
                             disabled={requestStatus === "loading"}

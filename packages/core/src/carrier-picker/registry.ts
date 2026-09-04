@@ -137,6 +137,28 @@ export type Carrier = {
   carrierContractEstimate?: SourcedFact<string>;
   /** Внутренняя оценка OCO — пока не заполняем. */
   ocoConnectionEstimate?: string;
+  /**
+   * УМЕЕТ ЛИ OCO ПОДКЛЮЧИТЬ ЭТОГО ПЕРЕВОЗЧИКА — то же самое, что говорит
+   * `CARRIER_CREDENTIAL_FIELDS`, но выставленное на витрину.
+   *
+   * ПОЧЕМУ ИХ ДВА, И ЭТО НЕ ДУБЛЬ. `CARRIER_CREDENTIAL_FIELDS`
+   * (`apps/web/lib/carriers/carrier-credential-fields.ts`) — ФАКТ О КОДЕ: у
+   * перевозчика есть набор полей, проверяльщик и форма. Он живёт в `apps/web`,
+   * потому что там же живёт подключение, и `packages/core` о нём знать не может
+   * и не должен: реестр не зависит от приложения. Это поле — ОБЕЩАНИЕ РЫНКУ:
+   * его читает публичная страница сравнения перевозчиков, колонка «Доступность
+   * в OCO», и читает её тот, кто ещё не наш продавец.
+   *
+   * ДО 04.09.2026 ЗДЕСЬ У ВСЕХ ДВЕНАДЦАТИ СТОЯЛО `true` — включая boxberry,
+   * который снят с обслуживания, и девять перевозчиков без адаптера. Поле,
+   * отвечающее «да» про всех, не сообщает ничего, а на публичной странице это
+   * было невыполнимым обещанием. Теперь значения честные: `true` только там,
+   * где подключение действительно построено.
+   *
+   * РАЗОЙТИСЬ ИМ НЕ ДАЁТ СТОРОЖ — `tests/connectable-via-oco.test.mjs`. Он
+   * стоит в верхнеуровневых тестах, а не внутри пакета: это единственное место,
+   * которое видит обе стороны, не заставляя ни один пакет импортировать другой.
+   */
   connectableViaOco?: boolean;
   /** Подтверждено реальным вызовом APIShip GET /lists/services
    * (07.07.2026) — только rupost имеет автоматизируемый через API
@@ -179,7 +201,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     supportsAutomatedFragileHandling: true,
     weightLimits: {
       value: { applicable: true, maxWeightKg: 20 },
@@ -197,7 +219,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     healthStatus: "discontinued",
     healthNote:
       "Прекратила самостоятельную работу с 01.10.2025 — логистическая инфраструктура и ПВЗ переходят в состав «Яндекс Доставки» после закрытия сделки о приобретении (объявлена 16.04.2025, закрыта юридически 24.04.2025). Источники: yandex.ru/company/news/01-16-04-2025; interfax.ru/business/1022482; dp.ru/a/2025/09/01/zakritie-boxberry-usilit-konsolidaciju (проверено 06.07.2026).",
-    connectableViaOco: true,
+    connectableViaOco: false,
   },
   // TODO: weightLimits pending — see docs/research/apiship-yataxi-tariffs-2026-07-08.json and open questions log
   {
@@ -332,7 +354,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: { applicable: true, maxWeightKg: 30, maxSumThreeSidesCm: 180 },
       sourceUrl: "https://dpd.ru/vse-tarify",
@@ -351,7 +373,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: { applicable: true, maxWeightKg: 10 },
       sourceUrl: "https://www.x5.ru/",
@@ -370,7 +392,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       sourceUrl: "https://dostavista.ru/for-legals",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: {
         applicable: false,
@@ -393,7 +415,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
   },
   {
     providerKey: "pecom",
@@ -407,7 +429,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       sourceUrl: "https://pecom.ru/stat_klientom/",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: {
         applicable: false,
@@ -428,7 +450,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     // maxSumThreeSidesCm: 0.54+0.39+0.39 m per official per-place limit on dellin.ru/ltl/parcels/
     weightLimits: {
       value: { applicable: true, maxWeightKg: 30, maxLongestSideCm: 54, maxSumThreeSidesCm: 132 },
@@ -447,7 +469,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
       value: "требует уточнения у перевозчика",
       verifiedAt: "2026-07-06",
     },
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: {
         applicable: false,
@@ -464,7 +486,7 @@ export const CARRIER_REGISTRY: Carrier[] = [
     methods: ["terminal", "courier"],
     notes: "сборные/паллетные грузы, регионы",
     healthStatus: "active",
-    connectableViaOco: true,
+    connectableViaOco: false,
     weightLimits: {
       value: {
         applicable: false,

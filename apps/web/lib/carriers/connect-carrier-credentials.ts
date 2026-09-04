@@ -42,32 +42,23 @@ import { mergeSubmittedCredentials } from "./merge-submitted-credentials";
  */
 
 /**
- * One required field of a provider's credential bag.
- * `allowed` pins a closed value set where the adapter has one.
+ * MOVED to `./carrier-credential-fields`, re-exported here so every existing
+ * importer keeps working unchanged. The move is not tidying: this module's
+ * import chain reaches `node:crypto`, and the carrier picker — a CLIENT
+ * component — now asks the same map whether a carrier can be connected. A leaf
+ * module with no imports is the only shape that can answer both sides without
+ * dragging a Node builtin into the browser bundle.
  */
-export type CarrierCredentialFieldSpec = {
-  name: string;
-  allowed?: readonly string[];
-};
+import {
+  CARRIER_CREDENTIAL_FIELDS,
+  type CarrierCredentialFieldSpec,
+} from "./carrier-credential-fields";
 
-/**
- * Required fields per providerKey — MIRRORS the adapters' own assert*Credentials
- * (assertYandexCredentials, assertCdekCredentials). Kept here so the service can
- * name WHICH field is wrong, which those asserts cannot do. The adapter stays the
- * authority: anything this spec lets through is still judged by the real verifier,
- * and a drift test proves a spec-complete bag is not rejected as malformed.
- */
-export const CARRIER_CREDENTIAL_FIELDS: Readonly<
-  Record<string, readonly CarrierCredentialFieldSpec[]>
-> = {
-  yataxi: [{ name: "platformStationId" }, { name: "token" }],
-  cdek: [
-    { name: "account" },
-    { name: "securePassword" },
-    // assertCdekCredentials accepts only "1" | "2".
-    { name: "contractType", allowed: ["1", "2"] },
-  ],
-};
+export {
+  CARRIER_CREDENTIAL_FIELDS,
+  isConnectableByOco,
+  type CarrierCredentialFieldSpec,
+} from "./carrier-credential-fields";
 
 export type ConnectCarrierCredentialsResult =
   /** Verified by the carrier and persisted. */
