@@ -9,6 +9,10 @@ import { isCarrierFormComplete } from "@/lib/carriers/is-carrier-form-complete";
 import { pickSuppliedCredentials } from "@/lib/carriers/pick-supplied-credentials";
 import { shouldAcceptFieldValue } from "@/lib/carriers/should-accept-field-value";
 import type { CarrierConnectField } from "@/lib/carriers/carrier-connect-fields";
+import {
+  carrierAnchorTarget,
+  carrierSectionId,
+} from "@/lib/carriers/resolve-carrier-anchor";
 
 /**
  * The «Подключение» tab: one card per carrier the connect service can handle.
@@ -97,7 +101,12 @@ async function fetchConnections(): Promise<ConnectionsFetch> {
   }
 }
 
-export function CarrierConnectionsPanel() {
+export function CarrierConnectionsPanel({
+  scrollToCarrier = null,
+}: {
+  /** Already validated on the server; null means «no card was asked for». */
+  scrollToCarrier?: string | null;
+} = {}) {
   const [carriers, setCarriers] = useState<CarrierConnection[] | null>(null);
   const [values, setValues] = useState<FormValues>({});
   const [interacted, setInteracted] = useState<InteractedFields>({});
@@ -112,9 +121,36 @@ export function CarrierConnectionsPanel() {
    */
   const inFlight = useRef<Set<string>>(new Set());
 
+  /** Scrolled already — a later reload must not yank the page back. */
+  const scrolledTo = useRef<string | null>(null);
+
   useEffect(() => {
     void loadConnections();
   }, []);
+
+  /**
+   * AFTER THE LIST EXISTS, not on navigation. A browser anchor cannot do this:
+   * the cards arrive from a fetch, so at the moment the URL is followed there is
+   * no element to jump to.
+   *
+   * Runs once per requested key. `loadConnections` runs again after every
+   * successful connect, and re-scrolling then would drag the seller away from
+   * the card they had just filled in.
+   */
+  useEffect(() => {
+    if (carriers === null) return;
+    const target = carrierAnchorTarget(
+      scrollToCarrier,
+      carriers.map((carrier) => carrier.providerKey),
+    );
+    if (target === null || scrolledTo.current === target) return;
+    scrolledTo.current = target;
+    // No element is not an error: the key was valid and the card simply is not
+    // on this list. Nothing happens, exactly as when no carrier was asked for.
+    document
+      .getElementById(carrierSectionId(target))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [carriers, scrollToCarrier]);
 
   async function loadConnections() {
     setLoading(true);
@@ -327,6 +363,7 @@ export function CarrierConnectionsPanel() {
         return (
           <section
             key={carrier.providerKey}
+            id={carrierSectionId(carrier.providerKey)}
             className="rounded-xl border border-slate-200 p-4"
             aria-label={carrier.displayName}
           >

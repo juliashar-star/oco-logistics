@@ -19,11 +19,14 @@ const TABS: { id: TabId; label: string }[] = [
 type UserSettingsTabsProps = {
   initialName: string;
   initialTab?: TabId;
+  /** Validated on the server; null means «no card was asked for». */
+  initialCarrier?: string | null;
 };
 
 export function UserSettingsTabs({
   initialName,
   initialTab = "profile",
+  initialCarrier = null,
 }: UserSettingsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
@@ -104,7 +107,7 @@ export function UserSettingsTabs({
               Здесь вы подключите своих перевозчиков.
             </p>
             <div className="mt-4">
-              <CarrierConnectionsPanel />
+              <CarrierConnectionsPanel scrollToCarrier={initialCarrier} />
             </div>
           </div>
         )}

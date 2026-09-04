@@ -1,4 +1,5 @@
 import { CARRIER_REGISTRY } from "@oco/core";
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 
 import type { CarrierConnectField } from "./carrier-connect-fields";
 
@@ -36,11 +37,16 @@ export function buildCarrierConnectionsView(
   const connected = new Set(connectedProviderKeys);
 
   return Object.entries(descriptors).map(([providerKey, fields]) => {
-    const displayName = CARRIER_REGISTRY.find(
+    // EXISTENCE and NAME are two questions, asked separately on purpose.
+    //
+    // Existence decides whether to fail: this tab is where a seller types
+    // CREDENTIALS, and asking for secrets under an anonymous heading is worse
+    // than failing loudly. Elsewhere in the cabinet an unnamed carrier degrades
+    // to «Другой перевозчик»; here it must not.
+    const known = CARRIER_REGISTRY.some(
       (carrier) => carrier.providerKey === providerKey,
-    )?.displayName;
-
-    if (displayName === undefined) {
+    );
+    if (!known) {
       throw new Error(
         `buildCarrierConnectionsView: no registry display name for "${providerKey}"`,
       );
@@ -48,7 +54,10 @@ export function buildCarrierConnectionsView(
 
     return {
       providerKey,
-      displayName,
+      // The NAME comes from the cabinet's one naming function, not from a
+      // second read of the registry. This tab used to resolve it itself, which
+      // made three sources of one carrier's name inside one cabinet.
+      displayName: carrierCabinetName(providerKey),
       isConnected: connected.has(providerKey),
       fields,
     };

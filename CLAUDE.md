@@ -64,6 +64,21 @@ Efficiency and elegance come after all three.
     cabinet the carrier is named for real — the seller connected it with their own credentials, so
     hiding it from them buys nothing. `Carrier.name` in the database is the provider key in capital
     letters, not a name: it must never reach a screen.
+    **In the cabinet the name comes from `carrierCabinetName` and from nowhere else.** On the
+    public side there are THREE screens and they do not behave alike: `/carrier-comparison` and
+    `/carrier-picker` call `providerSellerDisplayName`, which falls back to the registry's REAL
+    name for any key the two-entry mask map does not cover — so ten of twelve carriers are named
+    there in the open, and that leak is a recorded pre-launch item, not the intended state. The
+    landing page is stricter than both: it reads the mask map directly and DROPS a row it cannot
+    mask, which is why it does not leak. Copy the landing, not the other two.
+    **`tests/carrier-name-boundary.test.mjs` enforces the split across the three ways a name can
+    be obtained**, because one was not enough: it fails on a cabinet file calling the masking
+    helper, on a file reading `CARRIER_REGISTRY` outside four named places, and on one importing
+    `PROVIDER_SELLER_DISPLAY_NAMES` anywhere but the landing — the connection tab took its name
+    straight off the registry until 04.09, touching no helper at all. What it still cannot catch
+    is written beside it in that file; read that before trusting it. The rule was written on 18.08
+    and quietly broken by the carrier picker until then; a rule nothing watches is a rule that
+    drifts.
 
 ## How to work
 

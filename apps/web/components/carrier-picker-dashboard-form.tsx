@@ -1,11 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import {
-  CATEGORY_TO_PROFILE,
-  providerSellerDisplayName,
-  type RankedCarrier,
-} from "@oco/core";
+import { CATEGORY_TO_PROFILE, type RankedCarrier } from "@oco/core";
+// SUBPATH, not the barrel: this is a client component, and the cabinet naming
+// module imports only the registry, which imports nothing at all.
+import { carrierCabinetName } from "@oco/core/carrier-adapter/carrier-cabinet-names";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import {
@@ -47,7 +46,7 @@ function formatRequestDate(iso: string): string {
 const CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER = "требует уточнения у перевозчика";
 
 function formatContractInstruction(carrier: RankedCarrier): string {
-  const name = providerSellerDisplayName(carrier.providerKey) ?? carrier.displayName;
+  const name = carrierCabinetName(carrier.providerKey);
   const base = `Вам требуется заключить прямой договор с перевозчиком. Обратитесь в ${name} для заключения договора.`;
   const estimate = carrier.carrierContractEstimate?.value;
   if (estimate && estimate !== CONTRACT_ESTIMATE_UNKNOWN_PLACEHOLDER) {
@@ -398,8 +397,7 @@ export function CarrierPickerDashboardForm() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-slate-900">
-                            {providerSellerDisplayName(carrier.providerKey) ??
-                              carrier.displayName}
+                            {carrierCabinetName(carrier.providerKey)}
                           </p>
                           <Badge
                             className={
@@ -432,7 +430,13 @@ export function CarrierPickerDashboardForm() {
                         */}
                         {action === "connect" && (
                           <ButtonLink
-                            href="/dashboard/settings?tab=connection"
+                            // NAMES THE CARRIER, so the seller lands on the card
+                            // they were reading about rather than on a tab and a
+                            // hunt. The key is validated server-side against the
+                            // credential map before it reaches the markup.
+                            href={`/dashboard/settings?tab=connection&carrier=${encodeURIComponent(
+                              carrier.providerKey,
+                            )}`}
                             className="mt-2"
                           >
                             Подключить
