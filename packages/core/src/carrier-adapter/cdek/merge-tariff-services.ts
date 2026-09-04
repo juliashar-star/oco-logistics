@@ -104,17 +104,43 @@ function sumServices(services: unknown): number | null {
 }
 
 /**
- * CDEK error codes on a failed tariff row that mean «this parcel is not charged
- * for the service», NOT «the call went wrong».
+ * CDEK error codes on a failed tariff row that mean «the fee cannot be QUOTED
+ * here», NOT «the call went wrong». The row is kept and priced without the fee.
  *
  * MEASURED 14.08 on the PRODUCTION contract, 38 rows, all with status "false":
- * 37 answered `ve_additional_service_unavailable` («Доп услуга … недоступна» —
- * insurance is not enabled on this contract at all) and one answered
- * `ve_as_insurance_min_declared_cost` («минимальная объявленная стоимость —
- * 3000» against a declared value of 1000 ₽). In both the carrier is telling us
+ * 37 answered `ve_additional_service_unavailable` («Доп услуга … недоступна»)
+ * and one answered `ve_as_insurance_min_declared_cost` («минимальная
+ * объявленная стоимость — 3000» against a declared value of 1000 ₽).
+ *
+ * CORRECTED 04.09.2026 — WHAT THIS COMMENT SAID BEFORE WAS WRONG, and it was
+ * wrong in the direction that hides money. It said the carrier is «telling us
  * there is no fee to add, so the bare tarifflist price is CORRECT, not
- * understated — which is the whole distinction: a call that FAILED is not the
- * same as a service that does not APPLY.
+ * understated». Reading the contract documents showed the opposite:
+ *
+ *   Приложение №1 to the Регламент (ред. 10.07.2026): «Для Клиентов с договором
+ *   по типу ИМ для всех типов заказов ОБЯЗАТЕЛЬНЫЙ сбор 0,75% от объявленной
+ *   стоимости Отправления», and the declared-value field is mandatory for every
+ *   contract type. See docs/CDEK.md §2.4.
+ *
+ * Our production contract is type ИМ. So `ve_additional_service_unavailable`
+ * does not mean «no fee applies» — it means «you cannot ORDER this as a
+ * service, because it is charged automatically». **THE PRICE THIS FUNCTION
+ * PRODUCES IS UNDERSTATED by the mandatory fee**, and by how much depends on
+ * the declared value: 0.75 % of it, so 375 ₽ on a 50 000 ₽ parcel. The seller
+ * sees the shortfall only in the УПД, a week later.
+ *
+ * THE BEHAVIOUR STAYS AS IT IS, and that is deliberate, not neglect. Sending
+ * INSURANCE to the calculator is not an option: measured three times (14.08,
+ * 24.08, 28.08) it fails the whole list — 37 of 38 rows on tariffAndService,
+ * HTTP 400 on the per-tariff method. Keeping the row at the bare price is still
+ * better than dropping the carrier from the seller's screen. What must change
+ * is what the SELLER is told, and that is a product decision recorded in
+ * docs/ROADMAP.md, not something to fix inside this function.
+ *
+ * NOT MEASURED, and it blocks doing the arithmetic ourselves: which base CDEK
+ * applies the 0.75 % to on the invoice. The quote carries no declared value at
+ * all, while the order sends it as `packages[].items[].cost` — different bases.
+ * Only a real УПД answers this (docs/LIVE_ENVIRONMENT_TASKS.md, task 1).
  *
  * EXACT CODES, NEVER A PREFIX OR A SUBSTRING. An unknown code must never
  * silently come to mean «no fee»: that is exactly how a real surcharge would

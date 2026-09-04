@@ -138,6 +138,10 @@ NOT decided, and what is NOT verified.
    `.next` is shared and building underneath a running dev server breaks it. **A new entry in
    `packages/core/package.json` `exports` requires a dev-server restart:** Next reads that map at
    startup, so correct code will keep reporting "Package path is not exported" until it is bounced.
+   **ANY edit under `packages/core` counts, comments included.** A comment cannot break a bundle, and
+   that is exactly why the exception is dangerous: deciding a change is «only a comment» is a
+   judgement, judgement is made under time pressure, and one day it will be wrong about a file that
+   was not only a comment. A rule re-decided per case is not a rule. The build costs a minute.
 
 **A guard built on a fallback does not guard.** A consistency test must assert KEY PRESENCE in the
 second structure, not the resolved value, whenever the lookup has a default — otherwise the very
