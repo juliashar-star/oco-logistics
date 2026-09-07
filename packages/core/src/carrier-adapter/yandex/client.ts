@@ -18,6 +18,7 @@ import type {
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "@oco/core/carrier-adapter/types";
+import { computePlaceFromItems } from "../compute-place-from-items";
 import {
   CarrierLabelsNotReadyError,
   CarrierOfferExpiredError,
@@ -453,13 +454,11 @@ function buildPlatformOrderBody(
   choice: YandexDestinationChoice,
 ): Record<string, unknown> {
   const placeBarcode = `${input.clientNumber}-1`;
-  const totalWeightG = input.items.reduce(
-    (sum, item) => sum + item.weightG * item.quantity,
-    0,
-  );
-  const boxDx = Math.max(...input.items.map((item) => item.lengthCm ?? 1));
-  const boxDy = Math.max(...input.items.map((item) => item.widthCm ?? 1));
-  const boxDz = Math.max(...input.items.map((item) => item.heightCm ?? 1));
+  const place = computePlaceFromItems(input.items);
+  const totalWeightG = place.weightG;
+  const boxDx = place.lengthCm;
+  const boxDy = place.widthCm;
+  const boxDz = place.heightCm;
 
   const { firstName, lastName } = splitRecipientName(input.recipient.contactName);
 
