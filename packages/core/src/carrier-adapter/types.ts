@@ -173,6 +173,17 @@ export type CarrierOrderItem = {
   vatRate?: number;
 };
 
+export type CarrierOrderPlace = {
+  /** Номер места в заказе, начиная с 1. Уникален внутри заказа. */
+  number: number;
+  weightG: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  /** Позиции, лежащие ИМЕННО в этом месте. */
+  items: CarrierOrderItem[];
+};
+
 export type CarrierCodInfo = {
   enabled: boolean;
   amountRub?: number;
@@ -186,6 +197,13 @@ export type CarrierCreateOrderInput = {
   sender: CreateOrderAddress;
   recipient: CreateOrderAddress;
   items: CarrierOrderItem[];
+  /**
+   * Многоместное отправление. Когда не задано — поведение прежнее: одно место,
+   * синтезируемое из items. Задано — продавец объявил коробки сам.
+   * НЕ ВСЕ ПЕРЕВОЗЧИКИ ЭТО УМЕЮТ: у Экспресса (claims/*) понятия места нет вовсе.
+   * Поддержку читать из карты возможностей, а не предполагать.
+   */
+  places?: CarrierOrderPlace[];
   cod?: CarrierCodInfo;
   assessedCostRub?: number;
   /** PVZ identifier — string to support UUIDs (e.g. Yandex) as well as numeric ids. */
