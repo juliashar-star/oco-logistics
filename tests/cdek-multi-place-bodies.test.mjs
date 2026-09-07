@@ -44,8 +44,8 @@ function multiPlaceInput(overrides = {}) {
     recipient: { countryCode: "RU", contactName: "Тест Тестов", phone: "+79000000000", city: "Москва" },
     items: [ITEM_A, ITEM_B, ITEM_C],
     places: [
-      { number: 1, weightG: 1000, lengthCm: 20, widthCm: 20, heightCm: 20, items: [ITEM_A] },
-      { number: 2, weightG: 1000, items: [ITEM_B, ITEM_C] },
+      { weightG: 1000, lengthCm: 20, widthCm: 20, heightCm: 20, items: [ITEM_A] },
+      { weightG: 1000, items: [ITEM_B, ITEM_C] },
     ],
     pointOutId: "MSK65",
     ...overrides,
@@ -76,6 +76,112 @@ test("order body: two packages, numbers 1 and 2, ware_key runs across the order"
       ],
     },
   ]);
+});
+
+/**
+ * THE TWO POINTS MUST AGREE ON WHAT THEY REFUSE. Before 07.09.2026 the order
+ * builder guarded input.items while the quote guarded the normalised list, so
+ * an order carrying places and an empty items array was PRICED and then refused
+ * at submit — the seller saw a price for a shipment that could never be created.
+ */
+test("items:[] with declared places: the quote accepts it, and so does the order builder", async () => {
+  const input = multiPlaceInput({ items: [] });
+
+  const body = buildCdekOrderBody(input, OFFER_136, CREDS_TYPE1);
+  assert.equal(body.packages.length, 2);
+
+  const captured = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = stubFetch(captured);
+  try {
+    await withCdekBaseUrl(() => getOffers(input, CREDS_TYPE1));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.ok(captured.length > 0, "the quote must not refuse what the order accepts");
+  assert.equal(captured[0].body.packages.length, 2);
+});
+
+/**
+ * WORDING CHANGED 07.09.2026, and the two reference suites were edited with it —
+ * one line each, in tests/cdek-build-order-body.test.mjs and
+ * tests/cdek-get-offers.test.mjs. That was safe because a string assertion
+ * defends the WORDING, not the behaviour: the behaviour is defended by the
+ * deepEqual assertions against bodies measured on the carrier's sandbox, and
+ * those were not touched. The wording changed deliberately — the condition is
+ * now about places, not about items, because that is what both points check.
+ */
+test("no items and no places: BOTH points refuse, with the same message", async () => {
+  const input = multiPlaceInput({ items: [], places: undefined });
+
+  assert.throws(
+    () => buildCdekOrderBody(input, OFFER_136, CREDS_TYPE1),
+    (err) =>
+      err instanceof Error &&
+      err.message === "CDEK_INPUT_INVALID: at least one place is required",
+  );
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = stubFetch([]);
+  try {
+    await withCdekBaseUrl(() =>
+      assert.rejects(
+        () => getOffers(input, CREDS_TYPE1),
+        (err) =>
+          err instanceof Error &&
+          err.message === "CDEK_INPUT_INVALID: at least one place is required",
+      ),
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("a place with no items is refused by BOTH points", async () => {
+  const input = multiPlaceInput({
+    places: [{ weightG: 1000, items: [] }],
+  });
+
+  assert.throws(
+    () => buildCdekOrderBody(input, OFFER_136, CREDS_TYPE1),
+    (err) => err instanceof Error && err.message.startsWith("ORDER_PLACE_EMPTY:"),
+  );
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = stubFetch([]);
+  try {
+    await withCdekBaseUrl(() =>
+      assert.rejects(
+        () => getOffers(input, CREDS_TYPE1),
+        (err) => err instanceof Error && err.message.startsWith("ORDER_PLACE_EMPTY:"),
+      ),
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("no places: two items both reach the order body, in one package", () => {
+  const body = buildCdekOrderBody(
+    multiPlaceInput({ items: [ITEM_A, ITEM_B], places: undefined }),
+    OFFER_136,
+    CREDS_TYPE1,
+  );
+
+  assert.equal(body.packages.length, 1);
+  assert.deepEqual(
+    body.packages[0].items.map((item) => item.name),
+    ["Товар А", "Товар Б"],
+  );
+  assert.deepEqual(
+    body.packages[0].items.map((item) => item.ware_key),
+    ["ORDER-77-1", "ORDER-77-2"],
+  );
+  // 1000×1 + 600×1 = 1600 g, sides are the per-axis maximum.
+  assert.equal(body.packages[0].weight, 1600);
+  assert.equal(body.packages[0].length, 30);
+  assert.equal(body.packages[0].width, 20);
+  assert.equal(body.packages[0].height, 20);
 });
 
 test("order body: place without declared dimensions omits them entirely", () => {
@@ -158,7 +264,7 @@ test("quote body: one package per place, and NO number field on any of them", as
   }
 });
 
-test("quote INSURANCE on type 2 is the sum over ALL items, not the first line", async () => {
+test("quote INSURANCE counts QUANTITY: cost is per unit, so the total is Σ cost × amount", async () => {
   const captured = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = stubFetch(captured);
@@ -170,6 +276,13 @@ test("quote INSURANCE on type 2 is the sum over ALL items, not the first line", 
 
   const withServices = captured.find((call) => call.body.services !== undefined);
   assert.ok(withServices, "expected a body carrying services on contract type 2");
-  // 1000 + 500 + 250 = 1750 — the order's declared value, per Регламент п. 8.2.
-  assert.deepEqual(withServices.body.services, [{ code: "INSURANCE", parameter: "1750" }]);
+  // INVERTED 07.09.2026. This assertion previously expected "1750" — the sum of
+  // unitPriceRub with the quantity dropped — and that was a DEFECT pinned as
+  // behaviour, not behaviour worth pinning. `cost` is «Объявленная стоимость
+  // товара (за единицу товара…). С данного значения рассчитывается страховка»,
+  // and `amount` is required beside it
+  // (docs/research/cdek-declared-value-2026-08-13.md:20-23), so the order
+  // declares Σ cost × amount and the quote must ask for the same figure.
+  // 1000×1 + 500×1 + 250×2 = 2000.
+  assert.deepEqual(withServices.body.services, [{ code: "INSURANCE", parameter: "2000" }]);
 });

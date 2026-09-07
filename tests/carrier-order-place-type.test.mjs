@@ -66,18 +66,19 @@ test("input without places: items stay required and places is absent", () => {
   assert.equal(input.items.length, 2);
 });
 
-test("two places, one item in each: numbers are 1 and 2 and each carries its own item", () => {
+test("two places, one item in each: order is the array order, and each carries its own item", () => {
   const input = baseInput({
     places: [
-      { number: 1, weightG: 1000, lengthCm: 30, widthCm: 20, heightCm: 10, items: [ITEM_A] },
-      { number: 2, weightG: 300, lengthCm: 40, widthCm: 15, heightCm: 25, items: [ITEM_B] },
+      { weightG: 1000, lengthCm: 30, widthCm: 20, heightCm: 10, items: [ITEM_A] },
+      { weightG: 300, lengthCm: 40, widthCm: 15, heightCm: 25, items: [ITEM_B] },
     ],
   });
 
-  assert.deepEqual(
-    input.places.map((place) => place.number),
-    [1, 2],
-  );
+  // A place carries NO number: numbering belongs to the adapter, and the order
+  // of the places is the order of the array. See CarrierOrderPlace in types.ts.
+  for (const place of input.places) {
+    assert.equal("number" in place, false);
+  }
   assert.deepEqual(
     input.places.map((place) => place.items.map((item) => item.name)),
     [["Товар А"], ["Товар Б"]],
@@ -90,12 +91,12 @@ test("two places, one item in each: numbers are 1 and 2 and each carries its own
 test("one place holding TWO items: a single box with two products", () => {
   const input = baseInput({
     places: [
-      { number: 1, weightG: 1300, lengthCm: 40, widthCm: 20, heightCm: 25, items: [ITEM_A, ITEM_B] },
+      { weightG: 1300, lengthCm: 40, widthCm: 20, heightCm: 25, items: [ITEM_A, ITEM_B] },
     ],
   });
 
   assert.equal(input.places.length, 1);
-  assert.equal(input.places[0].number, 1);
+  assert.equal("number" in input.places[0], false);
   assert.equal(input.places[0].items.length, 2);
   assert.deepEqual(
     input.places[0].items.map((item) => item.name),
@@ -109,7 +110,7 @@ test("one place holding TWO items: a single box with two products", () => {
 test("place dimensions are optional: weight and items alone are a valid place", () => {
   const input = baseInput({
     items: [ITEM_A],
-    places: [{ number: 1, weightG: 1000, items: [ITEM_A] }],
+    places: [{ weightG: 1000, items: [ITEM_A] }],
   });
 
   assert.equal(input.places[0].lengthCm, undefined);

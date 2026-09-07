@@ -69,7 +69,9 @@ function buildPackageItem(item: CarrierOrderItem, wareKey: string) {
  * Pure builder for CDEK POST /v2/orders. No network.
  *
  * Measured rules (sandbox):
- * - packages[0].items is required (HTTP 400 v2_field_is_empty without it)
+ * - every packages[] entry must carry items (HTTP 400 v2_field_is_empty without
+ *   them) — measured on one package, and normalizeOrderPlaces refuses an empty
+ *   place before this builder is reached
  * - sender end is always from_location; never shipment_point in this slice
  *   (handoverMode is already encoded in the chosen tariff_code / delivery_mode,
  *   so the body does not express it)
@@ -81,14 +83,20 @@ export function buildCdekOrderBody(
   offer: CarrierOffer,
   credentials: CarrierCredentials,
 ): CdekOrderBody {
-  if (input.items.length === 0) {
-    throw new Error("CDEK_INPUT_INVALID: at least one item is required");
+  // SAME CHECK AS THE QUOTE, on the SAME list. Guarding input.items here while
+  // getOffers guarded the normalized list let an order with declared places and
+  // an empty items array be priced and then refused at submit.
+  const places = normalizeOrderPlaces(input);
+  if (places.length === 0) {
+    // WORD FOR WORD the same as getOffers. The seller must not get two different
+    // sentences for one input depending on which point spoke first.
+    throw new Error("CDEK_INPUT_INVALID: at least one place is required");
   }
 
   const creds = assertCdekCredentials(credentials);
   const tariffCode = parseTariffCodeFromOfferId(offer.offerId);
 
-  const packages = normalizeOrderPlaces(input).map((place) => {
+  const packages = places.map((place) => {
     const pkg: CdekOrderBody["packages"][number] = {
       number: String(place.number),
       weight: place.weightG,

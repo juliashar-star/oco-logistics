@@ -167,21 +167,26 @@ export async function getOffers(
   // item OCO builds (weight in grams).
   const places = normalizeOrderPlaces(input);
   if (places.length === 0) {
-    throw new Error("CDEK_INPUT_INVALID: at least one item is required");
+    // WORD FOR WORD the same as buildCdekOrderBody — see the note there.
+    throw new Error("CDEK_INPUT_INVALID: at least one place is required");
   }
-  // The SAME number the order will put in packages[].items[].cost, which is what
-  // CDEK insures («с данного значения рассчитывается страховка» — spec, quoted in
-  // the research note). Quoting a different figure than the order declares would
-  // reintroduce the gap in a subtler place. Not input.assessedCostRub: no adapter
-  // reads that field, and the order body does not send it.
-  // SUM OVER THE WHOLE ORDER, not the first line. Регламент п. 8.2 gives one
-  // declared value per накладная, and the API expresses it as the total of
-  // packages[].items[].cost — so the figure quoted must be that same total.
-  // Identical to the previous single-item behaviour when there is one item.
+  // THE DECLARED VALUE OF THE WHOLE ORDER, and it must equal what the order body
+  // declares. Регламент п. 8.2 gives one declared value per накладная; the API
+  // expresses it as packages[].items[].cost, and `cost` is the value PER UNIT —
+  // «Объявленная стоимость товара (за единицу товара…). С данного значения
+  // рассчитывается страховка», with `amount` required beside it
+  // (docs/research/cdek-declared-value-2026-08-13.md:20-23). So the total is
+  // Σ cost × amount, and dropping the quantity would quote insurance on less
+  // than the order declares. Not input.assessedCostRub: no adapter reads that
+  // field, and the order body does not send it.
   const insuranceParameter = String(
     places.reduce(
       (sum, place) =>
-        sum + place.items.reduce((acc, { item }) => acc + item.unitPriceRub, 0),
+        sum +
+        place.items.reduce(
+          (acc, { item }) => acc + item.unitPriceRub * item.quantity,
+          0,
+        ),
       0,
     ),
   );

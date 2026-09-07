@@ -146,7 +146,7 @@ test("empty items throws CDEK_INPUT_INVALID; tarifflist fetch never called", asy
           assert.ok(error instanceof Error);
           assert.equal(
             error.message,
-            "CDEK_INPUT_INVALID: at least one item is required",
+            "CDEK_INPUT_INVALID: at least one place is required",
           );
           return true;
         },

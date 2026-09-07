@@ -179,6 +179,6 @@ test("empty items array throws before anything else", () => {
       ),
     (err) =>
       err instanceof Error &&
-      err.message === "CDEK_INPUT_INVALID: at least one item is required",
+      err.message === "CDEK_INPUT_INVALID: at least one place is required",
   );
 });

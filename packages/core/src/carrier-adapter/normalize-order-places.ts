@@ -2,6 +2,7 @@ import type {
   CarrierCreateOrderInput,
   CarrierOrderItem,
 } from "./types";
+import { computePlaceFromItems } from "./compute-place-from-items";
 
 /**
  * One place as the adapters need it: a number unique within the order, the
@@ -30,10 +31,12 @@ export type NormalizedOrderPlaceItem = {
   positionIndex: number;
 };
 
+/** Thrown when a declared place holds nothing — see the comment at the throw. */
+export const ORDER_PLACE_EMPTY = "ORDER_PLACE_EMPTY";
+
 /**
  * ONE SHAPE FOR BOTH BRANCHES. When `places` is absent the result is a single
- * place built exactly as the adapters built it inline before, so a body sent
- * for a one-box order is unchanged down to the bit.
+ * place holding EVERY item of the order.
  *
  * WHAT THIS DOES NOT DECIDE: how a declared value is split across places. It is
  * not split. Регламент п. 8.2 gives ONE declared value per накладная, and CDEK
@@ -53,6 +56,16 @@ export function normalizeOrderPlaces(
 
   if (input.places !== undefined && input.places.length > 0) {
     return input.places.map((place, index) => {
+      // A place with nothing in it cannot be shipped and cannot be quoted.
+      // MEASURED on the CDEK sandbox: a package without items answers HTTP 400
+      // v2_field_is_empty — the rule is recorded beside the order builder in
+      // cdek/build-order-body.ts. Refusing here means the seller learns it
+      // before a price is quoted, not after they have chosen one.
+      if (place.items.length === 0) {
+        throw new Error(
+          `${ORDER_PLACE_EMPTY}: place ${index + 1} has no items`,
+        );
+      }
       const normalized: NormalizedOrderPlace = {
         number: index + 1,
         weightG: place.weightG,
@@ -71,19 +84,29 @@ export function normalizeOrderPlaces(
     });
   }
 
-  // No places declared: the single synthetic place the adapters used to build
-  // inline from items[0]. Same field-by-field result, same omissions.
-  const first = input.items[0];
-  if (first === undefined) {
+  // No places declared: ONE place holding every item, not just the first. The
+  // weight counts quantity, the same way parcelFitsServiceLimits and
+  // computePlaceFromItems already count it.
+  if (input.items.length === 0) {
     return [];
   }
+  const measured = computePlaceFromItems(input.items);
   const normalized: NormalizedOrderPlace = {
     number: 1,
-    weightG: first.weightG,
-    items: nextItems([first]),
+    weightG: measured.weightG,
+    items: nextItems(input.items),
   };
-  if (first.lengthCm !== undefined) normalized.lengthCm = first.lengthCm;
-  if (first.widthCm !== undefined) normalized.widthCm = first.widthCm;
-  if (first.heightCm !== undefined) normalized.heightCm = first.heightCm;
+  // Dimensions come from the items, but an axis NO item declared stays absent
+  // rather than becoming computePlaceFromItems' `?? 1` filler — same reason as
+  // the п. 2.2.3.1 note above: 1 cm is a number the seller never stated.
+  if (input.items.some((item) => item.lengthCm !== undefined)) {
+    normalized.lengthCm = measured.lengthCm;
+  }
+  if (input.items.some((item) => item.widthCm !== undefined)) {
+    normalized.widthCm = measured.widthCm;
+  }
+  if (input.items.some((item) => item.heightCm !== undefined)) {
+    normalized.heightCm = measured.heightCm;
+  }
   return [normalized];
 }

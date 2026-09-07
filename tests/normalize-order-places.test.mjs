@@ -41,18 +41,80 @@ function baseInput(overrides = {}) {
   };
 }
 
-test("no places: exactly one place, built from the first item as before", () => {
+test("no places: one place, weight counts quantity", () => {
   const places = normalizeOrderPlaces(baseInput());
 
   assert.equal(places.length, 1);
   assert.equal(places[0].number, 1);
-  assert.equal(places[0].weightG, 500);
+  // ITEM_A is 500 g × quantity 2. The old branch reported 500 and dropped the
+  // quantity; parcelFitsServiceLimits and computePlaceFromItems always counted it.
+  assert.equal(places[0].weightG, 1000);
   assert.equal(places[0].lengthCm, 30);
   assert.equal(places[0].widthCm, 20);
   assert.equal(places[0].heightCm, 10);
   assert.equal(places[0].items.length, 1);
   assert.equal(places[0].items[0].item, ITEM_A);
   assert.equal(places[0].items[0].positionIndex, 1);
+});
+
+test("no places: EVERY item lands in the single place, not just the first", () => {
+  const places = normalizeOrderPlaces(baseInput({ items: [ITEM_A, ITEM_B, ITEM_C] }));
+
+  assert.equal(places.length, 1);
+  assert.deepEqual(
+    places[0].items.map((entry) => entry.item.name),
+    ["Товар А", "Товар Б", "Товар В"],
+  );
+  assert.deepEqual(
+    places[0].items.map((entry) => entry.positionIndex),
+    [1, 2, 3],
+  );
+  // 500×2 + 300×1 + 200×1 = 1500.
+  assert.equal(places[0].weightG, 1500);
+  // Sides are the per-axis maximum over the items — computePlaceFromItems.
+  assert.equal(places[0].lengthCm, 40);
+  assert.equal(places[0].widthCm, 20);
+  assert.equal(places[0].heightCm, 25);
+});
+
+test("no places, no item declares an axis: that axis stays ABSENT, never a filler 1", () => {
+  const noDims = { name: "Без габаритов", quantity: 1, unitPriceRub: 10, weightG: 200 };
+  const places = normalizeOrderPlaces(baseInput({ items: [noDims] }));
+
+  assert.equal(places.length, 1);
+  assert.equal(places[0].weightG, 200);
+  assert.equal("lengthCm" in places[0], false);
+  assert.equal("widthCm" in places[0], false);
+  assert.equal("heightCm" in places[0], false);
+});
+
+test("declared place holding no items is refused", () => {
+  assert.throws(
+    () =>
+      normalizeOrderPlaces(
+        baseInput({
+          items: [ITEM_A],
+          places: [{ weightG: 1000, items: [] }],
+        }),
+      ),
+    (err) => err instanceof Error && err.message.startsWith("ORDER_PLACE_EMPTY:"),
+  );
+});
+
+test("the refusal names WHICH place is empty", () => {
+  assert.throws(
+    () =>
+      normalizeOrderPlaces(
+        baseInput({
+          items: [ITEM_A, ITEM_B],
+          places: [
+            { weightG: 1000, items: [ITEM_A] },
+            { weightG: 300, items: [] },
+          ],
+        }),
+      ),
+    (err) => err instanceof Error && err.message === "ORDER_PLACE_EMPTY: place 2 has no items",
+  );
 });
 
 test("no places and no items: empty list, so callers can refuse it themselves", () => {
@@ -64,8 +126,8 @@ test("two places: numbers are 1 and 2 in declaration order", () => {
     baseInput({
       items: [ITEM_A, ITEM_B],
       places: [
-        { number: 7, weightG: 1000, lengthCm: 30, widthCm: 20, heightCm: 10, items: [ITEM_A] },
-        { number: 9, weightG: 300, lengthCm: 40, widthCm: 15, heightCm: 25, items: [ITEM_B] },
+        { weightG: 1000, lengthCm: 30, widthCm: 20, heightCm: 10, items: [ITEM_A] },
+        { weightG: 300, lengthCm: 40, widthCm: 15, heightCm: 25, items: [ITEM_B] },
       ],
     }),
   );
@@ -83,8 +145,8 @@ test("position index runs across the ORDER: two items in the second place contin
     baseInput({
       items: [ITEM_A, ITEM_B, ITEM_C],
       places: [
-        { number: 1, weightG: 1000, items: [ITEM_A] },
-        { number: 2, weightG: 500, items: [ITEM_B, ITEM_C] },
+        { weightG: 1000, items: [ITEM_A] },
+        { weightG: 500, items: [ITEM_B, ITEM_C] },
       ],
     }),
   );
@@ -106,8 +168,8 @@ test("cost total across all places equals the sum of every item's unitPriceRub",
     baseInput({
       items: [ITEM_A, ITEM_B, ITEM_C],
       places: [
-        { number: 1, weightG: 1000, items: [ITEM_A] },
-        { number: 2, weightG: 500, items: [ITEM_B, ITEM_C] },
+        { weightG: 1000, items: [ITEM_A] },
+        { weightG: 500, items: [ITEM_B, ITEM_C] },
       ],
     }),
   );
@@ -123,7 +185,7 @@ test("a place without dimensions keeps them ABSENT — no measuring of its items
   const places = normalizeOrderPlaces(
     baseInput({
       items: [ITEM_A],
-      places: [{ number: 1, weightG: 1000, items: [ITEM_A] }],
+      places: [{ weightG: 1000, items: [ITEM_A] }],
     }),
   );
 
