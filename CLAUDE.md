@@ -183,6 +183,16 @@ confidence. A short fixed manual check list is cheaper and more honest.
 - A `prisma:error … Unique constraint failed on (companyId, idempotencyKey)` line prints on every
   re-quote and is **harmless by design** — the duplicate is caught and the existing draft reused.
 
+### `grep -i` НЕ РАБОТАЕТ С КИРИЛЛИЦЕЙ — ложные нули
+Измерено 07.09.2026. Локаль в этой среде пустая (C), поэтому `grep -i` не складывает
+регистр кириллицы: `grep -c "примерк"` даёт 0 там, где `grep -c "Примерк"` даёт 2, и
+`-i` не спасает. **Любое «ноль совпадений», полученное `grep -i` по русскому слову,
+недействительно.** Искать кириллицу ТОЛЬКО инструментом Grep (ripgrep) — он складывает
+Unicode-регистр верно. Второй дефект той же природы: `cd` сохраняется между вызовами
+Bash, и греп по несуществующему пути возвращает пусто МОЛЧА. Перед каждым грепом путь
+задавать от корня репозитория. **Ноль — это утверждение; прежде чем его записать,
+докажи, что искал там и тем.**
+
 ## Verification and commits
 
 Before proposing a commit, run and report the **observed** results of: `npm run typecheck`,
