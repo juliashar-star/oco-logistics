@@ -193,6 +193,35 @@ Bash, и греп по несуществующему пути возвраща�
 задавать от корня репозитория. **Ноль — это утверждение; прежде чем его записать,
 докажи, что искал там и тем.**
 
+### «Up (healthy)» НЕ ОЗНАЧАЕТ, ЧТО БАЗА ДОСТИЖИМА
+Измерено 07.09.2026. Healthcheck контейнера (`pg_isready`) выполняется ВНУТРИ контейнера
+и до хостового порта ему дела нет, поэтому «Up (healthy)» и `P1001: Can't reach database
+server at localhost:15432` не противоречат друг другу. После выключения ПК Docker Desktop
+может поднять контейнер по `restart: unless-stopped`, не переустановив прокси портов:
+`HostConfig.PortBindings` показывает привязку `15432 → 5432`, а `docker port` печатает
+пустоту и порт на стороне Windows не слушается. **В проверке окружения печатать
+`docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"` — статус без строки
+`0.0.0.0:15432->5432/tcp` успехом НЕ считается.**
+**НАСТОЯЩАЯ ПРИЧИНА — НЕ В DOCKER.** Windows держала исключённый диапазон TCP **15336–15435**
+(`netsh interface ipv4 show excludedportrange protocol=tcp`), 15432 внутри него, и связать порт
+не мог никто. **При автоподъёме контейнера привязка не удаётся МОЛЧА:** `docker ps` показывает
+`Up (healthy)` без строки портов и ни слова об ошибке. Сообщение появляется ТОЛЬКО при
+пересоздании — `docker compose down` + `up` печатает `ports are not available: … listen tcp
+0.0.0.0:15432: bind: An attempt was made to access a socket in a way forbidden by its access
+permissions`. Пока не пересоздашь, диагноза не увидишь.
+**ОПРОБОВАНО И НЕ ПОМОГАЕТ:** `docker restart oco-postgres` и перезапуск самого Docker Desktop.
+Причина одна на оба: ни один из них не ПЕРЕСОЗДАЁТ контейнер, а публикация порта ставится при
+создании — поднимается тот же объект контейнера с той же неудавшейся привязкой.
+**ПОДЕЙСТВОВАЛО (07.09.2026), делает ЧЕЛОВЕК из-под администратора:** `net stop winnat` →
+`netsh int ipv4 add excludedportrange protocol=tcp startport=15432 numberofports=1
+store=persistent` → `net start winnat`, затем `npm run docker:down` и `npm run docker:up`.
+После этого `docker port` печатает `5432/tcp -> 0.0.0.0:15432`, `migrate status` даёт 20
+применённых миграций, `test:db` — 137 пройдено, то есть вернулся ТОТ ЖЕ том, а не пустой.
+Резервирование сделано `store=persistent`, поэтому повториться не должно.
+`docker compose up -d` в одиночку не поможет — хеш конфигурации совпадает, compose считает
+желаемое состояние достигнутым и печатает `Running` вместо `Recreated`.
+Данные при перезапуске не теряются: том `infra_oco_pg_data` внешний по отношению к контейнеру.
+
 ## Verification and commits
 
 Before proposing a commit, run and report the **observed** results of: `npm run typecheck`,
