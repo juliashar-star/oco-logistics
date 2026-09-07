@@ -118,6 +118,14 @@ actually behaves are already lost, and the public site's documentation would hav
 reconstructed from the code. `docs/OFFER_BADGES.md` is the model: the rules in plain words, what is
 NOT decided, and what is NOT verified.
 
+### Вопрос перевозчику — крайняя мера, а не первый шаг
+Принято 06.09.2026. Всё, что можно проверить и узнать самим, — проверяем сами: документация,
+методы API только на чтение, личный кабинет, договоры и приложения в `contracts/`. В поддержку
+Яндекса и СДЭК уходит только критически важное и только то, что своими силами установить нельзя:
+конфигурация конкретного аккаунта, намерения перевозчика, то, чего нет ни в одном документе.
+Черновики и непройденная самопроверка живут в `docs/CARRIER_QUESTIONS_DRAFTS.md`; номер Я-N / С-N
+присваивается в момент отправки, не раньше.
+
 ## Anti-regression rules
 
 1. **Shrink the route to nothing.** Decisions — which adapters to call, what counts as empty, how to
