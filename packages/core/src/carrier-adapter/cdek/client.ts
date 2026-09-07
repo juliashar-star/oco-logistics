@@ -10,10 +10,11 @@ import type {
   CarrierOrderHistoryResult,
   CarrierOrderInfo,
   CarrierOrderInfoResult,
-  CarrierOrderItem,
   CarrierPickupPoint,
   CarrierTrackingEvent,
 } from "../types";
+import type { NormalizedOrderPlace } from "../normalize-order-places";
+import { normalizeOrderPlaces } from "../normalize-order-places";
 import {
   OCO_CANCEL_ALREADY_REQUESTED,
   OCO_CANCEL_ALREADY_REQUESTED_TEXT_RU,
@@ -115,7 +116,7 @@ function pickupTypeFromInput(
   return input.pointOutId?.trim() ? "PVZ" : "COURIER";
 }
 
-function buildPackage(item: CarrierOrderItem): {
+function buildPackage(place: NormalizedOrderPlace): {
   weight: number;
   length?: number;
   width?: number;
@@ -126,10 +127,10 @@ function buildPackage(item: CarrierOrderItem): {
     length?: number;
     width?: number;
     height?: number;
-  } = { weight: item.weightG };
-  if (item.lengthCm !== undefined) pkg.length = item.lengthCm;
-  if (item.widthCm !== undefined) pkg.width = item.widthCm;
-  if (item.heightCm !== undefined) pkg.height = item.heightCm;
+  } = { weight: place.weightG };
+  if (place.lengthCm !== undefined) pkg.length = place.lengthCm;
+  if (place.widthCm !== undefined) pkg.width = place.widthCm;
+  if (place.heightCm !== undefined) pkg.height = place.heightCm;
   return pkg;
 }
 
@@ -162,9 +163,10 @@ export async function getOffers(
   const pickupType = pickupTypeFromInput(input);
   const deliveryMode = cdekDeliveryMode(input.handoverMode, pickupType);
 
-  // One package from the single synthetic item OCO builds (weight in grams).
-  const item = input.items[0];
-  if (!item) {
+  // One package per place; without declared places that is the single synthetic
+  // item OCO builds (weight in grams).
+  const places = normalizeOrderPlaces(input);
+  if (places.length === 0) {
     throw new Error("CDEK_INPUT_INVALID: at least one item is required");
   }
   // The SAME number the order will put in packages[].items[].cost, which is what
@@ -172,7 +174,17 @@ export async function getOffers(
   // the research note). Quoting a different figure than the order declares would
   // reintroduce the gap in a subtler place. Not input.assessedCostRub: no adapter
   // reads that field, and the order body does not send it.
-  const insuranceParameter = String(item.unitPriceRub);
+  // SUM OVER THE WHOLE ORDER, not the first line. Регламент п. 8.2 gives one
+  // declared value per накладная, and the API expresses it as the total of
+  // packages[].items[].cost — so the figure quoted must be that same total.
+  // Identical to the previous single-item behaviour when there is one item.
+  const insuranceParameter = String(
+    places.reduce(
+      (sum, place) =>
+        sum + place.items.reduce((acc, { item }) => acc + item.unitPriceRub, 0),
+      0,
+    ),
+  );
   // Contract type decides whether the array is sent at all — see
   // cdekCalculatorServices. undefined means «omit the key».
   const services = cdekCalculatorServices(
@@ -194,7 +206,8 @@ export async function getOffers(
       buildCdekLocation(input.recipient.city, input.recipient.addressString),
       codes.recipientCode,
     ),
-    packages: [buildPackage(item)],
+    // NO `number` here: the calculator's package shape is not the order's.
+    packages: places.map(buildPackage),
   });
 
   type CalculatorAttempt =

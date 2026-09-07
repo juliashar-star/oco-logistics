@@ -4,6 +4,7 @@ import type {
   CarrierOffer,
   CarrierOrderItem,
 } from "../types";
+import { normalizeOrderPlaces } from "../normalize-order-places";
 import { buildCdekLocation } from "./build-cdek-location";
 import { assertCdekCredentials } from "./transport";
 
@@ -86,19 +87,22 @@ export function buildCdekOrderBody(
 
   const creds = assertCdekCredentials(credentials);
   const tariffCode = parseTariffCodeFromOfferId(offer.offerId);
-  const item = input.items[0]!;
 
-  // Synthetic single-parcel SKU — OCO has no real line articles yet.
-  const wareKey = `${input.clientNumber}-1`;
-
-  const pkg: CdekOrderBody["packages"][number] = {
-    number: "1",
-    weight: item.weightG,
-    items: [buildPackageItem(item, wareKey)],
-  };
-  if (item.lengthCm !== undefined) pkg.length = item.lengthCm;
-  if (item.widthCm !== undefined) pkg.width = item.widthCm;
-  if (item.heightCm !== undefined) pkg.height = item.heightCm;
+  const packages = normalizeOrderPlaces(input).map((place) => {
+    const pkg: CdekOrderBody["packages"][number] = {
+      number: String(place.number),
+      weight: place.weightG,
+      items: place.items.map(({ item, positionIndex }) =>
+        // Synthetic SKU — OCO has no real line articles yet. The index runs
+        // across the whole order, not within the place.
+        buildPackageItem(item, `${input.clientNumber}-${positionIndex}`),
+      ),
+    };
+    if (place.lengthCm !== undefined) pkg.length = place.lengthCm;
+    if (place.widthCm !== undefined) pkg.width = place.widthCm;
+    if (place.heightCm !== undefined) pkg.height = place.heightCm;
+    return pkg;
+  });
 
   const body: CdekOrderBody = {
     type: Number(creds.contractType),
@@ -108,7 +112,7 @@ export function buildCdekOrderBody(
       name: input.recipient.contactName,
       phones: [{ number: input.recipient.phone }],
     },
-    packages: [pkg],
+    packages,
     // Sender end does not branch: always address form via buildCdekLocation
     // (shared with getOffers — quote and order must describe the same place).
     // handoverMode is already encoded in the tariff_code; do not emit shipment_point.
