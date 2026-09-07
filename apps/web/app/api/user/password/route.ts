@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import {
+  clearPasswordChangeAttempts,
+  isPasswordChangeBlocked,
+  recordFailedPasswordChange,
+} from "@/lib/auth/rate-limit";
 import { withAuth } from "@/lib/auth/with-auth";
 import { validateChangePassword } from "@/lib/auth/validation";
 import { prisma } from "@/lib/db";
@@ -8,6 +13,23 @@ import { logAuditEvent } from "@/lib/audit/log";
 const WRONG_PASSWORD_ERROR = "Не удалось сменить пароль. Проверьте текущий пароль.";
 
 export const PATCH = withAuth(async (request, user) => {
+  // THE KEY IS THE USER, never the IP and never a pair of the two: a composite
+  // key hands every fresh IP its own allowance, so rotating IPs walks straight
+  // through it. The route is behind withAuth, so userId is always there.
+  const key = user.userId;
+
+  // FIRST, before the body is even parsed: a blocked caller must not reach
+  // validation, the user lookup or the hash comparison.
+  if (await isPasswordChangeBlocked(key)) {
+    return NextResponse.json(
+      {
+        error:
+          "Слишком много попыток сменить пароль. Подождите 15 минут и попробуйте снова.",
+      },
+      { status: 429 },
+    );
+  }
+
   try {
     const body = await request.json();
     const currentPassword = String(body.currentPassword ?? "");
@@ -24,11 +46,16 @@ export const PATCH = withAuth(async (request, user) => {
     });
 
     if (!stored) {
+      await recordFailedPasswordChange(key);
       return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
     }
 
     const valid = await verifyPassword(currentPassword, stored.passwordHash);
     if (!valid) {
+      // ONLY FAILURES COUNT, and the counter is cleared on success — the
+      // login/register model, not the five routes that record every request.
+      // Changing a password successfully several times in a row is not abuse.
+      await recordFailedPasswordChange(key);
       return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
     }
 
@@ -37,6 +64,8 @@ export const PATCH = withAuth(async (request, user) => {
       where: { id: user.userId },
       data: { passwordHash },
     });
+
+    await clearPasswordChangeAttempts(key);
 
     void logAuditEvent({
       userId: user.userId,

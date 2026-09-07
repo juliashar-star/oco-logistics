@@ -30,6 +30,24 @@ const CARRIER_CONNECTION_REQUEST_MAX_ATTEMPTS = 20;
 const CARRIER_CONNECTION_REQUEST_WINDOW_MS = 60 * 60 * 1000;
 const BUCKET_CARRIER_CONNECTION_REQUEST = "carrier-connection-request";
 
+/**
+ * Five failed password changes in a row is an anomaly, not a person who
+ * mistyped: someone who has forgotten their current password has «забыли
+ * пароль» and does not need a sixth guess here.
+ */
+const PASSWORD_CHANGE_MAX_ATTEMPTS = 5;
+const PASSWORD_CHANGE_WINDOW_MS = 15 * 60 * 1000;
+const BUCKET_PASSWORD_CHANGE = "password-change";
+
+/**
+ * Ten is deliberately loose: mail clients open a link more than once — preview
+ * panes, link scanners, a second tap — and a limit tuned for a human clicking
+ * would lock a legitimate seller out of their own verification.
+ */
+const VERIFY_EMAIL_MAX_ATTEMPTS = 10;
+const VERIFY_EMAIL_WINDOW_MS = 15 * 60 * 1000;
+const BUCKET_VERIFY_EMAIL = "verify-email";
+
 async function isBlocked(bucket: string, key: string, maxAttempts: number): Promise<boolean> {
   const row = await prisma.rateLimitBucket.findUnique({
     where: { bucket_key: { bucket, key } },
@@ -133,4 +151,24 @@ export async function recordCarrierConnectionRequestAttempt(key: string): Promis
     key,
     CARRIER_CONNECTION_REQUEST_WINDOW_MS,
   );
+}
+
+export async function isPasswordChangeBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_PASSWORD_CHANGE, key, PASSWORD_CHANGE_MAX_ATTEMPTS);
+}
+
+export async function recordFailedPasswordChange(key: string): Promise<void> {
+  await recordAttempt(BUCKET_PASSWORD_CHANGE, key, PASSWORD_CHANGE_WINDOW_MS);
+}
+
+export async function clearPasswordChangeAttempts(key: string): Promise<void> {
+  await clearAttempts(BUCKET_PASSWORD_CHANGE, key);
+}
+
+export async function isVerifyEmailBlocked(key: string): Promise<boolean> {
+  return isBlocked(BUCKET_VERIFY_EMAIL, key, VERIFY_EMAIL_MAX_ATTEMPTS);
+}
+
+export async function recordVerifyEmailAttempt(key: string): Promise<void> {
+  await recordAttempt(BUCKET_VERIFY_EMAIL, key, VERIFY_EMAIL_WINDOW_MS);
 }
