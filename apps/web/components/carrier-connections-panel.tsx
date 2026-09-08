@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { capitalizeFieldLabel } from "@/lib/carriers/capitalize-field-label";
+import { carrierFormGapMessage } from "@/lib/carriers/carrier-form-gap-message";
 import { connectSuccessMessage } from "@/lib/carriers/connect-success-message";
+import { describeCarrierFormGap } from "@/lib/carriers/describe-carrier-form-gap";
 import { isCarrierFormComplete } from "@/lib/carriers/is-carrier-form-complete";
 import { pickSuppliedCredentials } from "@/lib/carriers/pick-supplied-credentials";
 import { shouldAcceptFieldValue } from "@/lib/carriers/should-accept-field-value";
@@ -351,6 +353,41 @@ export function CarrierConnectionsPanel({
           carrierValues,
           carrier.isConnected,
         );
+        // The SAME answer the button reads, spelled out. Not a second opinion:
+        // isCarrierFormComplete is derived from this call's function, so the
+        // notice cannot list a missing field while the button invites a click.
+        // Classifying two or three fields twice per render costs nothing worth
+        // trading that guarantee for.
+        const gapMessage = carrierFormGapMessage(
+          describeCarrierFormGap(
+            carrier.fields,
+            carrierValues,
+            carrier.isConnected,
+          ),
+        );
+        /*
+          SHOWN ONLY AFTER THE SELLER HAS TOUCHED THIS CARD. Every carrier is
+          rendered at once, so a notice that appeared on load would greet the
+          seller with an amber block on every unconnected card before they had
+          done anything. The defect this fixes is the other moment: two of three
+          fields filled, the third not chosen, and a grey button saying nothing.
+
+          THE PRICE, AND IT IS DELIBERATE. `interacted` is a SECURITY signal —
+          it exists because Chrome was measured autofilling the seller's own
+          site password into these inputs, and shouldAcceptFieldValue uses it to
+          decide what may enter `values` at all. Reusing it to decide when a
+          notice appears couples a presentation choice to that measurement: if a
+          browser ever focuses a field before filling it, the gate accepts the
+          value and this notice's timing shifts with it. That is cosmetic — the
+          gate's security property is untouched either way.
+
+          A separate `touched` record was rejected: it would be a THIRD map
+          keyed [providerKey][fieldName] beside `values` and `interacted`, and a
+          second copy of the same fact is the drift this repository keeps paying
+          for. One signal, one meaning, and the coupling written down.
+        */
+        const hasInteracted =
+          Object.keys(forCarrier(interacted, carrier.providerKey)).length > 0;
         // Per card, never shared between them.
         const isSubmitting = submitting[carrier.providerKey] === true;
         const cardFeedback = Object.prototype.hasOwnProperty.call(
@@ -417,6 +454,38 @@ export function CarrierConnectionsPanel({
                 role="status"
               >
                 {cardFeedback.text}
+              </p>
+            )}
+
+            {/*
+              LAST IN THE SLOT, directly above the button it explains. The amber
+              is the order form's, not a third style: that page already uses
+              bg-amber-50 / text-amber-900 to say what is missing while its own
+              submit button is disabled.
+
+              THIS MAY STAND BESIDE A FEEDBACK BLOCK, and «one banner, never
+              two» does NOT apply. There the two banners were rival answers to
+              ONE question — which step to fix first — which is why `nextStep`
+              picks a winner. These answer different questions about different
+              moments: the red one is what the carrier said about the LAST
+              submit, this one is what the form is missing NOW. A seller who
+              clears a field to retype it after a rejection needs both, and
+              hiding either one restores a grey button with no explanation. The
+              two colours are what keep the pair from reading as one repeated
+              block.
+
+              role="status", NOT role="alert" — NOT MEASURED. The reasoning is
+              that this text changes on every keystroke and an assertive region
+              would interrupt the reader mid-word, while a polite one waits.
+              Whether a screen reader actually behaves that way here has not
+              been tested with one; do not write this up as a verified fact.
+            */}
+            {hasInteracted && gapMessage !== null && (
+              <p
+                className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                role="status"
+              >
+                {gapMessage}
               </p>
             )}
 

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { capitalizeFieldLabel } from "../apps/web/lib/carriers/capitalize-field-label.ts";
+import { describeCarrierFormGap } from "../apps/web/lib/carriers/describe-carrier-form-gap.ts";
+import { carrierFormGapMessage } from "../apps/web/lib/carriers/carrier-form-gap-message.ts";
 import { isCarrierFormComplete } from "../apps/web/lib/carriers/is-carrier-form-complete.ts";
 import { shouldAcceptFieldValue } from "../apps/web/lib/carriers/should-accept-field-value.ts";
 import { CARRIER_CONNECT_FIELDS } from "../apps/web/lib/carriers/carrier-connect-fields.ts";
@@ -337,4 +339,272 @@ test("isCarrierFormComplete: not connected — extra values for foreign fields a
     ),
     true,
   );
+});
+
+// ── describeCarrierFormGap
+//
+// The twelve isCarrierFormComplete tests above are the consistency guard for
+// these: the boolean is DERIVED from describeCarrierFormGap, so a gap
+// misclassified at the ready/not-ready boundary fails them. A separate
+// "the boolean agrees with the gap" test is deliberately NOT written — it could
+// not fail, and a guard nobody can watch fail proves nothing.
+
+/** Same shape the table-driven test above uses: every field carries a sendable value. */
+function completeValues(fields) {
+  return Object.fromEntries(
+    fields.map((field) => [
+      field.name,
+      field.kind === "choice" ? field.options[0].value : `typed-${field.name}`,
+    ]),
+  );
+}
+
+const names = (fields) => fields.map((field) => field.name);
+
+test("describeCarrierFormGap: not connected + one field blank → that field, alone", () => {
+  const gap = describeCarrierFormGap(
+    CDEK_FIELDS,
+    { account: "acct", securePassword: "secret" },
+    false,
+  );
+  assert.equal(gap.kind, "missing");
+  assert.deepEqual(names(gap.blank), ["contractType"]);
+  assert.deepEqual(names(gap.badChoice), []);
+});
+
+test("describeCarrierFormGap: not connected + two blank → both, in the order of the field list", () => {
+  const gap = describeCarrierFormGap(
+    CDEK_FIELDS,
+    { securePassword: "secret" },
+    false,
+  );
+  assert.equal(gap.kind, "missing");
+  // Source order, never sorted — it is the order the seller sees on screen.
+  assert.deepEqual(names(gap.blank), ["account", "contractType"]);
+});
+
+test("describeCarrierFormGap: not connected + all blank → all of them, in order", () => {
+  const gap = describeCarrierFormGap(CDEK_FIELDS, {}, false);
+  assert.equal(gap.kind, "missing");
+  assert.deepEqual(names(gap.blank), names(CDEK_FIELDS));
+  assert.deepEqual(names(gap.badChoice), []);
+});
+
+test("describeCarrierFormGap: not connected + choice outside its options → badChoice, not blank", () => {
+  const gap = describeCarrierFormGap(
+    CDEK_FIELDS,
+    { account: "acct", securePassword: "secret", contractType: "3" },
+    false,
+  );
+  assert.equal(gap.kind, "missing");
+  assert.deepEqual(names(gap.blank), []);
+  assert.deepEqual(names(gap.badChoice), ["contractType"]);
+});
+
+test("describeCarrierFormGap: not connected + a blank AND a bad choice → both buckets, no field in two", () => {
+  const gap = describeCarrierFormGap(
+    CDEK_FIELDS,
+    { account: "acct", contractType: "3" },
+    false,
+  );
+  assert.equal(gap.kind, "missing");
+  assert.deepEqual(names(gap.blank), ["securePassword"]);
+  assert.deepEqual(names(gap.badChoice), ["contractType"]);
+  const overlap = names(gap.blank).filter((name) =>
+    names(gap.badChoice).includes(name),
+  );
+  assert.deepEqual(
+    overlap,
+    [],
+    "the blank test runs first, so nothing reaches both",
+  );
+});
+
+test("describeCarrierFormGap: whitespace counts as blank, never as a bad choice", () => {
+  const gap = describeCarrierFormGap(
+    CDEK_FIELDS,
+    { account: "acct", securePassword: "   ", contractType: "   " },
+    false,
+  );
+  assert.equal(gap.kind, "missing");
+  // Three situations collapse into «empty» on purpose — a seller cannot act on
+  // the difference between an absent key and a string of spaces.
+  assert.deepEqual(names(gap.blank), ["securePassword", "contractType"]);
+  assert.deepEqual(names(gap.badChoice), []);
+});
+
+test("describeCarrierFormGap: not connected + everything filled → ready", () => {
+  for (const [providerKey, fields] of Object.entries(CARRIER_CONNECT_FIELDS)) {
+    const gap = describeCarrierFormGap(fields, completeValues(fields), false);
+    assert.equal(gap.kind, "ready", providerKey);
+  }
+});
+
+test("describeCarrierFormGap: connected + nothing typed → nothing_supplied, naming no field", () => {
+  for (const [providerKey, fields] of Object.entries(CARRIER_CONNECT_FIELDS)) {
+    const gap = describeCarrierFormGap(fields, {}, true);
+    assert.equal(gap.kind, "nothing_supplied", providerKey);
+    // Naming a field here would be wrong: filling ANY one of them clears it.
+    assert.equal("blank" in gap, false);
+    assert.equal("badChoice" in gap, false);
+  }
+});
+
+test("describeCarrierFormGap: connected + only whitespace → nothing_supplied", () => {
+  const gap = describeCarrierFormGap(YANDEX_FIELDS, { token: "   " }, true);
+  assert.equal(gap.kind, "nothing_supplied");
+});
+
+test("describeCarrierFormGap: connected + only an out-of-set choice → nothing_supplied", () => {
+  // The known imprecision, pinned so it stays a decision rather than an
+  // accident: through the interface this state is unreachable, because choice
+  // values come from buttons built out of field.options themselves.
+  const gap = describeCarrierFormGap(CDEK_FIELDS, { contractType: "3" }, true);
+  assert.equal(gap.kind, "nothing_supplied");
+});
+
+test("describeCarrierFormGap: connected + one field typed → ready", () => {
+  assert.equal(
+    describeCarrierFormGap(CDEK_FIELDS, { account: "acct" }, true).kind,
+    "ready",
+  );
+  assert.equal(
+    describeCarrierFormGap(CDEK_FIELDS, { contractType: "2" }, true).kind,
+    "ready",
+  );
+});
+
+test("describeCarrierFormGap: values for foreign fields are ignored", () => {
+  const gap = describeCarrierFormGap(
+    YANDEX_FIELDS,
+    { platformStationId: "station-1", token: "tok", contractType: "1" },
+    false,
+  );
+  assert.equal(gap.kind, "ready");
+});
+
+// ── carrierFormGapMessage
+
+const CDEK_BY_NAME = Object.fromEntries(
+  CDEK_FIELDS.map((field) => [field.name, field]),
+);
+
+test("carrierFormGapMessage: one blank field → its label, lowercase, mid-sentence", () => {
+  const label = CDEK_BY_NAME.contractType.label;
+  const message = carrierFormGapMessage(
+    describeCarrierFormGap(
+      CDEK_FIELDS,
+      { account: "acct", securePassword: "secret" },
+      false,
+    ),
+  );
+  assert.ok(message.includes(label), message);
+  // capitalizeFieldLabel belongs on the form label, not inside a sentence.
+  assert.equal(
+    message.includes(capitalizeFieldLabel(label)),
+    false,
+    "a capital mid-sentence means capitalizeFieldLabel leaked into the message",
+  );
+});
+
+test("carrierFormGapMessage: two blank fields → both labels, comma-separated, in field order", () => {
+  const message = carrierFormGapMessage(
+    describeCarrierFormGap(CDEK_FIELDS, { securePassword: "secret" }, false),
+  );
+  const expected = `${CDEK_BY_NAME.account.label}, ${CDEK_BY_NAME.contractType.label}`;
+  assert.ok(message.includes(expected), message);
+});
+
+test("carrierFormGapMessage: a bad choice gets its own sentence, and it does not say the field is empty", () => {
+  const message = carrierFormGapMessage(
+    describeCarrierFormGap(
+      CDEK_FIELDS,
+      { account: "acct", securePassword: "secret", contractType: "3" },
+      false,
+    ),
+  );
+  assert.ok(message.includes(CDEK_BY_NAME.contractType.label), message);
+  assert.equal(
+    message.includes("не заполнено"),
+    false,
+    "the field HAS a value; it is the value that cannot be sent",
+  );
+});
+
+test("carrierFormGapMessage: connected + nothing supplied → one sentence, naming no field", () => {
+  const message = carrierFormGapMessage(
+    describeCarrierFormGap(CDEK_FIELDS, {}, true),
+  );
+  assert.equal(message, "Чтобы сохранить, заполните хотя бы одно поле.");
+  for (const field of CDEK_FIELDS) {
+    assert.equal(message.includes(field.label), false, field.name);
+  }
+});
+
+test("carrierFormGapMessage: ready → nothing to say", () => {
+  assert.equal(
+    carrierFormGapMessage(
+      describeCarrierFormGap(CDEK_FIELDS, completeValues(CDEK_FIELDS), false),
+    ),
+    null,
+  );
+});
+
+test("carrierFormGapMessage: no message ever contains a raw field name", () => {
+  // «Never show a raw provider code or an internal key to a seller.»
+  for (const [providerKey, fields] of Object.entries(CARRIER_CONNECT_FIELDS)) {
+    const gaps = [
+      describeCarrierFormGap(fields, {}, false),
+      describeCarrierFormGap(fields, {}, true),
+      ...fields.map((omitted) => {
+        const partial = completeValues(fields);
+        delete partial[omitted.name];
+        return describeCarrierFormGap(fields, partial, false);
+      }),
+      ...fields
+        .filter((field) => field.kind === "choice")
+        .map((choice) =>
+          describeCarrierFormGap(
+            fields,
+            { ...completeValues(fields), [choice.name]: "not-an-option" },
+            false,
+          ),
+        ),
+    ];
+
+    for (const gap of gaps) {
+      const message = carrierFormGapMessage(gap);
+      if (message === null) continue;
+      for (const field of fields) {
+        assert.equal(
+          message.includes(field.name),
+          false,
+          `${providerKey}: ${field.name} reached the seller`,
+        );
+      }
+    }
+  }
+});
+
+test("carrierFormGapMessage: no message ever contains a supplied value", () => {
+  // These are the seller's carrier credentials. Nothing typed into the form may
+  // be echoed back onto the screen, however harmless the sentence looks.
+  for (const [providerKey, fields] of Object.entries(CARRIER_CONNECT_FIELDS)) {
+    for (const omitted of fields) {
+      const values = Object.fromEntries(
+        fields
+          .filter((field) => field.name !== omitted.name)
+          .map((field) => [field.name, `SECRET-${field.name}-MARKER`]),
+      );
+      const message = carrierFormGapMessage(
+        describeCarrierFormGap(fields, values, false),
+      );
+      if (message === null) continue;
+      assert.equal(
+        message.includes("SECRET-"),
+        false,
+        `${providerKey}: a supplied value reached the message`,
+      );
+    }
+  }
 });
