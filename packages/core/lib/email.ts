@@ -30,7 +30,7 @@ function buildVerificationHtml(verifyUrl: string): string {
                 Подтвердить email
               </a>
               <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#9ca3af;">
-                Ссылка действует 24 часа. Если вы не регистрировались в OCO — просто проигнорируйте это письмо.
+                Ссылка действует 24 часа. Если вы запросите письмо повторно, работать будет только последняя ссылка. Если вы не регистрировались в OCO — просто проигнорируйте это письмо.
               </p>
             </td>
           </tr>
@@ -401,7 +401,10 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
       subject: "Подтвердите email — OCO",
       body: {
         html: buildVerificationHtml(verifyUrl),
-        plaintext: `Подтвердите email в OCO Logistics: ${verifyUrl}\n\nСсылка действует 24 часа.`,
+        // «24 часа» alone was a promise the product breaks: a resend overwrites
+        // the token column, so the previous link dies the moment a new one is
+        // asked for, however much of the day is left. Both bodies say so.
+        plaintext: `Подтвердите email в OCO Logistics: ${verifyUrl}\n\nСсылка действует 24 часа. Если вы запросите письмо повторно, работать будет только последняя ссылка.`,
       },
       track_links: 0,
       track_read: 0,

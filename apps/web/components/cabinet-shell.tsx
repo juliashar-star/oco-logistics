@@ -8,6 +8,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
+import { resendCooldownRemainingSec } from "@/lib/auth/verification";
+import { prisma } from "@/lib/db";
 import { LogoutButton } from "@/components/logout-button";
 import { VerificationBanner } from "@/components/VerificationBanner";
 
@@ -64,6 +66,22 @@ export async function CabinetShell({
 
   const showBanner = !user.emailVerified;
 
+  // THE SAME TWO LINES `/verify-email` USES, and for the same reason: the
+  // banner's button must open already knowing how long is left, instead of
+  // inviting a press the server will refuse. Only asked for when the banner is
+  // actually rendered — a verified seller loads every cabinet page too, and
+  // owes no query for a banner they will not see.
+  const bannerCooldownSec = showBanner
+    ? resendCooldownRemainingSec(
+        (
+          await prisma.user.findUnique({
+            where: { id: user.userId },
+            select: { verificationTokenExpiry: true },
+          })
+        )?.verificationTokenExpiry,
+      )
+    : 0;
+
   return (
     <div className="flex min-h-screen bg-bg">
       <aside className="sticky top-0 flex h-screen w-[280px] shrink-0 flex-col self-start overflow-y-auto bg-surface shadow-sm">
@@ -91,7 +109,9 @@ export async function CabinetShell({
       </aside>
 
       <div className="flex min-h-screen flex-1 flex-col overflow-hidden">
-        {showBanner && <VerificationBanner />}
+        {showBanner && (
+          <VerificationBanner initialCooldownSec={bannerCooldownSec} />
+        )}
         <main className="flex-1 overflow-y-auto p-8">{children}</main>
       </div>
     </div>

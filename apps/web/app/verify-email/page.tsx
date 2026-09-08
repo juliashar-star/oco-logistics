@@ -6,15 +6,21 @@ import { ResendVerificationButton } from "@/components/resend-verification-butto
 import { prisma } from "@/lib/db";
 
 type VerifyEmailPageProps = {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; stale?: string }>;
 };
 
 export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
-  const { token } = await searchParams;
+  const { token, stale } = await searchParams;
 
+  // FIRST, AND STILL FIRST. `stale` cannot collide with this branch: the route
+  // that sets it builds `/verify-email?stale=1` with no token at all. Should
+  // both ever arrive together, the token wins — a link worth another attempt
+  // beats a notice about a previous one.
   if (token?.trim()) {
     redirect(`/api/auth/verify-email?token=${encodeURIComponent(token.trim())}`);
   }
+
+  const isStale = stale === "1";
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -52,6 +58,25 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
         <p className="mt-2 text-caption text-text-3">
           Перейдите по ссылке в письме, чтобы подтвердить email. Ссылка действует 24 часа.
         </p>
+
+        {/*
+          DELIBERATELY GENERAL, and the generality is the point. A refused link
+          is one of three things — a token that was never ours, one whose 24
+          hours ran out, and one a later resend overwrote — and NOTHING can tell
+          them apart: the resend overwrites the column, redemption nulls it, so
+          all three reach the route as no row at all. A sentence naming a cause
+          would be a guess dressed as a fact, and two of the three guesses would
+          be wrong. This says what is certain and what to do about it.
+
+          Warning, not error: the person did nothing wrong and the fix is the
+          button below. Same treatment as the settings notice that asks for a
+          missing sender city.
+        */}
+        {isStale && (
+          <p className="mt-6 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+            Эта ссылка больше не действует. Отправьте письмо заново.
+          </p>
+        )}
 
         <div className="mt-8">
           <ResendVerificationButton initialCooldownSec={initialCooldownSec} />
