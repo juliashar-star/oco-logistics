@@ -14,14 +14,14 @@ import { getClientIp } from "@/lib/http/client-ip";
 
 export async function POST(request: Request) {
   const key = getClientIp(request);
-  if (await isSendVerificationBlocked(key)) {
+  if (await isSendVerificationBlocked(prisma, key)) {
     return NextResponse.json(
       { error: "Слишком много запросов. Попробуйте через минуту." },
       { status: 429 },
     );
   }
 
-  await recordSendVerificationAttempt(key);
+  await recordSendVerificationAttempt(prisma, key);
 
   const user = await getCurrentUser();
   if (!user) {

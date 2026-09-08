@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { recommendCarriers } from "@/lib/carrier-picker/recommend";
 import {
   isPublicRecommendBlocked,
@@ -11,14 +12,14 @@ import { getClientIp } from "@/lib/http/client-ip";
 export async function POST(request: Request) {
   try {
     const key = getClientIp(request);
-    if (await isPublicRecommendBlocked(key)) {
+    if (await isPublicRecommendBlocked(prisma, key)) {
       return NextResponse.json(
         { error: "Слишком много запросов. Попробуйте через минуту." },
         { status: 429 },
       );
     }
 
-    await recordPublicRecommendAttempt(key);
+    await recordPublicRecommendAttempt(prisma, key);
 
     const body = await request.json();
     const result = await recommendCarriers(body);

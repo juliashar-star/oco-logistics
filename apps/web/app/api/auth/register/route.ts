@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     const key = getClientIp(request);
-    if (await isRegisterBlocked(key)) {
+    if (await isRegisterBlocked(prisma, key)) {
       return NextResponse.json(
         {
           error: "Слишком много попыток регистрации. Попробуйте через час.",
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      await recordRegisterAttempt(key);
+      await recordRegisterAttempt(prisma, key);
       return NextResponse.json(
         { error: "Аккаунт с таким email уже существует" },
         { status: 409 },
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       console.error("verification email send failed after register");
     }
 
-    await clearRegisterAttempts(key);
+    await clearRegisterAttempts(prisma, key);
 
     return NextResponse.json({
       ok: true,

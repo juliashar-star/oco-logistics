@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { consumePasswordResetToken } from "@/lib/auth/password-reset";
 import {
@@ -13,14 +14,14 @@ const GENERIC_ERROR = "Ссылка недействительна или ист
 
 export async function POST(request: Request) {
   const key = getClientIp(request);
-  if (await isResetPasswordBlocked(key)) {
+  if (await isResetPasswordBlocked(prisma, key)) {
     return NextResponse.json(
       { error: "Слишком много попыток. Попробуйте через 15 минут." },
       { status: 429 },
     );
   }
 
-  await recordResetPasswordAttempt(key);
+  await recordResetPasswordAttempt(prisma, key);
 
   try {
     const body = await request.json();

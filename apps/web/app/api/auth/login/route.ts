@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     const key = clientKey(request, email);
-    if (await isLoginBlocked(key)) {
+    if (await isLoginBlocked(prisma, key)) {
       return NextResponse.json(
         {
           error:
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const passwordOk = Boolean(user && (await verifyPassword(password, user.passwordHash)));
 
     if (!user) {
-      await recordFailedLogin(key);
+      await recordFailedLogin(prisma, key);
       void logAuditEvent({
         userId: null,
         companyId: null,
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     }
 
     if (!passwordOk) {
-      await recordFailedLogin(key);
+      await recordFailedLogin(prisma, key);
       void logAuditEvent({
         userId: user.id,
         companyId: user.companyId,
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await clearLoginAttempts(key);
+    await clearLoginAttempts(prisma, key);
 
     void logAuditEvent({
       userId: user.id,

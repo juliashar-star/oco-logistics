@@ -20,7 +20,7 @@ export const PATCH = withAuth(async (request, user) => {
 
   // FIRST, before the body is even parsed: a blocked caller must not reach
   // validation, the user lookup or the hash comparison.
-  if (await isPasswordChangeBlocked(key)) {
+  if (await isPasswordChangeBlocked(prisma, key)) {
     return NextResponse.json(
       {
         error:
@@ -46,7 +46,7 @@ export const PATCH = withAuth(async (request, user) => {
     });
 
     if (!stored) {
-      await recordFailedPasswordChange(key);
+      await recordFailedPasswordChange(prisma, key);
       return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
     }
 
@@ -55,7 +55,7 @@ export const PATCH = withAuth(async (request, user) => {
       // ONLY FAILURES COUNT, and the counter is cleared on success — the
       // login/register model, not the five routes that record every request.
       // Changing a password successfully several times in a row is not abuse.
-      await recordFailedPasswordChange(key);
+      await recordFailedPasswordChange(prisma, key);
       return NextResponse.json({ error: WRONG_PASSWORD_ERROR }, { status: 400 });
     }
 
@@ -65,7 +65,7 @@ export const PATCH = withAuth(async (request, user) => {
       data: { passwordHash },
     });
 
-    await clearPasswordChangeAttempts(key);
+    await clearPasswordChangeAttempts(prisma, key);
 
     void logAuditEvent({
       userId: user.userId,

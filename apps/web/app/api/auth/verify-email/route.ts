@@ -11,13 +11,13 @@ export async function GET(request: Request) {
   // token and a wrong one differ only by which page the browser lands on, so
   // counting failures alone would leave the guessing unmetered.
   const key = getClientIp(request);
-  if (await isVerifyEmailBlocked(key)) {
+  if (await isVerifyEmailBlocked(prisma, key)) {
     // THE SAME REDIRECT AS EVERY OTHER REFUSAL OF THIS ROUTE. It answers with
     // redirects only; a 429 body here would be the one response that tells an
     // attacker their guessing was noticed.
     return NextResponse.redirect(new URL("/verify-email/error", request.url));
   }
-  await recordVerifyEmailAttempt(key);
+  await recordVerifyEmailAttempt(prisma, key);
 
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token")?.trim();

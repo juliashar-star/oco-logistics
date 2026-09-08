@@ -17,13 +17,13 @@ import { requestCarrierConnection } from "@/lib/carriers/request-carrier-connect
 export const POST = withAuth(async (request, user) => {
   try {
     const key = user.companyId;
-    if (await isCarrierConnectionRequestBlocked(key)) {
+    if (await isCarrierConnectionRequestBlocked(prisma, key)) {
       return NextResponse.json(
         { error: "Слишком много запросов. Попробуйте позже." },
         { status: 429 },
       );
     }
-    await recordCarrierConnectionRequestAttempt(key);
+    await recordCarrierConnectionRequestAttempt(prisma, key);
 
     const body = await request.json();
     const providerKey = String(body.providerKey ?? "").trim();

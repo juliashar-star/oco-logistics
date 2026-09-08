@@ -14,14 +14,14 @@ const SUCCESS_MESSAGE =
 
 export async function POST(request: Request) {
   const key = getClientIp(request);
-  if (await isForgotPasswordBlocked(key)) {
+  if (await isForgotPasswordBlocked(prisma, key)) {
     return NextResponse.json(
       { error: "Слишком много запросов. Попробуйте через 15 минут." },
       { status: 429 },
     );
   }
 
-  await recordForgotPasswordAttempt(key);
+  await recordForgotPasswordAttempt(prisma, key);
 
   try {
     const body = await request.json();
