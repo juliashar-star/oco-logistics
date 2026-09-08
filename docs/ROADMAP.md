@@ -543,9 +543,39 @@ v2), хвост 17 (гео-разбивка).
       `apps/web/app/dashboard/carrier-picker/page.tsx`,
       `apps/web/app/dashboard/settings/page.tsx`, `apps/web/app/new-order/page.tsx`,
       `apps/web/app/shipments/page.tsx`.
-- [ ] Graceful registration: account must be created even if email send
+- [x] Graceful registration: account must be created even if email send
       fails; user lands on /verify-email with resend option (currently
       returns 500 on send failure)
+      **ЗАКРЫТО 08.09.2026 — СДЕЛАНО, а не отменено.** Коммит `c828cb4` от 25.06.2026
+      («feat: email verification — banner in layout, graceful registration, resend
+      endpoint»). Измерено чтением 08.09.2026: аккаунт создаётся транзакцией
+      `apps/web/app/api/auth/register/route.ts:49–67` (компания и пользователь), сессия
+      ставится на `:69–74` — обе ДО отправки письма. Сбой отправки только логируется
+      (`:76–79`), после чего роут БЕЗУСЛОВНО отдаёт 200 с
+      `{ ok: true, redirect: "/verify-email" }` (`:83–86`), и продавец попадает на страницу
+      с кнопкой «Отправить повторно». `sendVerificationEmail` обёрнут в try/catch внутри
+      `issueVerificationToken` (`apps/web/lib/auth/verification.ts:40–46`) и НЕ БРОСАЕТ,
+      поэтому внешний `catch` роута (`:87–93`) — единственный источник 500 — при сбое
+      ОТПРАВКИ не срабатывает вовсе.
+      **СКОБКА «currently returns 500 on send failure» БЫЛА НЕВЕРНА.** Отмечаю явно, а не
+      подменяю тихо: строка пункта оставлена дословно, чтобы было видно, что именно
+      опровергнуто. Пункт добавлен ТЕМ ЖЕ коммитом `c828cb4`, который это поведение и
+      построил, — в одном коммите уехали и починка, и строка бэклога, описывающая её как
+      несделанную (`git log -S "Graceful registration" -- docs/ROADMAP.md` даёт `c828cb4`
+      и правку списка `a325bb1` от 03.09.2026). До `c828cb4` роут письма вообще не слал и
+      вёл на `/dashboard`, так что состояния, описанного в скобке, не было и до неё.
+      **ЧТО ЭТИМ НЕ ЗАКРЫТО — 1: на пути верификации нет НИ ОДНОГО теста.** Измерено
+      08.09.2026: `grep -rln` по `tests/` со списком
+      `verificationToken|issueVerificationToken|verify-email|send-verification|VERIFICATION_TOKEN_TTL`
+      не даёт ни одного файла. Ни выпуск токена, ни перезапись при повторной отправке, ни
+      срок жизни, ни погашение не закреплены ничем.
+      **ЧТО ЭТИМ НЕ ЗАКРЫТО — 2: в `AuditLog` верификация не пишет ни одного события.**
+      Измерено 08.09.2026: `logAuditEvent` вызывают двенадцать файлов, и среди них нет ни
+      `api/auth/register/route.ts`, ни `api/auth/send-verification/route.ts`, ни
+      `api/auth/verify-email/route.ts`, ни `lib/auth/verification.ts`. Сброс пароля при этом
+      пишет два события — `auth.password_reset.request`
+      (`apps/web/app/api/auth/forgot-password/route.ts:44–50`) и
+      `auth.password_reset.consume` (`apps/web/app/api/auth/reset-password/route.ts:43–49`).
 - [x] Password reset via token link (NOT password-in-email — security/152-ФЗ)
       **ЗАКРЫТО 03.09.2026 — СДЕЛАНО, а не отменено.** Роуты
       `apps/web/app/api/auth/forgot-password/route.ts` и
