@@ -21,8 +21,16 @@ const ENV_PATH = path.join(REPO_ROOT, ".env");
 
 /** Tables cleared between tests. Extend as more models are exercised.
  * Shipment / CarrierCredential FK→Company: TRUNCATE … CASCADE covers children;
- * CarrierCredential listed explicitly now that credential-loader tests seed it. */
-const TRUNCATE_TABLES = ["Shipment", "CarrierCredential", "Company"];
+ * CarrierCredential listed explicitly now that credential-loader tests seed it.
+ * RateLimitBucket has NO foreign key to Company, so CASCADE never reaches it —
+ * it has to be named here or its rows survive every truncate and leak from one
+ * test into the next. */
+const TRUNCATE_TABLES = [
+  "Shipment",
+  "CarrierCredential",
+  "Company",
+  "RateLimitBucket",
+];
 
 const TEST_DATABASE_NAME = "oco_logistics_test";
 
