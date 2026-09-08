@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DeliveryInterval } from "@oco/apiship";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DeliveryIntervalPicker } from "@/components/delivery-interval-picker";
+import { FieldLabel } from "@/components/ui/field-label";
 import { needsSuggestionPick } from "@/lib/address/needs-suggestion-pick";
 import type {
   OfferAdapterWithoutOffersDto,
@@ -1300,9 +1301,9 @@ export function NewOrderForm() {
 
         {pickupType === "PVZ" && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <FieldLabel htmlFor="pickup-point" required>
               Пункт выдачи (ПВЗ)
-            </label>
+            </FieldLabel>
             <p className="mb-2 text-xs text-slate-500">
               Список пунктов выдачи загружается по городу назначения.
             </p>
@@ -1333,7 +1334,9 @@ export function NewOrderForm() {
                   include «Выберите пункт выдачи», which occupies one of them
                   and cannot be dropped — it is how a seller clears a choice. */}
               <select
+                id="pickup-point"
                 required
+                aria-required
                 size={Math.min(1 + visiblePickup.options.length, 2)}
                 value={pointOutId}
                 onChange={(e) => setPointOutId(e.target.value)}
@@ -1453,11 +1456,13 @@ export function NewOrderForm() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <FieldLabel htmlFor="recipient-name" required>
               Получатель (ФИО)
-            </label>
+            </FieldLabel>
             <input
+              id="recipient-name"
               required
+              aria-required
               value={recipientName}
               onChange={(e) => setRecipientName(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2"
@@ -1465,11 +1470,13 @@ export function NewOrderForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <FieldLabel htmlFor="recipient-phone" required>
               Телефон получателя
-            </label>
+            </FieldLabel>
             <input
+              id="recipient-phone"
               required
+              aria-required
               type="tel"
               autoComplete="tel"
               value={recipientPhone}
@@ -1506,9 +1513,13 @@ export function NewOrderForm() {
             say kilograms («Вес — не больше 100 кг»). Do not add max back. */}
         <div className="grid gap-4 sm:grid-cols-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Вес, г</label>
+            <FieldLabel htmlFor="weight-g" required>
+              Вес, г
+            </FieldLabel>
             <input
+              id="weight-g"
               required
+              aria-required
               type="number"
               min={1}
               value={weightG}
@@ -1517,9 +1528,13 @@ export function NewOrderForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Длина, см</label>
+            <FieldLabel htmlFor="length-cm" required>
+              Длина, см
+            </FieldLabel>
             <input
+              id="length-cm"
               required
+              aria-required
               type="number"
               min={1}
               value={lengthCm}
@@ -1528,9 +1543,13 @@ export function NewOrderForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Ширина, см</label>
+            <FieldLabel htmlFor="width-cm" required>
+              Ширина, см
+            </FieldLabel>
             <input
+              id="width-cm"
               required
+              aria-required
               type="number"
               min={1}
               value={widthCm}
@@ -1539,9 +1558,13 @@ export function NewOrderForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Высота, см</label>
+            <FieldLabel htmlFor="height-cm" required>
+              Высота, см
+            </FieldLabel>
             <input
+              id="height-cm"
               required
+              aria-required
               type="number"
               min={1}
               value={heightCm}
@@ -1568,11 +1591,13 @@ export function NewOrderForm() {
         )}
 
         <div className="max-w-xs">
-          <label className="mb-1 block text-sm font-medium text-slate-700">
+          <FieldLabel htmlFor="declared-value-rub" required>
             Объявленная ценность, ₽
-          </label>
+          </FieldLabel>
           <input
+            id="declared-value-rub"
             required
+            aria-required
             type="number"
             min={1}
             step={1}

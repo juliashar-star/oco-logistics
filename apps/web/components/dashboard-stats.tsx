@@ -143,10 +143,17 @@ function StatsSkeleton() {
 export function DashboardStats({
   userEmail: _userEmail,
   companyName,
-  emailVerified,
 }: {
   userEmail: string;
   companyName: string;
+  /**
+   * STILL PART OF THE CONTRACT, DELIBERATELY NOT DESTRUCTURED. The caller
+   * passes it and the prop stays declared, but the heading no longer reads it —
+   * confirming the email closes ONE of four steps, and this component now asks
+   * the readiness object whether all four are closed. Left in the type rather
+   * than removed so the change stays inside this file; dropping the prop is a
+   * caller change and belongs to whoever needs it gone.
+   */
   emailVerified: boolean;
 }) {
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
@@ -207,8 +214,24 @@ export function DashboardStats({
 
   return (
     <div>
+      {/*
+        «Всё готово» IS THE READINESS OBJECT'S ANSWER, not the session's
+        emailVerified. The prop said only that the email was confirmed, so the
+        heading congratulated a seller who still had no sender address, no
+        carrier and no shipment — three of the four steps open, listed as open
+        in the block right below the same heading.
+
+        UNKNOWN IS NOT DONE. `readiness` is null while the stats request is in
+        flight and whenever the response fails isSellerReadiness (a stale
+        bundle, a failed fetch). Only an explicit `allDone === true` may claim
+        the seller has nothing left; every other state — null included — falls
+        back to «Добро пожаловать», which is true whatever is still open. The
+        opposite default would announce «Всё готово» on every page load before
+        the answer arrives, and again to anyone whose request failed.
+      */}
       <h2 className="text-2xl font-semibold text-text">
-        {emailVerified ? "Всё готово" : "Добро пожаловать"}, {companyName}
+        {readiness?.allDone === true ? "Всё готово" : "Добро пожаловать"},{" "}
+        {companyName}
       </h2>
 
       {loading && (
