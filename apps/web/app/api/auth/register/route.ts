@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       role: result.user.role,
     });
 
-    const issued = await issueVerificationToken(result.user.id, result.user.email);
+    const issued = await issueVerificationToken(prisma, result.user.id, result.user.email);
     if (issued.outcome === "failed") {
       // Nothing to tell the seller from here: when the first letter was proven
       // not sent its token was rolled back to null, and /verify-email reads

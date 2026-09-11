@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await issueVerificationToken(user.userId, user.email);
+    const result = await issueVerificationToken(prisma, user.userId, user.email);
 
     if (result.outcome === "failed") {
       // The reason goes to the log, never to the seller: the operator needs the

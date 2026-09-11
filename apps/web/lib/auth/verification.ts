@@ -1,6 +1,14 @@
 import { randomUUID } from "crypto";
+// NOT a parameter, unlike the client. `packages/core/lib/email.ts` imports
+// nothing and reaches the provider through the global `fetch`, so a test
+// replaces `fetch` rather than the sender.
 import { sendVerificationEmail } from "@oco/core";
-import { prisma } from "@/lib/db";
+// The client is a PARAMETER, and the `@/` alias is deliberately absent. Both for
+// the same reason: this module must be reachable by a db test running outside
+// Next, where the alias does not resolve and where the `@oco/db` singleton would
+// bind to the DEVELOPER's database. Same reason as the services in `lib/shipments`
+// and `lib/carriers`, which have taken their client this way from the start.
+import type { PrismaClient } from "@prisma/client";
 import {
   isPriorLinkAlive,
   planAfterSend,
@@ -8,7 +16,7 @@ import {
   sendFailureServerLog,
   type PriorVerification,
   type RollbackResult,
-} from "@/lib/auth/verification-send-outcome";
+} from "./verification-send-outcome";
 
 export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 export const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -54,11 +62,12 @@ export type IssueVerificationResult =
  * link that works. So on «not established» the new token stays, exactly as
  * before this change; see `classifyVerificationSend` for where the line runs.
  *
- * Not reachable by a test today: this module takes the `@oco/db` singleton and
- * the `@/` alias, which a test outside Next cannot resolve. The decisions it
- * makes are in verification-send-outcome.ts, and those are tested.
+ * The client is the first argument so that a db test can hand over its own:
+ * tests/db/issue-verification-token.db.test.mjs runs this function against the
+ * test database, conditional rollback included, with `fetch` replaced.
  */
 export async function issueVerificationToken(
+  prisma: PrismaClient,
   userId: string,
   email: string,
 ): Promise<IssueVerificationResult> {
