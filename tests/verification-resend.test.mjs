@@ -22,6 +22,7 @@ import {
   parseResendResponse,
   RESEND_COOLDOWN_SEC,
   RESEND_FALLBACK_ERROR,
+  RESEND_REFUSAL_REASON,
 } from "../apps/web/lib/auth/parse-resend-response.ts";
 
 /**
@@ -296,19 +297,113 @@ describe("parseResendResponse", () => {
     });
   });
 
-  test("429 with a number → exactly that countdown, and no red line", () => {
-    assert.deepEqual(
-      parseResendResponse(429, { error: "Подождите 42 сек. перед повторной отправкой" }),
-      { cooldownSec: 42, error: null },
-    );
+  // was «429 with a number → exactly that countdown, and no red line» — passed on
+  // the text-reading parser, failed the moment the regexp went. INVERTED in E7:
+  // this body carries the cooldown's WORDS but no `reason`, and the button no
+  // longer reads a number out of words. Without the code it cannot know this is
+  // a cooldown, so it says the words out loud instead of counting down in
+  // silence — a silent countdown looks exactly like a letter that went.
+  test("429 with the cooldown's words but no reason → the full cooldown AND the words", () => {
+    const text = "Подождите 42 сек. перед повторной отправкой";
+    assert.deepEqual(parseResendResponse(429, { error: text }), {
+      cooldownSec: RESEND_COOLDOWN_SEC,
+      error: text,
+    });
   });
 
+  // NOT inverted, and why: this body carries no `reason` either, and «no code →
+  // say it out loud» gives exactly the answer the IP limit always got. It passed
+  // before E7 and, unedited, after the parser changed — it now pins the
+  // missing-field path for the IP limit's words.
   test("429 without a number → the full cooldown AND the words", () => {
     const text = "Слишком много запросов. Попробуйте через минуту.";
     assert.deepEqual(parseResendResponse(429, { error: text }), {
       cooldownSec: RESEND_COOLDOWN_SEC,
       error: text,
     });
+  });
+
+  // ── E7: the two 429s are told apart by `reason`, never by the words
+
+  test("429 resend_cooldown with seconds → exactly that countdown, and no red line", () => {
+    assert.deepEqual(
+      parseResendResponse(429, {
+        error: "Подождите 42 сек. перед повторной отправкой",
+        reason: RESEND_REFUSAL_REASON.cooldown,
+        retryAfterSec: 42,
+      }),
+      { cooldownSec: 42, error: null },
+    );
+  });
+
+  test("the countdown comes from retryAfterSec, not from a number in the words", () => {
+    assert.deepEqual(
+      parseResendResponse(429, {
+        error: "Подождите 42 сек. перед повторной отправкой",
+        reason: RESEND_REFUSAL_REASON.cooldown,
+        retryAfterSec: 17,
+      }),
+      { cooldownSec: 17, error: null },
+    );
+  });
+
+  test("429 ip_rate_limited → the full cooldown AND the words", () => {
+    const text = "Слишком много запросов. Попробуйте через минуту.";
+    assert.deepEqual(
+      parseResendResponse(429, { error: text, reason: RESEND_REFUSAL_REASON.ipLimit }),
+      { cooldownSec: RESEND_COOLDOWN_SEC, error: text },
+    );
+  });
+
+  test("429 with an unknown reason → the full cooldown AND the words", () => {
+    const text = "Подождите 42 сек. перед повторной отправкой";
+    assert.deepEqual(
+      parseResendResponse(429, { error: text, reason: "some_future_code", retryAfterSec: 42 }),
+      { cooldownSec: RESEND_COOLDOWN_SEC, error: text },
+    );
+  });
+
+  test("a cooldown without usable seconds → said out loud, never a guessed countdown", () => {
+    const text = "Подождите 42 сек. перед повторной отправкой";
+    for (const retryAfterSec of [undefined, null, 0, -5, 1.5, "42"]) {
+      assert.deepEqual(
+        parseResendResponse(429, {
+          error: text,
+          reason: RESEND_REFUSAL_REASON.cooldown,
+          retryAfterSec,
+        }),
+        { cooldownSec: RESEND_COOLDOWN_SEC, error: text },
+        String(retryAfterSec),
+      );
+    }
+  });
+
+  test("a reason but no words: the cooldown still counts down, with nothing to say", () => {
+    assert.deepEqual(
+      parseResendResponse(429, { reason: RESEND_REFUSAL_REASON.cooldown, retryAfterSec: 30 }),
+      { cooldownSec: 30, error: null },
+    );
+  });
+
+  test("a reason but no words: the IP limit says the fallback words out loud", () => {
+    assert.deepEqual(
+      parseResendResponse(429, { reason: RESEND_REFUSAL_REASON.ipLimit }),
+      { cooldownSec: RESEND_COOLDOWN_SEC, error: RESEND_FALLBACK_ERROR },
+    );
+  });
+
+  test("the two codes the route issues are distinct strings, and the cooldown one is known here", () => {
+    // KEY PRESENCE, not a resolved value: the route imports these same
+    // constants, so a renamed key would break both sides at the type check,
+    // and a cooldown code this parser does not recognise would fall to the
+    // out-loud branch — which this assertion would catch.
+    assert.equal(typeof RESEND_REFUSAL_REASON.cooldown, "string");
+    assert.equal(typeof RESEND_REFUSAL_REASON.ipLimit, "string");
+    assert.notEqual(RESEND_REFUSAL_REASON.cooldown, RESEND_REFUSAL_REASON.ipLimit);
+    assert.deepEqual(
+      parseResendResponse(429, { reason: RESEND_REFUSAL_REASON.cooldown, retryAfterSec: 5 }),
+      { cooldownSec: 5, error: null },
+    );
   });
 
   test("401 → the words, no cooldown", () => {

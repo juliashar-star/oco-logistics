@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/db";
+import { RESEND_REFUSAL_REASON } from "@/lib/auth/parse-resend-response";
 import {
   isSendVerificationBlocked,
   recordSendVerificationAttempt,
@@ -16,11 +17,18 @@ import {
 } from "@/lib/auth/verification-send-outcome";
 import { getClientIp } from "@/lib/http/client-ip";
 
+// Both 429s carry a machine `reason` beside the seller's words; the button
+// decides by the code and only shows the words (parse-resend-response.ts). The
+// words themselves are unchanged — an older bundle in an open tab still reads
+// them.
 export async function POST(request: Request) {
   const key = getClientIp(request);
   if (await isSendVerificationBlocked(prisma, key)) {
     return NextResponse.json(
-      { error: "Слишком много запросов. Попробуйте через минуту." },
+      {
+        error: "Слишком много запросов. Попробуйте через минуту.",
+        reason: RESEND_REFUSAL_REASON.ipLimit,
+      },
       { status: 429 },
     );
   }
@@ -44,8 +52,14 @@ export async function POST(request: Request) {
 
     if (isResendCooldownActive(dbUser?.verificationTokenExpiry ?? null)) {
       const retryAfter = resendCooldownRemainingSec(dbUser?.verificationTokenExpiry ?? null);
+      // Retry-After stays: it is the standard header and useful outside our
+      // client. `retryAfterSec` is the same number where our client reads it.
       return NextResponse.json(
-        { error: `Подождите ${retryAfter} сек. перед повторной отправкой` },
+        {
+          error: `Подождите ${retryAfter} сек. перед повторной отправкой`,
+          reason: RESEND_REFUSAL_REASON.cooldown,
+          retryAfterSec: retryAfter,
+        },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },
       );
     }
