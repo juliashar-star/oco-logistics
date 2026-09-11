@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ApishipError } from "@oco/apiship";
+import { apishipFailureResponse } from "@/lib/apiship-failure-response";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import {
@@ -50,10 +51,9 @@ export const GET = withAuth(async (request, user) => {
     });
   } catch (error) {
     if (error instanceof ApishipError) {
-      return NextResponse.json(
-        { error: error.message || "Не удалось получить список ПВЗ" },
-        { status: 502 },
-      );
+      const mapped = apishipFailureResponse(error, "shipments/points");
+      console.error(mapped.serverLog);
+      return NextResponse.json(mapped.body, { status: mapped.httpStatus });
     }
     console.error("points list failed");
     return NextResponse.json(

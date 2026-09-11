@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ApishipError } from "@oco/apiship";
+import { apishipFailureResponse } from "@/lib/apiship-failure-response";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import {
@@ -118,18 +119,9 @@ export const POST = withAuth(async (request, user) => {
     return NextResponse.json({ intervals });
   } catch (error) {
     if (error instanceof ApishipError) {
-      console.error("intervals ApishipError", {
-        statusCode: error.statusCode,
-        code: error.code,
-      });
-      return NextResponse.json(
-        {
-          error:
-            error.message ||
-            "Не удалось получить интервалы доставки. Проверьте адреса и параметры посылки.",
-        },
-        { status: 502 },
-      );
+      const mapped = apishipFailureResponse(error, "shipments/intervals");
+      console.error(mapped.serverLog);
+      return NextResponse.json(mapped.body, { status: mapped.httpStatus });
     }
     console.error("intervals failed");
     return NextResponse.json(

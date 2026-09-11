@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ApishipError } from "@oco/apiship";
+import { apishipFailureResponse } from "@/lib/apiship-failure-response";
 import { withAuth } from "@/lib/auth/with-auth";
 import { canUseApiship } from "@/lib/apiship-client-for-company";
 import { prisma } from "@/lib/db";
@@ -163,14 +164,9 @@ export const POST = withAuth(async (request, user) => {
     });
   } catch (error) {
     if (error instanceof ApishipError) {
-      return NextResponse.json(
-        {
-          error:
-            error.message ||
-            "Не удалось создать отправление. Проверьте данные и попробуйте снова.",
-        },
-        { status: 502 },
-      );
+      const mapped = apishipFailureResponse(error, "shipments/create");
+      console.error(mapped.serverLog);
+      return NextResponse.json(mapped.body, { status: mapped.httpStatus });
     }
 
     if (error instanceof Error) {

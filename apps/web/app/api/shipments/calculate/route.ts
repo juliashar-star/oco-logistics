@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_DECISION_WEIGHTS, rankQuotes } from "@oco/core";
 import { ApishipError } from "@oco/apiship";
+import { apishipFailureResponse } from "@/lib/apiship-failure-response";
 import { withAuth } from "@/lib/auth/with-auth";
 import { prisma } from "@/lib/db";
 import {
@@ -138,14 +139,9 @@ export const POST = withAuth(async (request, user) => {
     });
   } catch (error) {
     if (error instanceof ApishipError) {
-      return NextResponse.json(
-        {
-          error:
-            error.message ||
-            "Не удалось рассчитать тарифы. Проверьте адреса и параметры посылки.",
-        },
-        { status: 502 },
-      );
+      const mapped = apishipFailureResponse(error, "shipments/calculate");
+      console.error(mapped.serverLog);
+      return NextResponse.json(mapped.body, { status: mapped.httpStatus });
     }
     console.error("calculate failed");
     return NextResponse.json(
