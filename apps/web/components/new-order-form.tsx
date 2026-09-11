@@ -20,7 +20,10 @@ import {
 } from "@/lib/date/format-offer-lines";
 import { pickSharedOfferExpiry } from "@/lib/date/pick-shared-offer-expiry";
 import { describeEmptyPickupPoints } from "@/lib/shipments/describe-empty-pickup-points";
-import { describeAdaptersWithoutOffers } from "@/lib/shipments/describe-adapters-without-offers";
+import {
+  describeAdaptersWithoutOffers,
+  settingsLinkReasonForAdaptersWithoutOffers,
+} from "@/lib/shipments/describe-adapters-without-offers";
 import { describePartialPickupPoints } from "@/lib/shipments/describe-partial-pickup-points";
 import {
   formatParcelEntrySummary,
@@ -36,6 +39,11 @@ import {
   visiblePickupPointOptions,
 } from "@/lib/shipments/visible-pickup-point-options";
 import { describeCarriersUnreachable } from "@/lib/shipments/describe-carriers-unreachable";
+import {
+  readSettingsLinkReason,
+  settingsLinkTab,
+  type SettingsLinkReason,
+} from "@/lib/shipments/settings-link-reason";
 import { offerCardHeading } from "@/lib/shipments/offer-card-heading";
 import type {
   CarrierDto,
@@ -67,6 +75,7 @@ import { isHttpOrHttpsUrl } from "@/lib/url/is-http-or-https-url";
 import { isSellerReadiness } from "@/lib/seller-readiness";
 import {
   CALCULATION_GATE_MESSAGES,
+  CALCULATION_GATE_SETTINGS_REASON,
   createSubmitGate,
   resolveCalculationGate,
   type ReadinessState,
@@ -274,7 +283,21 @@ export function NewOrderForm() {
     fromAddress?: string | null;
     pointOutId?: number | null;
   } | null>(null);
-  const [error, setError] = useState("");
+  /**
+   * The error line and the code for the settings link beside it travel
+   * TOGETHER, set by one call. `setError` takes the code as an optional second
+   * argument and defaults it to null, so every call that sets a text without a
+   * code — `setError("")` included — also clears the link. A link cannot
+   * outlive the sentence it was issued for.
+   */
+  const [errorState, setErrorState] = useState<{
+    text: string;
+    reason: SettingsLinkReason | null;
+  }>({ text: "", reason: null });
+  const error = errorState.text;
+  function setError(text: string, reason: SettingsLinkReason | null = null) {
+    setErrorState({ text, reason });
+  }
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<CreateResult | null>(null);
@@ -804,6 +827,7 @@ export function NewOrderForm() {
           typeof offersData.error === "string"
             ? offersData.error
             : "Не удалось рассчитать тарифы",
+          readSettingsLinkReason(offersData),
         );
         return;
       }
@@ -838,6 +862,9 @@ export function NewOrderForm() {
         setError(
           describeCarriersUnreachable(offersData.adaptersWithoutOffers) ??
             "Тарифы не пришли. Попробуйте рассчитать ещё раз.",
+          settingsLinkReasonForAdaptersWithoutOffers(
+            offersData.adaptersWithoutOffers,
+          ),
         );
         // Snapshot NOT taken: nothing was learned about this form's parameters,
         // so the next press must re-run rather than be treated as a repeat of a
@@ -956,7 +983,10 @@ export function NewOrderForm() {
     }
 
     if (!gate.proceed) {
-      setError(CALCULATION_GATE_MESSAGES[gate.reason]);
+      setError(
+        CALCULATION_GATE_MESSAGES[gate.reason],
+        CALCULATION_GATE_SETTINGS_REASON[gate.reason],
+      );
       return;
     }
 
@@ -964,7 +994,10 @@ export function NewOrderForm() {
     // holds the value of the render this handler was created in, which on a
     // first fast click is the optimistic default.
     if (gate.state.status === "ready" && !gate.state.value.senderConfigured) {
-      setError(CALCULATION_GATE_MESSAGES.no_sender);
+      setError(
+        CALCULATION_GATE_MESSAGES.no_sender,
+        CALCULATION_GATE_SETTINGS_REASON.no_sender,
+      );
       return;
     }
 
@@ -1107,6 +1140,7 @@ export function NewOrderForm() {
           typeof data.error === "string"
             ? data.error
             : "Не удалось создать отправление",
+          readSettingsLinkReason(data),
         );
         return;
       }
@@ -1173,6 +1207,9 @@ export function NewOrderForm() {
    * minimisation first and convenience second.
    */
   const blockedByMissingCarrier = readiness !== null && !readiness.carrierConnected;
+
+  /** Decided by the code that came with the error, never by its words. */
+  const errorLinkTab = settingsLinkTab(errorState);
 
   return (
     <div className="space-y-8">
@@ -1626,10 +1663,11 @@ export function NewOrderForm() {
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
             {error}
-            {(error.includes("не подключён") ||
-              error.includes("настройках") ||
-              error.includes("отправления")) && (
+            {errorLinkTab === "company" && (
               <> {settingsLink("Перейти в настройки")}</>
+            )}
+            {errorLinkTab === "connection" && (
+              <> {connectionLink("Перейти в настройки")}</>
             )}
           </p>
         )}

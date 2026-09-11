@@ -1,3 +1,8 @@
+import {
+  SETTINGS_LINK_REASON,
+  type SettingsLinkReason,
+} from "./settings-link-reason";
+
 /**
  * WHY: when one adapter answers and another does not, the seller sees a shorter
  * list of cards and no error at all. The fan-out already knows which adapter
@@ -171,4 +176,28 @@ export function describeAdaptersWithoutOffers(
   }
 
   return capitaliseFirst(parts.join("; "));
+}
+
+/**
+ * The settings-link code for the same list, from the SAME grouping that writes
+ * the words: a code exactly when the `auth_failed` group is not empty, which is
+ * exactly when the sentence says «проверьте подключение в настройках». Built
+ * beside the text rather than on the server so the two cannot disagree.
+ *
+ * MIXED WITH «не отвечает», the link still opens «Подключение». It answers the
+ * part of the sentence that asks for it; the other part asks only for another
+ * calculation on this form, and a link does not contradict that.
+ */
+export function settingsLinkReasonForAdaptersWithoutOffers(
+  adapters: unknown,
+): SettingsLinkReason | null {
+  if (!Array.isArray(adapters)) {
+    return null;
+  }
+  for (const entry of adapters as AdapterWithoutOffersInput[]) {
+    if (groupOf(entry?.status) === "auth_failed") {
+      return SETTINGS_LINK_REASON.carrierConnection;
+    }
+  }
+  return null;
 }

@@ -5,6 +5,10 @@ import {
   carrierAuthErrorMessage,
   carrierNotConnectedMessage,
 } from "@/lib/shipments/carrier-connection-messages";
+import {
+  SETTINGS_LINK_REASON,
+  settingsLinkReasonForBuildFailure,
+} from "@/lib/shipments/settings-link-reason";
 import { resolveOrderAdapter } from "@oco/core/carrier-adapter/order-adapters";
 import type { CarrierOffer } from "@oco/core/carrier-adapter/types";
 import { withAuth } from "@/lib/auth/with-auth";
@@ -192,7 +196,10 @@ export const POST = withAuth<{ id: string }>(
       );
       if (!credsResult.ok) {
         return NextResponse.json(
-          { error: carrierNotConnectedMessage(orderAdapter.providerKey) },
+          {
+            error: carrierNotConnectedMessage(orderAdapter.providerKey),
+            reason: SETTINGS_LINK_REASON.carrierConnection,
+          },
           { status: 400 },
         );
       }
@@ -248,9 +255,11 @@ export const POST = withAuth<{ id: string }>(
       });
 
       if (!built.ok) {
+        const reason = settingsLinkReasonForBuildFailure(built.reason);
         return NextResponse.json(
           {
             error: messageForBuildFailure(built.reason, decrypted.pickupType),
+            ...(reason === null ? {} : { reason }),
           },
           { status: 400 },
         );
@@ -331,7 +340,10 @@ export const POST = withAuth<{ id: string }>(
         }
         if (result.reason === "auth") {
           return NextResponse.json(
-            { error: carrierAuthErrorMessage(orderAdapter.providerKey) },
+            {
+              error: carrierAuthErrorMessage(orderAdapter.providerKey),
+              reason: SETTINGS_LINK_REASON.carrierConnection,
+            },
             { status: 400 },
           );
         }
@@ -356,7 +368,10 @@ export const POST = withAuth<{ id: string }>(
         // Named from the adapter actually called — CarrierAuthError is the base
         // of both YandexAuthError and CdekAuthError.
         return NextResponse.json(
-          { error: carrierAuthErrorMessage(orderAdapter.providerKey) },
+          {
+            error: carrierAuthErrorMessage(orderAdapter.providerKey),
+            reason: SETTINGS_LINK_REASON.carrierConnection,
+          },
           { status: 400 },
         );
       }

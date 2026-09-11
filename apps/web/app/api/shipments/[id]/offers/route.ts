@@ -17,6 +17,10 @@ import { listConnectedCarriers } from "@/lib/shipments/list-connected-carriers";
 import { decideOffersOutcome } from "@/lib/shipments/decide-offers-outcome";
 import { toOffersResponse } from "@/lib/shipments/offer-dto";
 import {
+  SETTINGS_LINK_REASON,
+  settingsLinkReasonForBuildFailure,
+} from "@/lib/shipments/settings-link-reason";
+import {
   preselectOffer,
   type OfferPriority,
   type PreselectOfferInput,
@@ -182,6 +186,7 @@ export const POST = withAuth<{ id: string }>(
           {
             error:
               "Подключите перевозчика в настройках, чтобы рассчитать доставку",
+            reason: SETTINGS_LINK_REASON.carrierConnection,
           },
           { status: 400 },
         );
@@ -201,6 +206,11 @@ export const POST = withAuth<{ id: string }>(
         pointCarrierKey !== "" &&
         forOffers.length === 0
       ) {
+        // NO SETTINGS-LINK CODE HERE, on purpose. The sentence names an action
+        // on the form — choose another point — and a link to the carrier
+        // connection would offer something the sentence does not say. To give
+        // it a link the sentence itself would have to change, and that is a
+        // separate edit to what the seller reads.
         return NextResponse.json(
           {
             error:
@@ -268,9 +278,11 @@ export const POST = withAuth<{ id: string }>(
       });
 
       if (!built.ok) {
+        const reason = settingsLinkReasonForBuildFailure(built.reason);
         return NextResponse.json(
           {
             error: messageForBuildFailure(built.reason, decrypted.pickupType),
+            ...(reason === null ? {} : { reason }),
           },
           { status: 400 },
         );
@@ -406,6 +418,7 @@ export const POST = withAuth<{ id: string }>(
           {
             error:
               "Не удалось авторизоваться у перевозчика. Проверьте подключение в настройках.",
+            reason: SETTINGS_LINK_REASON.carrierConnection,
           },
           { status: 400 },
         );

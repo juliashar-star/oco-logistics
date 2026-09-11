@@ -1,4 +1,8 @@
 import type { SellerReadiness } from "../seller-readiness";
+import {
+  SETTINGS_LINK_REASON,
+  type SettingsLinkReason,
+} from "./settings-link-reason";
 
 /**
  * Whether a calculation may proceed to create-draft, and the guard that keeps a
@@ -44,6 +48,19 @@ export const CALCULATION_GATE_MESSAGES = {
 } as const;
 
 export type CalculationGateRefusal = keyof typeof CALCULATION_GATE_MESSAGES;
+
+/**
+ * The settings-link code for each refusal. A Record over the same keys, so a
+ * refusal cannot be added to the messages without deciding where its link goes
+ * — typecheck refuses the gap.
+ */
+export const CALCULATION_GATE_SETTINGS_REASON: Record<
+  CalculationGateRefusal,
+  SettingsLinkReason
+> = {
+  no_carrier: SETTINGS_LINK_REASON.carrierConnection,
+  no_sender: SETTINGS_LINK_REASON.senderIncomplete,
+};
 
 export type CalculationGateDecision =
   | { proceed: true; state: ReadinessState }
