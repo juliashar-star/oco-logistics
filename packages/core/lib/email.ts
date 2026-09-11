@@ -379,15 +379,134 @@ export async function sendCarrierIntegrationRequestSellerConfirmation(
   }
 }
 
-export async function sendVerificationEmail(to: string, token: string): Promise<void> {
+/**
+ * How a verification send ended — THREE outcomes, not a boolean.
+ *
+ * WHY THREE. The caller rolls the token column back when a letter did not go
+ * out, so the link in the previous letter keeps working. That is only safe when
+ * non-delivery is PROVEN: if the letter may have been delivered, rolling back
+ * kills the very link it carries. So «not sent» and «not established» must stay
+ * apart all the way to the caller.
+ *
+ * `reason` is for the operator's log and nothing else: variable NAMES, an HTTP
+ * status, an error code. Never a value, never a response body (it can echo the
+ * recipient's address), never an error message (it can carry anything).
+ */
+export type VerificationEmailOutcome =
+  | { delivery: "sent" }
+  | { delivery: "not_sent"; reason: string }
+  | { delivery: "unknown"; reason: string };
+
+/** Every point at which a send can end, as the facts that point leaves behind. */
+export type VerificationSendStage =
+  | { stage: "config_missing"; missing: readonly string[] }
+  | { stage: "request_failed"; code: string }
+  | { stage: "http_error"; status: number }
+  | { stage: "unreadable_body"; status: number }
+  | { stage: "api_status"; status: number; apiStatus: unknown };
+
+/**
+ * Where «not sent» ends and «not established» begins — decided by reading this
+ * file, not by guessing at the provider.
+ *
+ * NOT SENT, proven:
+ * - configuration missing — the function returns before any network call;
+ * - HTTP 4xx — the provider refused the request;
+ * - 2xx whose body says `status: "error"` — the provider said so itself.
+ *
+ * NOT ESTABLISHED:
+ * - ANY rejected `fetch`. The code cannot tell a failure before the request
+ *   left from one after it: both are the same `await fetch` throwing. A reset or
+ *   a timeout after the body was sent may follow an accepted message.
+ * - HTTP 5xx and any other non-2xx that is not 4xx. A 504 means a gateway gave
+ *   up waiting — the server behind it may have taken the message.
+ * - 2xx with a body that is not JSON. The HTTP request was accepted.
+ *
+ * The 4xx / 5xx line rests on HTTP semantics, NOT on measured Unisender
+ * behaviour: nobody has observed what this provider does on either.
+ */
+export function classifyVerificationSend(
+  s: VerificationSendStage,
+): VerificationEmailOutcome {
+  switch (s.stage) {
+    case "config_missing": {
+      const one = s.missing.length === 1;
+      return {
+        delivery: "not_sent",
+        reason: `${s.missing.join(" and ")} ${one ? "is" : "are"} not set; no verification email can be sent until ${one ? "it is" : "they are"}`,
+      };
+    }
+    case "request_failed":
+      return {
+        delivery: "unknown",
+        reason: `request to Unisender Go failed (${s.code}); delivery not established`,
+      };
+    case "http_error":
+      return s.status >= 400 && s.status < 500
+        ? {
+            delivery: "not_sent",
+            reason: `Unisender Go refused the send with HTTP ${s.status}`,
+          }
+        : {
+            delivery: "unknown",
+            reason: `Unisender Go answered HTTP ${s.status}; delivery not established`,
+          };
+    case "unreadable_body":
+      return {
+        delivery: "unknown",
+        reason: `Unisender Go answered HTTP ${s.status} with a body that is not JSON; delivery not established`,
+      };
+    case "api_status":
+      return s.apiStatus === "error"
+        ? {
+            delivery: "not_sent",
+            reason: `Unisender Go answered HTTP ${s.status} with API status error`,
+          }
+        : { delivery: "sent" };
+  }
+}
+
+const CODE_LIKE = /^[A-Z][A-Z0-9_]{1,63}$/;
+const NAME_LIKE = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
+
+/**
+ * A loggable word for a rejected `fetch`: the cause's code when it looks like a
+ * code (ECONNRESET, UND_ERR_SOCKET), else the error's name — NEVER its message,
+ * which can carry the URL or anything else a runtime chose to put there.
+ */
+export function requestFailureCode(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "unknown";
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause !== null && typeof cause === "object") {
+    const code = (cause as { code?: unknown }).code;
+    if (typeof code === "string" && CODE_LIKE.test(code)) {
+      return code;
+    }
+  }
+  return NAME_LIKE.test(error.name) ? error.name : "Error";
+}
+
+/**
+ * Sends the verification letter and REPORTS how it ended. Never throws: an
+ * expected outcome is a value to branch on, not an exception — the same reason
+ * `redeemVerification` uses `updateMany`.
+ */
+export async function sendVerificationEmail(
+  to: string,
+  token: string,
+): Promise<VerificationEmailOutcome> {
   const apiKey = process.env.UNISENDER_GO_API_KEY;
   const fromEmail = process.env.UNISENDER_GO_FROM_EMAIL;
   const fromName = process.env.UNISENDER_GO_FROM_NAME ?? "OCO Logistics";
 
   if (!apiKey || !fromEmail) {
-    throw new Error(
-      "UNISENDER_GO_API_KEY и UNISENDER_GO_FROM_EMAIL должны быть заданы в .env",
-    );
+    const missing = [
+      ...(!apiKey ? ["UNISENDER_GO_API_KEY"] : []),
+      ...(!fromEmail ? ["UNISENDER_GO_FROM_EMAIL"] : []),
+    ];
+    return classifyVerificationSend({ stage: "config_missing", missing });
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -411,8 +530,11 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
     },
   };
 
+  // Nothing is logged in here: the outcome's `reason` travels to the route,
+  // which writes ONE line that also says what became of the token.
+  let response: Response;
   try {
-    const response = await fetch(UNISENDER_SEND_URL, {
+    response = await fetch(UNISENDER_SEND_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -421,19 +543,27 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
       },
       body: JSON.stringify(requestBody),
     });
-
-    if (!response.ok) {
-      console.error("Unisender Go HTTP error:", response.status);
-      throw new Error(`Unisender Go HTTP ${response.status}`);
-    }
-
-    const data = (await response.json()) as { status?: string; error?: string };
-    if (data.status === "error") {
-      console.error("Unisender Go API error");
-      throw new Error("Unisender Go API error");
-    }
   } catch (error) {
-    console.error("sendVerificationEmail failed");
-    throw error;
+    return classifyVerificationSend({
+      stage: "request_failed",
+      code: requestFailureCode(error),
+    });
   }
+
+  if (!response.ok) {
+    return classifyVerificationSend({ stage: "http_error", status: response.status });
+  }
+
+  let data: { status?: unknown } | null;
+  try {
+    data = (await response.json()) as { status?: unknown } | null;
+  } catch {
+    return classifyVerificationSend({ stage: "unreadable_body", status: response.status });
+  }
+
+  return classifyVerificationSend({
+    stage: "api_status",
+    status: response.status,
+    apiStatus: data?.status,
+  });
 }

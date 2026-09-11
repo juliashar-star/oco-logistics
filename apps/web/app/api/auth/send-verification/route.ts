@@ -10,6 +10,10 @@ import {
   issueVerificationToken,
   resendCooldownRemainingSec,
 } from "@/lib/auth/verification";
+import {
+  failedSendMessage,
+  SEND_FAILED_TEXT,
+} from "@/lib/auth/verification-send-outcome";
 import { getClientIp } from "@/lib/http/client-ip";
 
 export async function POST(request: Request) {
@@ -46,12 +50,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { emailSent } = await issueVerificationToken(user.userId, user.email);
+    const result = await issueVerificationToken(user.userId, user.email);
 
-    if (!emailSent) {
-      console.error("send-verification email delivery failed");
+    if (result.outcome === "failed") {
+      // The reason goes to the log, never to the seller: the operator needs the
+      // variable name or the status, the seller needs to know what still works.
+      console.error(result.serverLog);
       return NextResponse.json(
-        { error: "Не удалось отправить письмо. Попробуйте позже." },
+        { error: failedSendMessage(result.priorLinkAlive) },
         { status: 503 },
       );
     }
@@ -59,9 +65,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   } catch {
     console.error("send-verification failed");
-    return NextResponse.json(
-      { error: "Не удалось отправить письмо. Попробуйте позже." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: SEND_FAILED_TEXT }, { status: 500 });
   }
 }

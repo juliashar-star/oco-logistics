@@ -73,9 +73,13 @@ export async function POST(request: Request) {
       role: result.user.role,
     });
 
-    const { emailSent } = await issueVerificationToken(result.user.id, result.user.email);
-    if (!emailSent) {
-      console.error("verification email send failed after register");
+    const issued = await issueVerificationToken(result.user.id, result.user.email);
+    if (issued.outcome === "failed") {
+      // Nothing to tell the seller from here: when the first letter was proven
+      // not sent its token was rolled back to null, and /verify-email reads
+      // that and says «Письмо не отправлено» on its own. The reason is the
+      // operator's.
+      console.error(issued.serverLog);
     }
 
     await clearRegisterAttempts(prisma, key);

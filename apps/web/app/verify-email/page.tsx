@@ -2,6 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { resendCooldownRemainingSec } from "@/lib/auth/verification";
+import {
+  letterCopy,
+  verificationLetterState,
+} from "@/lib/auth/verification-page-copy";
 import { ResendVerificationButton } from "@/components/resend-verification-button";
 import { prisma } from "@/lib/db";
 
@@ -36,6 +40,14 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
 
   const initialCooldownSec = resendCooldownRemainingSec(dbUser?.verificationTokenExpiry);
 
+  // NO LETTER IS WHAT A NULL EXPIRY MEANS HERE. A confirmed seller never reaches
+  // this line — they were sent to the dashboard above — and for everyone else
+  // the column is null only when no letter is live: a failed first letter whose
+  // token was rolled back, or an account created before verification existed.
+  // «Мы отправили письмо» would be false for both, so the page says what did
+  // happen instead, and drops the 24 hours of a link that does not exist.
+  const copy = letterCopy(verificationLetterState(dbUser?.verificationTokenExpiry));
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-6">
       <div className="w-full max-w-md rounded-[var(--r-lg)] border border-border bg-surface p-8 shadow-sm">
@@ -50,14 +62,15 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
           </span>
         </div>
 
-        <h1 className="mt-6 text-heading text-text">Проверьте почту</h1>
+        <h1 className="mt-6 text-heading text-text">{copy.heading}</h1>
         <p className="mt-3 text-body text-text-2">
-          Мы отправили письмо на{" "}
+          {copy.bodyBeforeEmail}
           <span className="font-medium text-text">{user.email}</span>
+          {copy.bodyAfterEmail}
         </p>
-        <p className="mt-2 text-caption text-text-3">
-          Перейдите по ссылке в письме, чтобы подтвердить email. Ссылка действует 24 часа.
-        </p>
+        {copy.hint !== null && (
+          <p className="mt-2 text-caption text-text-3">{copy.hint}</p>
+        )}
 
         {/*
           DELIBERATELY GENERAL, and the generality is the point. A refused link
@@ -79,7 +92,10 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
         )}
 
         <div className="mt-8">
-          <ResendVerificationButton initialCooldownSec={initialCooldownSec} />
+          <ResendVerificationButton
+            initialCooldownSec={initialCooldownSec}
+            label={copy.buttonLabel}
+          />
         </div>
       </div>
     </div>

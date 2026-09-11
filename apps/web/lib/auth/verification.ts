@@ -1,6 +1,14 @@
 import { randomUUID } from "crypto";
 import { sendVerificationEmail } from "@oco/core";
 import { prisma } from "@/lib/db";
+import {
+  isPriorLinkAlive,
+  planAfterSend,
+  rollbackData,
+  sendFailureServerLog,
+  type PriorVerification,
+  type RollbackResult,
+} from "@/lib/auth/verification-send-outcome";
 
 export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 export const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -22,13 +30,57 @@ export function resendCooldownRemainingSec(expiry: Date | null | undefined): num
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
 }
 
+/**
+ * `failed` carries what each caller needs and nothing more: whether the link in
+ * the previous letter still works (for the seller's message) and one line for
+ * the operator's log, in the form of `serverLog` in connect-result-response.ts.
+ */
+export type IssueVerificationResult =
+  | { outcome: "sent" }
+  | { outcome: "failed"; priorLinkAlive: boolean; serverLog: string };
+
+/**
+ * Writes a new token, sends the letter, and — ONLY when non-delivery is
+ * proven — puts the previous token back.
+ *
+ * THE DEFECT THIS ANSWERS. The new token used to be written before the send and
+ * left in place whatever happened, so a failed send killed the link in the
+ * previous letter and delivered no new one: the seller was left with no working
+ * link at all.
+ *
+ * WHY ONLY ON PROVEN NON-DELIVERY. When delivery is not established — a
+ * rejected request, an HTTP 5xx, a 2xx with an unreadable body — the letter may
+ * have gone out carrying the NEW token. Rolling back then would kill the one
+ * link that works. So on «not established» the new token stays, exactly as
+ * before this change; see `classifyVerificationSend` for where the line runs.
+ *
+ * Not reachable by a test today: this module takes the `@oco/db` singleton and
+ * the `@/` alias, which a test outside Next cannot resolve. The decisions it
+ * makes are in verification-send-outcome.ts, and those are tested.
+ */
 export async function issueVerificationToken(
   userId: string,
   email: string,
-): Promise<{ emailSent: boolean }> {
+): Promise<IssueVerificationResult> {
+  // Read BEFORE the write. `update` returns the row as it is AFTER the change,
+  // so the previous values can only be had by asking first. Both may be null:
+  // at registration the user was created without either column.
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { verificationToken: true, verificationTokenExpiry: true },
+  });
+  const prior: PriorVerification = {
+    token: before?.verificationToken ?? null,
+    expiry: before?.verificationTokenExpiry ?? null,
+  };
+
   const token = randomUUID();
   const verificationTokenExpiry = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS);
 
+  // UNCONDITIONAL, deliberately. The newest send wins: two resends racing each
+  // other both write, and the later write stands. Making this write conditional
+  // on the previous token would turn a concurrent resend into a refusal — a
+  // different rule, and not this change's to make.
   await prisma.user.update({
     where: { id: userId },
     data: {
@@ -37,11 +89,32 @@ export async function issueVerificationToken(
     },
   });
 
-  try {
-    await sendVerificationEmail(email, token);
-    return { emailSent: true };
-  } catch {
-    console.error("verification email send failed");
-    return { emailSent: false };
+  const sent = await sendVerificationEmail(email, token);
+  if (sent.delivery === "sent") {
+    return { outcome: "sent" };
   }
+
+  let rollback: RollbackResult = "not_attempted";
+  if (planAfterSend(sent.delivery) === "rollback") {
+    // CONDITIONAL, and the condition is OUR token. If the column no longer
+    // holds it, someone wrote after us — another resend — and their value is
+    // the one that stands: zero rows updated is not an error, it is that. A
+    // blind rollback here would erase their token, and with it a letter that
+    // may already be in the seller's inbox.
+    const { count } = await prisma.user.updateMany({
+      where: { id: userId, verificationToken: token },
+      data: rollbackData(prior),
+    });
+    rollback = count === 1 ? "done" : "skipped";
+  }
+
+  return {
+    outcome: "failed",
+    priorLinkAlive: isPriorLinkAlive({
+      rolledBack: rollback === "done",
+      prior,
+      now: new Date(),
+    }),
+    serverLog: sendFailureServerLog({ reason: sent.reason, rollback }),
+  };
 }
