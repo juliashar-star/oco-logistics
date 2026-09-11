@@ -43,6 +43,13 @@ export function carrierFormGapMessage(gap: CarrierFormGap): string | null {
     case "ready":
       return null;
 
+    case "no_fields":
+      // A configuration error on our side, not something a seller can act on:
+      // there is no field to name and no value to ask for. The button stays
+      // disabled — describeCarrierFormGap never reports this as ready — and the
+      // notice stays silent rather than invent an instruction.
+      return null;
+
     case "nothing_supplied":
       // «Сохранить», not «Подключить»: this branch only happens on a carrier
       // that is already connected, which is also what the button says there.

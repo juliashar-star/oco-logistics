@@ -50,6 +50,13 @@ export type CarrierFormGap =
   /** Nothing is missing. The button may be enabled. */
   | { kind: "ready" }
   /**
+   * There are no fields to fill at all. Never a seller's state: a carrier entry
+   * with an empty credential list is a configuration error on our side. Not
+   * ready, so the button stays disabled — and nothing to say to the seller,
+   * who can fix none of it.
+   */
+  | { kind: "no_fields" }
+  /**
    * Connected carrier, and not one field carries a sendable value. Names no
    * field on purpose — see above.
    */
@@ -106,6 +113,23 @@ export function describeCarrierFormGap(
   values: Readonly<Record<string, string>>,
   isConnected: boolean,
 ): CarrierFormGap {
+  // AN EMPTY FIELD LIST IS NEVER READY, in either connection state, and it is
+  // checked first so neither branch below ever sees one. `every` over an empty
+  // list is vacuously true: the not-connected branch reported `ready`, which lit
+  // «Подключить» on a card with nothing in it and would have sent a POST with no
+  // credentials at all.
+  //
+  // WHY A KIND OF ITS OWN and not `nothing_supplied`, which the connected branch
+  // already returned for an empty list. `carrierFormGapMessage` documents that
+  // `nothing_supplied` only happens on a carrier that is already connected, and
+  // answers it with «Чтобы сохранить…». Reused here, that invariant would stop
+  // being true, and a not-connected card whose button says «Подключить» would be
+  // told to «сохранить». An empty list is not a seller's gap at all — it is a
+  // configuration error on our side — and it gets a name that says so.
+  if (fields.length === 0) {
+    return { kind: "no_fields" };
+  }
+
   const blank: CarrierConnectField[] = [];
   const badChoice: CarrierConnectField[] = [];
   let filledCount = 0;

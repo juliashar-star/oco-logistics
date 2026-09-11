@@ -2,17 +2,21 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { verifiedToastText } from "@/lib/auth/verification-redirects";
 
 export function VerifiedToast() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (searchParams.get("verified") !== "true") return;
+    // One lookup for every value the verification route issues — see
+    // verification-redirects.ts. Anything else leaves the page untouched.
+    const text = verifiedToastText(searchParams.get("verified"));
+    if (text === null) return;
 
     const toast = document.createElement("div");
     toast.setAttribute("role", "status");
-    toast.textContent = "Email подтверждён ✓";
+    toast.textContent = text;
     Object.assign(toast.style, {
       position: "fixed",
       bottom: "24px",

@@ -608,3 +608,38 @@ test("carrierFormGapMessage: no message ever contains a supplied value", () => {
     }
   }
 });
+
+// ── describeCarrierFormGap: an empty field list (finding 3, 11.09.2026)
+//
+// Pinned on the UNCHANGED code by a one-off run outside this file, so that the
+// twelve isCarrierFormComplete tests above could be shown green with this file
+// unedited: describeCarrierFormGap([], {}, false) returned { kind: "ready" } and
+// isCarrierFormComplete([], {}, false) returned true — «Подключить» lit on a card
+// with no fields, and a POST would have gone out with no credentials. The tests
+// below are that pin, inverted.
+
+test("describeCarrierFormGap: an empty field list is no_fields, never ready — not connected", () => {
+  assert.deepEqual(describeCarrierFormGap([], {}, false), { kind: "no_fields" });
+});
+
+test("describeCarrierFormGap: an empty field list is no_fields — connected too", () => {
+  // Used to be nothing_supplied, whose text says «сохранить» and is documented
+  // as connected-only; an empty list is not a seller's gap at all.
+  assert.deepEqual(describeCarrierFormGap([], {}, true), { kind: "no_fields" });
+});
+
+test("describeCarrierFormGap: values supplied for a carrier with no fields still do not make it ready", () => {
+  assert.deepEqual(
+    describeCarrierFormGap([], { token: "tok", account: "acct" }, false),
+    { kind: "no_fields" },
+  );
+});
+
+test("isCarrierFormComplete: an empty field list never lights the button, in either state", () => {
+  assert.equal(isCarrierFormComplete([], {}, false), false);
+  assert.equal(isCarrierFormComplete([], {}, true), false);
+});
+
+test("carrierFormGapMessage: no_fields says nothing — there is nothing a seller can fix", () => {
+  assert.equal(carrierFormGapMessage({ kind: "no_fields" }), null);
+});
